@@ -21,6 +21,8 @@ export function Moderation() {
   useEffect(() => {
     if (currentWorkspace) {
       loadPosts();
+    } else {
+      setLoading(false);
     }
   }, [currentWorkspace, filter]);
 

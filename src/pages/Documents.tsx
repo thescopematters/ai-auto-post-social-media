@@ -37,6 +37,8 @@ export function Documents() {
   useEffect(() => {
     if (currentWorkspace) {
       loadDocuments();
+    } else {
+      setLoading(false);
     }
   }, [currentWorkspace]);
 
