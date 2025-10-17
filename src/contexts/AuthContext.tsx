@@ -1,20 +1,42 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { User, Session, AuthError } from '@supabase/supabase-js';
-import { supabase } from '../lib/supabase';
-import { Database } from '../lib/database.types';
+import { authApi, workspaceApi } from '../lib/apiClient';
 
-type Profile = Database['public']['Tables']['profiles']['Row'];
-type Workspace = Database['public']['Tables']['workspaces']['Row'];
+interface User {
+  id: string;
+  email: string;
+  fullName?: string;
+  role?: string;
+}
+
+interface Profile {
+  id: string;
+  email: string;
+  full_name: string | null;
+  company_name: string | null;
+  role: string;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface Workspace {
+  id: string;
+  name: string;
+  owner_id: string;
+  brand_color: string | null;
+  logo_url: string | null;
+  created_at: string;
+  updated_at: string;
+}
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
   profile: Profile | null;
   workspaces: Workspace[];
   currentWorkspace: Workspace | null;
   loading: boolean;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: AuthError | null }>;
-  signIn: (email: string, password: string) => Promise<{ error: AuthError | null }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   setCurrentWorkspace: (workspace: Workspace) => void;
   refreshProfile: () => Promise<void>;
@@ -24,117 +46,142 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [currentWorkspace, setCurrentWorkspaceState] = useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      (async () => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await loadUserData(session.user.id);
+    const initAuth = async () => {
+      const token = localStorage.getItem('accessToken');
+      if (token) {
+        try {
+          await loadUserData();
+        } catch (error) {
+          console.error('Failed to load user data:', error);
+          localStorage.removeItem('accessToken');
+          localStorage.removeItem('refreshToken');
         }
-        setLoading(false);
-      })();
-    });
+      }
+      setLoading(false);
+    };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      (async () => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          await loadUserData(session.user.id);
-        } else {
-          setProfile(null);
-          setWorkspaces([]);
-          setCurrentWorkspaceState(null);
-        }
-      })();
-    });
-
-    return () => subscription.unsubscribe();
+    initAuth();
   }, []);
 
-  const loadUserData = async (userId: string) => {
-    const { data: profileData } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .maybeSingle();
+  const loadUserData = async () => {
+    try {
+      const response = await authApi.getCurrentUser();
 
-    if (profileData) {
-      setProfile(profileData);
-    }
+      if (response.success && response.data) {
+        const userData = response.data as any;
 
-    const { data: workspacesData, error: workspacesError } = await supabase
-      .rpc('get_user_workspaces', { user_id_param: userId } as any);
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          fullName: userData.fullName || userData.full_name,
+          role: userData.role,
+        });
 
-    if (workspacesError) {
-      console.error('Error loading workspaces:', workspacesError);
-      setWorkspaces([]);
-      setCurrentWorkspaceState(null);
-      return;
-    }
+        setProfile(userData);
 
-    const allWorkspaces = workspacesData as Workspace[] | null;
+        const workspacesResponse = await workspaceApi.getAll();
+        if (workspacesResponse.success && workspacesResponse.data) {
+          const allWorkspaces = workspacesResponse.data as Workspace[];
 
-    if (allWorkspaces && allWorkspaces.length > 0) {
-      allWorkspaces.sort((a: any, b: any) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-      setWorkspaces(allWorkspaces);
-      const savedWorkspaceId = localStorage.getItem('currentWorkspaceId');
-      const workspace = savedWorkspaceId
-        ? allWorkspaces.find((w: any) => w.id === savedWorkspaceId) || allWorkspaces[0]
-        : allWorkspaces[0];
-      setCurrentWorkspaceState(workspace);
-    } else {
-      setWorkspaces([]);
-      setCurrentWorkspaceState(null);
+          if (allWorkspaces.length > 0) {
+            allWorkspaces.sort((a, b) =>
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            );
+            setWorkspaces(allWorkspaces);
+
+            const savedWorkspaceId = localStorage.getItem('currentWorkspaceId');
+            const workspace = savedWorkspaceId
+              ? allWorkspaces.find(w => w.id === savedWorkspaceId) || allWorkspaces[0]
+              : allWorkspaces[0];
+            setCurrentWorkspaceState(workspace);
+          } else {
+            setWorkspaces([]);
+            setCurrentWorkspaceState(null);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading user data:', error);
+      throw error;
     }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      const response = await authApi.register(email, password, fullName);
 
-    if (error) return { error };
+      if (response.success && response.data) {
+        const { accessToken, refreshToken, user: userData } = response.data as any;
 
-    if (data.user) {
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: data.user.id,
-        email: data.user.email!,
-        full_name: fullName,
-      } as any);
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
 
-      if (profileError) {
-        console.error('Error creating profile:', profileError);
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          fullName: userData.fullName,
+          role: userData.role,
+        });
+
+        await loadUserData();
+
+        return { error: null };
       }
-    }
 
-    return { error: null };
+      return { error: new Error(response.error || 'Registration failed') };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    return { error };
+    try {
+      const response = await authApi.login(email, password);
+
+      if (response.success && response.data) {
+        const { accessToken, refreshToken, user: userData } = response.data as any;
+
+        localStorage.setItem('accessToken', accessToken);
+        localStorage.setItem('refreshToken', refreshToken);
+
+        setUser({
+          id: userData.id,
+          email: userData.email,
+          fullName: userData.fullName,
+          role: userData.role,
+        });
+
+        await loadUserData();
+
+        return { error: null };
+      }
+
+      return { error: new Error(response.error || 'Login failed') };
+    } catch (error) {
+      return { error: error as Error };
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setProfile(null);
-    setWorkspaces([]);
-    setCurrentWorkspaceState(null);
-    localStorage.removeItem('currentWorkspaceId');
+    try {
+      await authApi.logout();
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      localStorage.removeItem('accessToken');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('currentWorkspaceId');
+      setUser(null);
+      setProfile(null);
+      setWorkspaces([]);
+      setCurrentWorkspaceState(null);
+    }
   };
 
   const setCurrentWorkspace = (workspace: Workspace) => {
@@ -144,7 +191,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const refreshProfile = async () => {
     if (user) {
-      await loadUserData(user.id);
+      await loadUserData();
     }
   };
 
@@ -152,7 +199,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     <AuthContext.Provider
       value={{
         user,
-        session,
         profile,
         workspaces,
         currentWorkspace,

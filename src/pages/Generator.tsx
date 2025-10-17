@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { contentApi, documentApi } from '../lib/apiClient';
 import { Sparkles, Settings, Linkedin, Twitter, RefreshCw } from 'lucide-react';
 
 type Document = {

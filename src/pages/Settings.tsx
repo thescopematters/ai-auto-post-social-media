@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { workspaceApi } from '../lib/apiClient';
 import { User, Building2, Bell, Shield, CreditCard, Save, Linkedin, Twitter } from 'lucide-react';
 
 export function Settings() {
