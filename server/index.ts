@@ -12,10 +12,6 @@ import workspaceRoutes from './routes/workspace.routes';
 import documentRoutes from './routes/document.routes';
 import contentRoutes from './routes/content.routes';
 import dashboardRoutes from './routes/dashboard.routes';
-import documentsNewRoutes from './routes/documents.routes';
-import contentGenerationRoutes from './routes/content-generation.routes';
-import subscriptionRoutes from './routes/subscription.routes';
-import { SchedulerService } from './services/scheduler.service';
 
 const app: Application = express();
 
@@ -62,11 +58,6 @@ app.use(`${config.api.prefix}/workspaces`, documentRoutes);
 app.use(`${config.api.prefix}/workspaces`, contentRoutes);
 app.use(`${config.api.prefix}/workspaces`, dashboardRoutes);
 
-// New routes
-app.use(`${config.api.prefix}/workspaces`, documentsNewRoutes);
-app.use(`${config.api.prefix}/workspaces`, contentGenerationRoutes);
-app.use(`${config.api.prefix}`, subscriptionRoutes);
-
 app.use(notFoundHandler);
 app.use(errorHandler);
 
@@ -77,10 +68,6 @@ const startServer = () => {
       logger.info(`📝 Environment: ${config.nodeEnv}`);
       logger.info(`🔗 API Base URL: http://localhost:${config.port}${config.api.prefix}`);
       logger.info(`💚 Health Check: http://localhost:${config.port}/health`);
-
-      // Start scheduler service
-      SchedulerService.start();
-      logger.info(`⏰ Scheduler service started`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -100,13 +87,11 @@ process.on('uncaughtException', (error: Error) => {
 
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
-  SchedulerService.stop();
   process.exit(0);
 });
 
 process.on('SIGINT', () => {
   logger.info('SIGINT received, shutting down gracefully');
-  SchedulerService.stop();
   process.exit(0);
 });
 
