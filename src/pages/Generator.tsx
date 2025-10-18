@@ -27,15 +27,9 @@ export function Generator() {
   const loadDocuments = async () => {
     if (!currentWorkspace) return;
 
-    const { data } = await supabase
-      .from('documents')
-      .select('id, title, content_text')
-      .eq('workspace_id', currentWorkspace.id)
-      .eq('processing_status', 'completed')
-      .order('uploaded_at', { ascending: false });
-
-    if (data) {
-      setDocuments(data);
+    const response = await documentApi.getAll(currentWorkspace.id);
+    if (response.success && response.data) {
+      setDocuments(response.data as Document[]);
     }
   };
 
@@ -44,29 +38,23 @@ export function Generator() {
 
     setGenerating(true);
 
-    const mockPosts = [
-      `🚀 Exciting insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
-
-      `Just analyzed the latest trends in ${platform === 'linkedin' ? 'B2B marketing' : 'social media'}. The results might surprise you 📊\n\nKey takeaways:\n✅ Authentic content wins\n✅ Engagement over reach\n✅ Value-first approach\n\nWant to learn more? Drop a comment below!\n\n#Marketing #Strategy`,
-
-      `${platform === 'linkedin' ? '💡' : '🔥'} Hot take: The future of content creation is here.\n\nAI isn't replacing creativity – it's amplifying it. Teams using smart automation tools are producing 3x more content while maintaining quality.\n\nThe question isn't whether to adopt AI, but how fast you can integrate it.\n\n#ContentMarketing #DigitalTransformation`
-    ];
-
-    const selectedPosts = mockPosts.slice(0, 3);
-    setGeneratedPosts(selectedPosts);
-
-    for (const content of selectedPosts) {
-      await supabase.from('generated_posts').insert({
-        workspace_id: currentWorkspace.id,
-        document_id: selectedDocument,
+    try {
+      const response = await contentApi.generate(currentWorkspace.id, {
+        documentId: selectedDocument,
         platform,
-        content,
-        variant_number: selectedPosts.indexOf(content) + 1,
-        moderation_status: 'pending',
-      } as any);
-    }
+        tone,
+        variantCount: 3,
+      });
 
-    setGenerating(false);
+      if (response.success && response.data) {
+        const posts = response.data as any[];
+        setGeneratedPosts(posts.map((p: any) => p.content));
+      }
+    } catch (error) {
+      console.error('Error generating content:', error);
+    } finally {
+      setGenerating(false);
+    }
   };
 
   return (

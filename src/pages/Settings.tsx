@@ -14,13 +14,13 @@ export function Settings() {
     if (!profile) return;
 
     setSaving(true);
-    await supabase
-      .from('profiles')
-      .update({ full_name: fullName, company_name: companyName } as any)
-      .eq('id', profile.id);
-
-    await refreshProfile();
-    setSaving(false);
+    try {
+      await refreshProfile();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const tabs = [

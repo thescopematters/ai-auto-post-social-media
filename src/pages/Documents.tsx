@@ -45,14 +45,9 @@ export function Documents() {
   const loadDocuments = async () => {
     if (!currentWorkspace) return;
 
-    const { data, error } = await supabase
-      .from('documents')
-      .select('*')
-      .eq('workspace_id', currentWorkspace.id)
-      .order('uploaded_at', { ascending: false });
-
-    if (!error && data) {
-      setDocuments(data);
+    const response = await documentApi.getAll(currentWorkspace.id);
+    if (response.success && response.data) {
+      setDocuments(response.data as Document[]);
     }
     setLoading(false);
   };
@@ -63,36 +58,23 @@ export function Documents() {
 
     setUploading(true);
 
-    const fileExt = file.name.split('.').pop()?.toLowerCase();
-    const fileName = `${Date.now()}-${file.name}`;
-    const filePath = `${currentWorkspace.id}/${fileName}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(filePath, file);
-
-    if (!uploadError) {
-      const { data: { publicUrl } } = supabase.storage
-        .from('documents')
-        .getPublicUrl(filePath);
-
-      const { error: dbError } = await supabase.from('documents').insert({
-        workspace_id: currentWorkspace.id,
-        uploaded_by: user.id,
+    try {
+      const response = await documentApi.upload(currentWorkspace.id, {
         title: file.name,
-        file_type: fileExt as any,
-        file_url: publicUrl,
-        file_size: file.size,
-        processing_status: 'pending',
-      } as any);
+        fileType: file.name.split('.').pop()?.toLowerCase() || 'txt',
+        fileUrl: '',
+        fileSize: file.size,
+      });
 
-      if (!dbError) {
+      if (response.success) {
         await loadDocuments();
         setShowUploadModal(false);
       }
+    } catch (error) {
+      console.error('Error uploading file:', error);
+    } finally {
+      setUploading(false);
     }
-
-    setUploading(false);
   };
 
   const handleUrlUpload = async (url: string, title: string) => {
@@ -100,21 +82,23 @@ export function Documents() {
 
     setUploading(true);
 
-    const { error } = await supabase.from('documents').insert({
-      workspace_id: currentWorkspace.id,
-      uploaded_by: user.id,
-      title: title || url,
-      file_type: 'url',
-      file_url: url,
-      processing_status: 'pending',
-    } as any);
+    try {
+      const response = await documentApi.upload(currentWorkspace.id, {
+        title: title || url,
+        fileType: 'url',
+        fileUrl: url,
+        fileSize: 0,
+      });
 
-    if (!error) {
-      await loadDocuments();
-      setShowUploadModal(false);
+      if (response.success) {
+        await loadDocuments();
+        setShowUploadModal(false);
+      }
+    } catch (error) {
+      console.error('Error uploading URL:', error);
+    } finally {
+      setUploading(false);
     }
-
-    setUploading(false);
   };
 
   const handleTextUpload = async (text: string, title: string) => {
@@ -122,21 +106,24 @@ export function Documents() {
 
     setUploading(true);
 
-    const { error } = await supabase.from('documents').insert({
-      workspace_id: currentWorkspace.id,
-      uploaded_by: user.id,
-      title: title || 'Manual Text Input',
-      file_type: 'manual',
-      content_text: text,
-      processing_status: 'completed',
-    } as any);
+    try {
+      const response = await documentApi.upload(currentWorkspace.id, {
+        title: title || 'Manual Text Input',
+        fileType: 'manual',
+        fileUrl: '',
+        fileSize: text.length,
+        contentText: text,
+      });
 
-    if (!error) {
-      await loadDocuments();
-      setShowUploadModal(false);
+      if (response.success) {
+        await loadDocuments();
+        setShowUploadModal(false);
+      }
+    } catch (error) {
+      console.error('Error saving text:', error);
+    } finally {
+      setUploading(false);
     }
-
-    setUploading(false);
   };
 
   const filteredDocuments = documents.filter(doc =>
@@ -242,7 +229,7 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
 
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this document?')) {
-      await supabase.from('documents').delete().eq('id', document.id);
+      await documentApi.delete(document.id);
       onDelete();
     }
   };

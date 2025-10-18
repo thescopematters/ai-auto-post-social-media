@@ -29,34 +29,25 @@ export function Moderation() {
   const loadPosts = async () => {
     if (!currentWorkspace) return;
 
-    const { data } = await supabase
-      .from('generated_posts')
-      .select('*, documents(title)')
-      .eq('workspace_id', currentWorkspace.id)
-      .eq('moderation_status', filter)
-      .order('generated_at', { ascending: false });
-
-    if (data) {
-      setPosts(data as Post[]);
+    const response = await contentApi.getAll(currentWorkspace.id, { status: filter });
+    if (response.success && response.data) {
+      setPosts(response.data as Post[]);
     }
     setLoading(false);
   };
 
   const handleModeration = async (postId: string, action: 'approved' | 'rejected') => {
-    await supabase
-      .from('generated_posts')
-      .update({ moderation_status: action, moderated_by: user?.id, moderated_at: new Date().toISOString() } as any)
-      .eq('id', postId);
+    if (!currentWorkspace) return;
 
-    await supabase.from('moderation_logs').insert({
-      post_id: postId,
-      user_id: user?.id,
-      action,
-      previous_status: 'pending',
-      new_status: action,
-    } as any);
+    const moderationAction = action === 'approved' ? 'approve' : 'reject';
+    const response = await contentApi.moderate(currentWorkspace.id, postId, {
+      action: moderationAction,
+      reason: `Post ${action} by moderator`,
+    });
 
-    loadPosts();
+    if (response.success) {
+      loadPosts();
+    }
   };
 
   if (loading) {
