@@ -5,6 +5,7 @@ import supabaseAdmin from '../config/database';
 import { NotFoundError } from '../utils/errors';
 import { successResponse, paginatedResponse } from '../utils/response';
 import logger from '../config/logger';
+import geminiService from '../services/gemini.service';
 
 const generateMockContent = (platform: string, tone: string): string[] => {
   const templates = {
@@ -43,16 +44,23 @@ export const generateContent = async (
       .eq('workspace_id', workspaceId)
       .single();
 
-    if (!document) {
-      throw new NotFoundError('Document not found');
+    if (!document || !document.content_text) {
+      throw new NotFoundError('Document not found or has no content');
     }
 
-    const mockPosts = generateMockContent(platform, tone);
-    const posts = mockPosts.slice(0, variantCount || 3);
+    const generatedContents = await geminiService.generateContent({
+      platform,
+      tone,
+      sourceContent: document.content_text,
+      variantCount: variantCount || 3,
+      includeHashtags: true,
+    });
 
     const generatedPosts: any[] = [];
 
-    for (let i = 0; i < posts.length; i++) {
+    for (let i = 0; i < generatedContents.length; i++) {
+      const generated = generatedContents[i];
+
       const { data, error } = await supabaseAdmin
         .from('generated_posts')
         .insert({
@@ -60,11 +68,11 @@ export const generateContent = async (
           document_id: documentId,
           agent_config_id: agentConfigId,
           platform,
-          content: posts[i],
+          content: generated.content,
           variant_number: i + 1,
-          hashtags: [],
+          hashtags: generated.hashtags,
           media_urls: [],
-          predicted_score: Math.random() * 10,
+          predicted_score: generated.score,
           moderation_status: 'pending',
         })
         .select()
@@ -75,7 +83,7 @@ export const generateContent = async (
       }
     }
 
-    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId}`);
+    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId} using AI`);
 
     successResponse(res, generatedPosts, 'Content generated successfully', 201);
   } catch (error) {
