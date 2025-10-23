@@ -5,23 +5,7 @@ import supabaseAdmin from '../config/database';
 import { NotFoundError } from '../utils/errors';
 import { successResponse, paginatedResponse } from '../utils/response';
 import logger from '../config/logger';
-
-const generateMockContent = (platform: string, tone: string): string[] => {
-  const templates = {
-    linkedin: [
-      `🚀 Excited to share some insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
-      `Just analyzed the latest trends in B2B marketing. The results might surprise you 📊\n\nKey takeaways:\n✅ Authentic content wins\n✅ Engagement over reach\n✅ Value-first approach\n\nWant to learn more? Drop a comment below!\n\n#Marketing #Strategy`,
-      `💡 Hot take: The future of content creation is here.\n\nAI isn't replacing creativity – it's amplifying it. Teams using smart automation tools are producing 3x more content while maintaining quality.\n\nThe question isn't whether to adopt AI, but how fast you can integrate it.\n\n#ContentMarketing #DigitalTransformation`,
-    ],
-    twitter: [
-      `🔥 AI automation is changing the game. 40% productivity boost for companies that embrace it.\n\nNot replacing humans, just making us better at what we do.\n\n#AI #Productivity`,
-      `Latest B2B marketing trends:\n\n✅ Authentic beats perfect\n✅ Engagement > Reach  \n✅ Value first, always\n\nWhat are you seeing in your space?\n\n#Marketing`,
-      `Hot take: AI won't replace creators.\n\nIt'll just separate those who adapt from those who don't.\n\nTeams using AI tools = 3x more content, same quality.\n\n#ContentMarketing`,
-    ],
-  };
-
-  return templates[platform as keyof typeof templates] || templates.linkedin;
-};
+import geminiService from '../services/gemini.service';
 
 export const generateContent = async (
   req: AuthRequest,
@@ -38,7 +22,7 @@ export const generateContent = async (
 
     const { data: document } = await supabaseAdmin
       .from('documents')
-      .select('content_text')
+      .select('content_text, title')
       .eq('id', documentId)
       .eq('workspace_id', workspaceId)
       .single();
@@ -47,8 +31,18 @@ export const generateContent = async (
       throw new NotFoundError('Document not found');
     }
 
-    const mockPosts = generateMockContent(platform, tone);
-    const posts = mockPosts.slice(0, variantCount || 3);
+    if (!document.content_text) {
+      throw new Error('Document has no content to generate posts from');
+    }
+
+    logger.info(`Generating ${variantCount || 3} posts for document ${documentId} on ${platform} with ${tone} tone`);
+
+    const posts = await geminiService.generateWithRetry(
+      document.content_text,
+      platform as 'linkedin' | 'twitter',
+      tone,
+      variantCount || 3
+    );
 
     const generatedPosts: any[] = [];
 
