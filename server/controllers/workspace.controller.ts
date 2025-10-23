@@ -82,6 +82,18 @@ export const createWorkspace = async (
       throw new Error('Failed to create workspace');
     }
 
+    const { error: memberError } = await supabaseAdmin
+      .from('workspace_members')
+      .insert({
+        workspace_id: workspace.id,
+        user_id: req.user.id,
+        role: 'admin',
+      });
+
+    if (memberError) {
+      logger.error('Workspace member creation error:', memberError);
+    }
+
     const { error: subscriptionError } = await supabaseAdmin
       .from('subscriptions')
       .insert({
