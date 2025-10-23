@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { supabase } from '../lib/supabase';
+import { documentApi } from '../lib/apiClient';
 import {
   Upload,
   FileText,

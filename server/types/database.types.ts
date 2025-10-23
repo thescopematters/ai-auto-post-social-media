@@ -236,7 +236,6 @@ export interface Database {
           agent_config_id: string | null
           platform: 'linkedin' | 'twitter'
           content: string
-          tone: 'professional' | 'casual' | 'thought_leader' | 'educational' | 'promotional'
           variant_number: number
           hashtags: string[]
           media_urls: string[]
@@ -254,7 +253,6 @@ export interface Database {
           agent_config_id?: string | null
           platform: 'linkedin' | 'twitter'
           content: string
-          tone?: 'professional' | 'casual' | 'thought_leader' | 'educational' | 'promotional'
           variant_number?: number
           hashtags?: string[]
           media_urls?: string[]
@@ -272,7 +270,6 @@ export interface Database {
           agent_config_id?: string | null
           platform?: 'linkedin' | 'twitter'
           content?: string
-          tone?: 'professional' | 'casual' | 'thought_leader' | 'educational' | 'promotional'
           variant_number?: number
           hashtags?: string[]
           media_urls?: string[]
