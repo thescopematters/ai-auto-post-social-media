@@ -2,7 +2,7 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import supabaseAdmin from '../config/database';
-import { NotFoundError, BadRequestError } from '../utils/errors';
+import { NotFoundError, ValidationError } from '../utils/errors';
 import { successResponse, paginatedResponse } from '../utils/response';
 import logger from '../config/logger';
 import { generatePostsWithGemini } from '../services/gemini.service';
@@ -21,19 +21,19 @@ export const generateContent = async (
     }
 
     if (!documentId || !platform || !tone) {
-      throw new BadRequestError('Missing required fields: documentId, platform, or tone');
+      throw new ValidationError('Missing required fields: documentId, platform, or tone');
     }
 
     if (!['linkedin', 'twitter'].includes(platform)) {
-      throw new BadRequestError('Invalid platform. Must be "linkedin" or "twitter"');
+      throw new ValidationError('Invalid platform. Must be "linkedin" or "twitter"');
     }
 
     if (!['professional', 'casual', 'thought_leader', 'educational', 'promotional'].includes(tone)) {
-      throw new BadRequestError('Invalid tone');
+      throw new ValidationError('Invalid tone');
     }
 
     if (variantCount < 1 || variantCount > 20) {
-      throw new BadRequestError('variantCount must be between 1 and 20');
+      throw new ValidationError('variantCount must be between 1 and 20');
     }
 
     const { data: document, error: docError } = await supabaseAdmin
@@ -48,7 +48,7 @@ export const generateContent = async (
     }
 
     if (!document.content_text) {
-      throw new BadRequestError('Document has no content to generate posts from');
+      throw new ValidationError('Document has no content to generate posts from');
     }
 
     logger.info(`Starting post generation for document ${documentId}`, {
