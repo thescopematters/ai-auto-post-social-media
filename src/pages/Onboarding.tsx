@@ -16,33 +16,18 @@ export function Onboarding() {
 
     setCreating(true);
 
-    const { data: workspace, error: workspaceError } = await supabase
-      .from('workspaces')
-      .insert({
-        name: workspaceName,
-        owner_id: user.id,
-      } as any)
-      .select()
-      .single();
+    try {
+      const response = await workspaceApi.create(workspaceName, '#3B82F6', undefined);
 
-    if (!workspaceError && workspace) {
-      await supabase.from('subscriptions').insert({
-        workspace_id: (workspace as any).id,
-        tier: 'free',
-        status: 'active',
-      } as any);
-
-      await supabase.from('ai_agent_configs').insert({
-        workspace_id: (workspace as any).id,
-        name: 'Default Agent',
-        is_default: true,
-      } as any);
-
-      await refreshProfile();
-      navigate('/dashboard');
+      if (response.success) {
+        await refreshProfile();
+        navigate('/dashboard');
+      }
+    } catch (error) {
+      console.error('Error creating workspace:', error);
+    } finally {
+      setCreating(false);
     }
-
-    setCreating(false);
   };
 
   return (
