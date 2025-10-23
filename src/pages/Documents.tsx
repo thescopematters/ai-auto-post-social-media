@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { documentApi } from '../lib/apiClient';
+import { supabase } from '../lib/supabase';
 import {
   Upload,
   FileText,
@@ -45,9 +45,14 @@ export function Documents() {
   const loadDocuments = async () => {
     if (!currentWorkspace) return;
 
-    const response = await documentApi.getAll(currentWorkspace.id);
-    if (response.success && response.data) {
-      setDocuments(response.data as Document[]);
+    const { data, error } = await supabase
+      .from('documents')
+      .select('*')
+      .eq('workspace_id', currentWorkspace.id)
+      .order('uploaded_at', { ascending: false });
+
+    if (!error && data) {
+      setDocuments(data);
     }
     setLoading(false);
   };
@@ -58,23 +63,36 @@ export function Documents() {
 
     setUploading(true);
 
-    try {
-      const response = await documentApi.upload(currentWorkspace.id, {
-        title: file.name,
-        fileType: file.name.split('.').pop()?.toLowerCase() || 'txt',
-        fileUrl: '',
-        fileSize: file.size,
-      });
+    const fileExt = file.name.split('.').pop()?.toLowerCase();
+    const fileName = `${Date.now()}-${file.name}`;
+    const filePath = `${currentWorkspace.id}/${fileName}`;
 
-      if (response.success) {
+    const { error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(filePath, file);
+
+    if (!uploadError) {
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(filePath);
+
+      const { error: dbError } = await supabase.from('documents').insert({
+        workspace_id: currentWorkspace.id,
+        uploaded_by: user.id,
+        title: file.name,
+        file_type: fileExt as any,
+        file_url: publicUrl,
+        file_size: file.size,
+        processing_status: 'pending',
+      } as any);
+
+      if (!dbError) {
         await loadDocuments();
         setShowUploadModal(false);
       }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-    } finally {
-      setUploading(false);
     }
+
+    setUploading(false);
   };
 
   const handleUrlUpload = async (url: string, title: string) => {
@@ -82,23 +100,21 @@ export function Documents() {
 
     setUploading(true);
 
-    try {
-      const response = await documentApi.upload(currentWorkspace.id, {
-        title: title || url,
-        fileType: 'url',
-        fileUrl: url,
-        fileSize: 0,
-      });
+    const { error } = await supabase.from('documents').insert({
+      workspace_id: currentWorkspace.id,
+      uploaded_by: user.id,
+      title: title || url,
+      file_type: 'url',
+      file_url: url,
+      processing_status: 'pending',
+    } as any);
 
-      if (response.success) {
-        await loadDocuments();
-        setShowUploadModal(false);
-      }
-    } catch (error) {
-      console.error('Error uploading URL:', error);
-    } finally {
-      setUploading(false);
+    if (!error) {
+      await loadDocuments();
+      setShowUploadModal(false);
     }
+
+    setUploading(false);
   };
 
   const handleTextUpload = async (text: string, title: string) => {
@@ -106,24 +122,21 @@ export function Documents() {
 
     setUploading(true);
 
-    try {
-      const response = await documentApi.upload(currentWorkspace.id, {
-        title: title || 'Manual Text Input',
-        fileType: 'manual',
-        fileUrl: '',
-        fileSize: text.length,
-        contentText: text,
-      });
+    const { error } = await supabase.from('documents').insert({
+      workspace_id: currentWorkspace.id,
+      uploaded_by: user.id,
+      title: title || 'Manual Text Input',
+      file_type: 'manual',
+      content_text: text,
+      processing_status: 'completed',
+    } as any);
 
-      if (response.success) {
-        await loadDocuments();
-        setShowUploadModal(false);
-      }
-    } catch (error) {
-      console.error('Error saving text:', error);
-    } finally {
-      setUploading(false);
+    if (!error) {
+      await loadDocuments();
+      setShowUploadModal(false);
     }
+
+    setUploading(false);
   };
 
   const filteredDocuments = documents.filter(doc =>
@@ -229,7 +242,7 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
 
   const handleDelete = async () => {
     if (confirm('Are you sure you want to delete this document?')) {
-      await documentApi.delete(document.id);
+      await supabase.from('documents').delete().eq('id', document.id);
       onDelete();
     }
   };

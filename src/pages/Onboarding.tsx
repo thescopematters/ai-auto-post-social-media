@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { workspaceApi } from '../lib/apiClient';
+import { supabase } from '../lib/supabase';
 import { CheckCircle, ArrowRight, Building2, Sparkles } from 'lucide-react';
 
 export function Onboarding() {

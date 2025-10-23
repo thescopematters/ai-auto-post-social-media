@@ -5,7 +5,6 @@ import supabaseAdmin from '../config/database';
 import { NotFoundError } from '../utils/errors';
 import { successResponse, paginatedResponse } from '../utils/response';
 import logger from '../config/logger';
-import geminiService from '../services/gemini.service';
 
 const generateMockContent = (platform: string, tone: string): string[] => {
   const templates = {
@@ -44,23 +43,16 @@ export const generateContent = async (
       .eq('workspace_id', workspaceId)
       .single();
 
-    if (!document || !document.content_text) {
-      throw new NotFoundError('Document not found or has no content');
+    if (!document) {
+      throw new NotFoundError('Document not found');
     }
 
-    const generatedContents = await geminiService.generateContent({
-      platform,
-      tone,
-      sourceContent: document.content_text,
-      variantCount: variantCount || 3,
-      includeHashtags: true,
-    });
+    const mockPosts = generateMockContent(platform, tone);
+    const posts = mockPosts.slice(0, variantCount || 3);
 
     const generatedPosts: any[] = [];
 
-    for (let i = 0; i < generatedContents.length; i++) {
-      const generated = generatedContents[i];
-
+    for (let i = 0; i < posts.length; i++) {
       const { data, error } = await supabaseAdmin
         .from('generated_posts')
         .insert({
@@ -68,11 +60,11 @@ export const generateContent = async (
           document_id: documentId,
           agent_config_id: agentConfigId,
           platform,
-          content: generated.content,
+          content: posts[i],
           variant_number: i + 1,
-          hashtags: generated.hashtags,
+          hashtags: [],
           media_urls: [],
-          predicted_score: generated.score,
+          predicted_score: Math.random() * 10,
           moderation_status: 'pending',
         })
         .select()
@@ -83,7 +75,7 @@ export const generateContent = async (
       }
     }
 
-    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId} using AI`);
+    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId}`);
 
     successResponse(res, generatedPosts, 'Content generated successfully', 201);
   } catch (error) {

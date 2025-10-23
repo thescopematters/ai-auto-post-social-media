@@ -74,15 +74,6 @@ export class RateLimitError extends AppError {
 }
 
 /**
- * 403 Forbidden - Feature or resource access denied
- */
-export class ForbiddenError extends AppError {
-  constructor(message: string = 'Access forbidden') {
-    super(message, 403);
-  }
-}
-
-/**
  * 500 Internal Server Error - Unexpected server errors
  */
 export class InternalServerError extends AppError {

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { workspaceApi } from '../lib/apiClient';
+import { supabase } from '../lib/supabase';
 import { User, Building2, Bell, Shield, CreditCard, Save, Linkedin, Twitter } from 'lucide-react';
 
 export function Settings() {
@@ -14,13 +14,13 @@ export function Settings() {
     if (!profile) return;
 
     setSaving(true);
-    try {
-      await refreshProfile();
-    } catch (error) {
-      console.error('Error saving profile:', error);
-    } finally {
-      setSaving(false);
-    }
+    await supabase
+      .from('profiles')
+      .update({ full_name: fullName, company_name: companyName } as any)
+      .eq('id', profile.id);
+
+    await refreshProfile();
+    setSaving(false);
   };
 
   const tabs = [

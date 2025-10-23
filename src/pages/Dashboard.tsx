@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { dashboardApi, contentApi } from '../lib/apiClient';
+import { supabase } from '../lib/supabase';
 import {
   FileText,
   Sparkles,
@@ -48,31 +48,45 @@ export function Dashboard() {
   const loadDashboardData = async () => {
     if (!currentWorkspace) return;
 
-    try {
-      const [statsRes, activityRes] = await Promise.all([
-        dashboardApi.getStats(currentWorkspace.id),
-        dashboardApi.getRecentActivity(currentWorkspace.id, 5),
-      ]);
+    const [documentsRes, postsRes, scheduledRes, moderationRes] = await Promise.all([
+      supabase
+        .from('documents')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', currentWorkspace.id),
+      supabase
+        .from('generated_posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', currentWorkspace.id),
+      supabase
+        .from('scheduled_posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', currentWorkspace.id)
+        .eq('status', 'scheduled'),
+      supabase
+        .from('generated_posts')
+        .select('id', { count: 'exact', head: true })
+        .eq('workspace_id', currentWorkspace.id)
+        .eq('moderation_status', 'pending'),
+    ]);
 
-      if (statsRes.success && statsRes.data) {
-        setStats({
-          totalDocuments: statsRes.data.totalDocuments || 0,
-          totalPosts: statsRes.data.totalPosts || 0,
-          scheduledPosts: statsRes.data.scheduledPosts || 0,
-          pendingModeration: statsRes.data.pendingModeration || 0,
-          publishedThisMonth: statsRes.data.publishedThisMonth || 0,
-          avgEngagementRate: statsRes.data.avgEngagementRate || 0,
-        });
-      }
+    const { data: recentPostsData } = await supabase
+      .from('generated_posts')
+      .select('*, documents(title)')
+      .eq('workspace_id', currentWorkspace.id)
+      .order('generated_at', { ascending: false })
+      .limit(5);
 
-      if (activityRes.success && activityRes.data) {
-        setRecentPosts(activityRes.data || []);
-      }
-    } catch (error) {
-      console.error('Error loading dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
+    setStats({
+      totalDocuments: documentsRes.count || 0,
+      totalPosts: postsRes.count || 0,
+      scheduledPosts: scheduledRes.count || 0,
+      pendingModeration: moderationRes.count || 0,
+      publishedThisMonth: 0,
+      avgEngagementRate: 0,
+    });
+
+    setRecentPosts(recentPostsData || []);
+    setLoading(false);
   };
 
   if (loading) {
