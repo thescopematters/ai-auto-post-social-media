@@ -29,34 +29,28 @@ export function Moderation() {
   const loadPosts = async () => {
     if (!currentWorkspace) return;
 
-    const { data } = await supabase
-      .from('generated_posts')
-      .select('*, documents(title)')
-      .eq('workspace_id', currentWorkspace.id)
-      .eq('moderation_status', filter)
-      .order('generated_at', { ascending: false });
+    try {
+      const response = await contentApi.getAllPosts(currentWorkspace.id, 1, 100, filter);
 
-    if (data) {
-      setPosts(data as Post[]);
+      if (response.success && response.data) {
+        setPosts(response.data as Post[]);
+      }
+    } catch (error) {
+      console.error('Error loading posts:', error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleModeration = async (postId: string, action: 'approved' | 'rejected') => {
-    await supabase
-      .from('generated_posts')
-      .update({ moderation_status: action, moderated_by: user?.id, moderated_at: new Date().toISOString() } as any)
-      .eq('id', postId);
+    if (!currentWorkspace) return;
 
-    await supabase.from('moderation_logs').insert({
-      post_id: postId,
-      user_id: user?.id,
-      action,
-      previous_status: 'pending',
-      new_status: action,
-    } as any);
-
-    loadPosts();
+    try {
+      await contentApi.moderatePost(currentWorkspace.id, postId, action);
+      await loadPosts();
+    } catch (error) {
+      console.error('Error moderating post:', error);
+    }
   };
 
   if (loading) {

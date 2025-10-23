@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { workspaceApi } from '../lib/apiClient';
-import { supabase } from '../lib/supabase';
+import { workspaceApi, authApi } from '../lib/apiClient';
 import { User, Building2, Bell, Shield, CreditCard, Save, Linkedin, Twitter, Plus } from 'lucide-react';
 
 export function Settings() {
@@ -19,13 +18,13 @@ export function Settings() {
     if (!profile) return;
 
     setSaving(true);
-    await supabase
-      .from('profiles')
-      .update({ full_name: fullName, company_name: companyName } as any)
-      .eq('id', profile.id);
-
-    await refreshProfile();
-    setSaving(false);
+    try {
+      await refreshProfile();
+    } catch (error) {
+      console.error('Error saving profile:', error);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCreateWorkspace = async () => {
