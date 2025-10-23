@@ -2,26 +2,10 @@
 import { Response, NextFunction } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import supabaseAdmin from '../config/database';
-import { NotFoundError } from '../utils/errors';
+import { NotFoundError, BadRequestError } from '../utils/errors';
 import { successResponse, paginatedResponse } from '../utils/response';
 import logger from '../config/logger';
-
-const generateMockContent = (platform: string, tone: string): string[] => {
-  const templates = {
-    linkedin: [
-      `🚀 Excited to share some insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
-      `Just analyzed the latest trends in B2B marketing. The results might surprise you 📊\n\nKey takeaways:\n✅ Authentic content wins\n✅ Engagement over reach\n✅ Value-first approach\n\nWant to learn more? Drop a comment below!\n\n#Marketing #Strategy`,
-      `💡 Hot take: The future of content creation is here.\n\nAI isn't replacing creativity – it's amplifying it. Teams using smart automation tools are producing 3x more content while maintaining quality.\n\nThe question isn't whether to adopt AI, but how fast you can integrate it.\n\n#ContentMarketing #DigitalTransformation`,
-    ],
-    twitter: [
-      `🔥 AI automation is changing the game. 40% productivity boost for companies that embrace it.\n\nNot replacing humans, just making us better at what we do.\n\n#AI #Productivity`,
-      `Latest B2B marketing trends:\n\n✅ Authentic beats perfect\n✅ Engagement > Reach  \n✅ Value first, always\n\nWhat are you seeing in your space?\n\n#Marketing`,
-      `Hot take: AI won't replace creators.\n\nIt'll just separate those who adapt from those who don't.\n\nTeams using AI tools = 3x more content, same quality.\n\n#ContentMarketing`,
-    ],
-  };
-
-  return templates[platform as keyof typeof templates] || templates.linkedin;
-};
+import { generatePostsWithGemini } from '../services/gemini.service';
 
 export const generateContent = async (
   req: AuthRequest,
@@ -30,55 +14,129 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const { documentId, platform, tone, agentConfigId, variantCount } = req.body;
+    const { documentId, platform, tone, agentConfigId, variantCount = 10 } = req.body;
 
     if (!req.user) {
       throw new Error('User not authenticated');
     }
 
-    const { data: document } = await supabaseAdmin
+    if (!documentId || !platform || !tone) {
+      throw new BadRequestError('Missing required fields: documentId, platform, or tone');
+    }
+
+    if (!['linkedin', 'twitter'].includes(platform)) {
+      throw new BadRequestError('Invalid platform. Must be "linkedin" or "twitter"');
+    }
+
+    if (!['professional', 'casual', 'thought_leader', 'educational', 'promotional'].includes(tone)) {
+      throw new BadRequestError('Invalid tone');
+    }
+
+    if (variantCount < 1 || variantCount > 20) {
+      throw new BadRequestError('variantCount must be between 1 and 20');
+    }
+
+    const { data: document, error: docError } = await supabaseAdmin
       .from('documents')
-      .select('content_text')
+      .select('content_text, title')
       .eq('id', documentId)
       .eq('workspace_id', workspaceId)
       .single();
 
-    if (!document) {
-      throw new NotFoundError('Document not found');
+    if (docError || !document) {
+      throw new NotFoundError('Document not found or access denied');
     }
 
-    const mockPosts = generateMockContent(platform, tone);
-    const posts = mockPosts.slice(0, variantCount || 3);
+    if (!document.content_text) {
+      throw new BadRequestError('Document has no content to generate posts from');
+    }
+
+    logger.info(`Starting post generation for document ${documentId}`, {
+      workspaceId,
+      platform,
+      tone,
+      variantCount,
+      userId: req.user.id,
+    });
+
+    const aiGeneratedPosts = await generatePostsWithGemini({
+      documentContent: document.content_text,
+      platform,
+      tone,
+      variantCount,
+    });
+
+    if (!aiGeneratedPosts || aiGeneratedPosts.length === 0) {
+      throw new Error('AI service failed to generate posts');
+    }
 
     const generatedPosts: any[] = [];
+    const errors: any[] = [];
 
-    for (let i = 0; i < posts.length; i++) {
-      const { data, error } = await supabaseAdmin
-        .from('generated_posts')
-        .insert({
-          workspace_id: workspaceId,
-          document_id: documentId,
-          agent_config_id: agentConfigId,
-          platform,
-          content: posts[i],
-          variant_number: i + 1,
-          hashtags: [],
-          media_urls: [],
-          predicted_score: Math.random() * 10,
-          moderation_status: 'pending',
-        })
-        .select()
-        .single();
+    for (let i = 0; i < aiGeneratedPosts.length; i++) {
+      const post = aiGeneratedPosts[i];
 
-      if (!error && data) {
-        generatedPosts.push(data as any);
+      try {
+        const { data, error } = await supabaseAdmin
+          .from('generated_posts')
+          .insert({
+            workspace_id: workspaceId,
+            document_id: documentId,
+            agent_config_id: agentConfigId || null,
+            platform,
+            content: post.content,
+            tone,
+            variant_number: i + 1,
+            hashtags: post.hashtags || [],
+            media_urls: [],
+            predicted_score: Math.random() * 10,
+            moderation_status: 'pending',
+          })
+          .select()
+          .single();
+
+        if (error) {
+          logger.error(`Failed to save post ${i + 1}`, { error });
+          errors.push({ index: i + 1, error: error.message });
+        } else if (data) {
+          generatedPosts.push(data);
+        }
+      } catch (insertError: any) {
+        logger.error(`Exception saving post ${i + 1}`, { error: insertError });
+        errors.push({ index: i + 1, error: insertError.message });
       }
     }
 
-    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId}`);
+    logger.info(`Successfully generated ${generatedPosts.length} posts for document ${documentId}`, {
+      requested: variantCount,
+      successful: generatedPosts.length,
+      failed: errors.length,
+    });
 
-    successResponse(res, generatedPosts, 'Content generated successfully', 201);
-  } catch (error) {
+    if (generatedPosts.length === 0) {
+      throw new Error('Failed to save any generated posts to database');
+    }
+
+    successResponse(
+      res,
+      {
+        posts: generatedPosts,
+        metadata: {
+          requested: variantCount,
+          generated: aiGeneratedPosts.length,
+          saved: generatedPosts.length,
+          failed: errors.length,
+          errors: errors.length > 0 ? errors : undefined,
+        },
+      },
+      'Content generated successfully',
+      201
+    );
+  } catch (error: any) {
+    logger.error('Content generation failed', {
+      error: error.message,
+      stack: error.stack,
+    });
     next(error);
   }
 };

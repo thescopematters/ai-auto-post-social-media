@@ -1,0 +1,163 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import logger from '../config/logger';
+
+interface GeneratePostsParams {
+  documentContent: string;
+  platform: 'linkedin' | 'twitter';
+  tone: 'professional' | 'casual' | 'thought_leader' | 'educational' | 'promotional';
+  variantCount: number;
+}
+
+interface GeneratedPost {
+  content: string;
+  hashtags: string[];
+}
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+
+if (!GEMINI_API_KEY) {
+  logger.warn('GEMINI_API_KEY not configured. AI content generation will not work.');
+}
+
+const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+const getPlatformGuidelines = (platform: 'linkedin' | 'twitter'): string => {
+  const guidelines = {
+    linkedin: `
+      - Professional and business-focused
+      - Ideal length: 150-300 words (1-3 short paragraphs)
+      - Use line breaks for readability
+      - Include relevant hashtags (3-5) at the end
+      - Encourage engagement with questions or calls-to-action
+      - Use emojis sparingly for visual appeal
+      - Focus on industry insights, professional growth, or business value
+    `,
+    twitter: `
+      - Concise and punchy
+      - Maximum 280 characters
+      - Use 2-3 relevant hashtags integrated naturally
+      - Make every word count
+      - Use emojis strategically for impact
+      - Create urgency or curiosity
+      - Easy to read and share
+    `,
+  };
+  return guidelines[platform];
+};
+
+const getToneGuidelines = (
+  tone: 'professional' | 'casual' | 'thought_leader' | 'educational' | 'promotional'
+): string => {
+  const toneGuides = {
+    professional: 'Maintain a formal, authoritative voice. Use industry terminology appropriately. Be clear and direct.',
+    casual: 'Use conversational language. Be friendly and approachable. Use contractions and casual phrases.',
+    thought_leader: 'Share bold insights and perspectives. Challenge conventional thinking. Be confident and visionary.',
+    educational: 'Focus on teaching and explaining. Break down complex concepts. Use examples and actionable takeaways.',
+    promotional: 'Highlight benefits and value propositions. Create excitement. Include clear calls-to-action.',
+  };
+  return toneGuides[tone];
+};
+
+export const generatePostsWithGemini = async (
+  params: GeneratePostsParams
+): Promise<GeneratedPost[]> => {
+  const { documentContent, platform, tone, variantCount } = params;
+
+  if (!GEMINI_API_KEY) {
+    throw new Error('Gemini API key is not configured');
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
+    const platformGuidelines = getPlatformGuidelines(platform);
+    const toneGuidelines = getToneGuidelines(tone);
+
+    const prompt = `You are an expert social media content creator specializing in ${platform} posts.
+
+SOURCE CONTENT:
+${documentContent}
+
+TASK:
+Generate exactly ${variantCount} unique, engaging ${platform} posts based on the source content above.
+
+PLATFORM REQUIREMENTS (${platform.toUpperCase()}):
+${platformGuidelines}
+
+TONE REQUIREMENTS (${tone.toUpperCase()}):
+${toneGuidelines}
+
+IMPORTANT INSTRUCTIONS:
+1. Each post must be completely unique with different angles, hooks, or insights
+2. Extract key insights, statistics, or valuable information from the source content
+3. Make posts engaging and optimized for ${platform}
+4. Include relevant hashtags appropriate for ${platform}
+5. Ensure posts match the ${tone} tone consistently
+6. Return ONLY valid JSON without any markdown formatting or code blocks
+
+REQUIRED JSON FORMAT:
+{
+  "posts": [
+    {
+      "content": "The full post content here...",
+      "hashtags": ["hashtag1", "hashtag2", "hashtag3"]
+    }
+  ]
+}
+
+Generate ${variantCount} posts now:`;
+
+    logger.info(`Generating ${variantCount} ${platform} posts with ${tone} tone using Gemini AI`);
+
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const text = response.text();
+
+    logger.info(`Gemini API response received: ${text.substring(0, 100)}...`);
+
+    let parsedResponse;
+    try {
+      const cleanedText = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsedResponse = JSON.parse(cleanedText);
+    } catch (parseError) {
+      logger.error('Failed to parse Gemini response as JSON', { error: parseError, text });
+      throw new Error('Invalid response format from AI service');
+    }
+
+    if (!parsedResponse.posts || !Array.isArray(parsedResponse.posts)) {
+      logger.error('Invalid response structure from Gemini', { response: parsedResponse });
+      throw new Error('Invalid response structure from AI service');
+    }
+
+    const posts: GeneratedPost[] = parsedResponse.posts.map((post: any) => ({
+      content: post.content || '',
+      hashtags: Array.isArray(post.hashtags) ? post.hashtags : [],
+    }));
+
+    if (posts.length === 0) {
+      throw new Error('No posts generated by AI service');
+    }
+
+    logger.info(`Successfully generated ${posts.length} posts`);
+    return posts;
+  } catch (error: any) {
+    logger.error('Error generating posts with Gemini', {
+      error: error.message,
+      stack: error.stack,
+    });
+
+    if (error.message?.includes('API key')) {
+      throw new Error('AI service configuration error. Please contact support.');
+    }
+
+    if (error.message?.includes('quota') || error.message?.includes('rate limit')) {
+      throw new Error('AI service temporarily unavailable. Please try again in a few moments.');
+    }
+
+    throw new Error(`Failed to generate posts: ${error.message}`);
+  }
+};
+
+export default {
+  generatePostsWithGemini,
+};
