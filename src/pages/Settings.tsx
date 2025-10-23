@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { workspaceApi } from '../lib/apiClient';
-import { User, Building2, Bell, Shield, CreditCard, Save, Linkedin, Twitter } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { User, Building2, Bell, Shield, CreditCard, Save, Linkedin, Twitter, Plus } from 'lucide-react';
 
 export function Settings() {
   const { profile, currentWorkspace, refreshProfile } = useAuth();
@@ -9,6 +10,10 @@ export function Settings() {
   const [fullName, setFullName] = useState(profile?.full_name || '');
   const [companyName, setCompanyName] = useState(profile?.company_name || '');
   const [saving, setSaving] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [workspaceName, setWorkspaceName] = useState('');
+  const [workspaceBrandColor, setWorkspaceBrandColor] = useState('#3b82f6');
+  const [workspaceError, setWorkspaceError] = useState('');
 
   const handleSaveProfile = async () => {
     if (!profile) return;
@@ -21,6 +26,37 @@ export function Settings() {
 
     await refreshProfile();
     setSaving(false);
+  };
+
+  const handleCreateWorkspace = async () => {
+    if (!workspaceName.trim()) {
+      setWorkspaceError('Workspace name is required');
+      return;
+    }
+
+    setCreatingWorkspace(true);
+    setWorkspaceError('');
+
+    try {
+      const response = await workspaceApi.create(
+        workspaceName,
+        workspaceBrandColor,
+        undefined
+      );
+
+      if (response.success) {
+        setWorkspaceName('');
+        setWorkspaceBrandColor('#3b82f6');
+        await refreshProfile();
+      } else {
+        setWorkspaceError(response.error || 'Failed to create workspace');
+      }
+    } catch (error) {
+      console.error('Error creating workspace:', error);
+      setWorkspaceError('An error occurred while creating the workspace');
+    } finally {
+      setCreatingWorkspace(false);
+    }
   };
 
   const tabs = [
@@ -121,30 +157,97 @@ export function Settings() {
             {activeTab === 'workspace' && (
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 mb-6">Workspace Settings</h2>
-                <div className="space-y-6 max-w-2xl">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Workspace Name
-                    </label>
-                    <input
-                      type="text"
-                      value={currentWorkspace?.name || ''}
-                      disabled
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
-                    />
+
+                {currentWorkspace ? (
+                  <div className="space-y-6 max-w-2xl">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Workspace Name
+                      </label>
+                      <input
+                        type="text"
+                        value={currentWorkspace?.name || ''}
+                        disabled
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Brand Color
+                      </label>
+                      <input
+                        type="color"
+                        value={currentWorkspace?.brand_color || '#3b82f6'}
+                        disabled
+                        className="w-20 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                      />
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Brand Color
-                    </label>
-                    <input
-                      type="color"
-                      value={currentWorkspace?.brand_color || '#3b82f6'}
-                      disabled
-                      className="w-20 h-10 border border-gray-300 rounded-lg cursor-pointer"
-                    />
+                ) : (
+                  <div className="max-w-2xl">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 mb-6">
+                      <div className="flex items-start gap-3">
+                        <Building2 className="w-6 h-6 text-blue-600 mt-1" />
+                        <div>
+                          <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                            Create Your Workspace
+                          </h3>
+                          <p className="text-gray-600 mb-4">
+                            You don't have a workspace yet. Create one to start managing your content and collaborating with your team.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Workspace Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={workspaceName}
+                          onChange={(e) => {
+                            setWorkspaceName(e.target.value);
+                            setWorkspaceError('');
+                          }}
+                          placeholder="Enter workspace name"
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                          Brand Color
+                        </label>
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="color"
+                            value={workspaceBrandColor}
+                            onChange={(e) => setWorkspaceBrandColor(e.target.value)}
+                            className="w-20 h-10 border border-gray-300 rounded-lg cursor-pointer"
+                          />
+                          <span className="text-sm text-gray-600">{workspaceBrandColor}</span>
+                        </div>
+                      </div>
+
+                      {workspaceError && (
+                        <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                          <p className="text-sm text-red-600">{workspaceError}</p>
+                        </div>
+                      )}
+
+                      <button
+                        onClick={handleCreateWorkspace}
+                        disabled={creatingWorkspace}
+                        className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Plus className="w-5 h-5 mr-2" />
+                        {creatingWorkspace ? 'Creating...' : 'Create Workspace'}
+                      </button>
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
 
