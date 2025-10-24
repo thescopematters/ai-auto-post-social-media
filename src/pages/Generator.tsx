@@ -54,10 +54,9 @@ export function Generator() {
         variantCount: 3,
       });
 
-      if (response.success && response.data) {
-        const posts = (response.data as any).posts || [];
-        const postContents = posts.map((p: any) => p.content);
-        setGeneratedPosts(postContents);
+      if (response.success && Array.isArray(response.data)) {
+        const posts = response.data.map((item: any) => item.content).filter(Boolean);
+        setGeneratedPosts(posts);
       }
     } catch (error) {
       console.error('Error generating content:', error);
