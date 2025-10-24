@@ -12,6 +12,10 @@ import workspaceRoutes from './routes/workspace.routes';
 import documentRoutes from './routes/document.routes';
 import contentRoutes from './routes/content.routes';
 import dashboardRoutes from './routes/dashboard.routes';
+import socialAuthRoutes from './routes/socialAuth.routes';
+import schedulerRoutes from './routes/scheduler.routes';
+import { schedulerController } from './controllers/scheduler.controller';
+
 
 const app: Application = express();
 
@@ -57,9 +61,12 @@ app.use(`${config.api.prefix}/workspaces`, workspaceRoutes);
 app.use(`${config.api.prefix}/workspaces`, documentRoutes);
 app.use(`${config.api.prefix}/workspaces`, contentRoutes);
 app.use(`${config.api.prefix}/workspaces`, dashboardRoutes);
+app.use(`${config.api.prefix}/auth`, socialAuthRoutes);
+app.use(`${config.api.prefix}/scheduler`, schedulerRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
+schedulerController.startScheduler();
 
 const startServer = () => {
   try {

@@ -13,6 +13,7 @@ import { Moderation } from './pages/Moderation';
 import { Schedule } from './pages/Schedule';
 import { Analytics } from './pages/Analytics';
 import { Settings } from './pages/Settings';
+import { LinkedInCallback } from './pages/LinkedInCallback';
 
 function App() {
   return (
@@ -22,6 +23,7 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
           <Route
             path="/onboarding"
             element={

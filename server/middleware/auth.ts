@@ -1,8 +1,13 @@
-// @ts-nocheck
-import { Request, Response, NextFunction } from 'express';
-import { AuthenticationError, AuthorizationError } from '../utils/errors';
-import { verifyAccessToken, TokenPayload } from '../utils/jwt';
-import supabaseAdmin from '../config/database';
+import { Request, Response, NextFunction } from "express";
+import { AuthenticationError, AuthorizationError } from "../utils/errors";
+import { verifyAccessToken, TokenPayload } from "../utils/jwt";
+import supabaseAdmin from "../config/database";
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseAuth = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 export interface AuthRequest extends Request {
   user?: TokenPayload & {
@@ -20,31 +25,70 @@ export const authenticate = async (
   try {
     const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new AuthenticationError('No token provided');
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      throw new AuthenticationError("No token provided");
     }
-
     const token = authHeader.substring(7);
-    const decoded = verifyAccessToken(token);
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabaseAuth.auth.getUser(token);
 
-    const { data: user, error } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email, role')
-      .eq('id', decoded.userId)
-      .single();
+      if (!error && user) {
+        const { data: profile, error: profileError } = await supabaseAdmin
+          .from("profiles")
+          .select("id, email, role")
+          .eq("id", user.id)
+          .single();
 
-    if (error || !user) {
-      throw new AuthenticationError('User not found');
+        if (!profile) {
+          throw new AuthenticationError("User profile not found");
+        }
+
+        req.user = {
+          userId: user.id,
+          id: user.id,
+          email: user.email,
+          role: profile.role,
+        };
+        next();
+        return;
+      } else {
+        console.log('❌ Supabase token verification failed:', error?.message);
+      }
+    } catch (supabaseError) {
+      console.log('❌ Supabase token verification exception:', supabaseError);
     }
 
-    req.user = {
-      ...decoded,
-      id: user.id,
-      role: user.role,
-    };
+    try {
+      const decoded = verifyAccessToken(token);
 
-    next();
+      const { data: user, error } = await supabaseAdmin
+        .from("profiles")
+        .select("id, email, role")
+        .eq("id", decoded.userId)
+        .single();
+
+      if (error || !user) {
+        console.log('❌ User not found for custom token');
+        throw new AuthenticationError("User not found");
+      }
+
+      req.user = {
+        ...decoded,
+        id: user.id,
+        role: user.role,
+      };
+
+      next();
+    } catch (customError) {
+      console.log('❌ Custom token verification failed:', customError);
+      throw customError;
+    }
+
   } catch (error) {
+    console.log('FINAL AUTH ERROR:', error);
     next(error);
   }
 };
@@ -55,28 +99,29 @@ export const requireWorkspace = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const workspaceId = req.params.workspaceId || req.body.workspaceId || req.query.workspaceId;
+    const workspaceId =
+      req.params.workspaceId || req.body.workspaceId || req.query.workspaceId;
 
     if (!workspaceId) {
-      throw new AuthorizationError('Workspace ID required');
+      throw new AuthorizationError("Workspace ID required");
     }
 
     if (!req.user) {
-      throw new AuthenticationError('User not authenticated');
+      throw new AuthenticationError("User not authenticated");
     }
 
     const { data: membership, error } = await supabaseAdmin
-      .from('workspace_members')
-      .select('workspace_id, role')
-      .eq('workspace_id', workspaceId)
-      .eq('user_id', req.user.id)
+      .from("workspace_members")
+      .select("workspace_id, role")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", req.user.id)
       .maybeSingle();
 
     if (error || !membership) {
       const { data: workspace } = await supabaseAdmin
-        .from('workspaces')
-        .select('owner_id')
-        .eq('id', workspaceId)
+        .from("workspaces")
+        .select("owner_id")
+        .eq("id", workspaceId)
         .single();
 
       if (workspace && workspace.owner_id === req.user.id) {
@@ -85,7 +130,7 @@ export const requireWorkspace = async (
         return;
       }
 
-      throw new AuthorizationError('Access to workspace denied');
+      throw new AuthorizationError("Access to workspace denied");
     }
 
     req.workspaceId = workspaceId;
@@ -103,25 +148,25 @@ export const requireRole = (allowedRoles: string[]) => {
   ): Promise<void> => {
     try {
       if (!req.user) {
-        throw new AuthenticationError('User not authenticated');
+        throw new AuthenticationError("User not authenticated");
       }
 
       if (!req.workspaceId) {
-        throw new AuthorizationError('Workspace context required');
+        throw new AuthorizationError("Workspace context required");
       }
 
       const { data: membership } = await supabaseAdmin
-        .from('workspace_members')
-        .select('role')
-        .eq('workspace_id', req.workspaceId)
-        .eq('user_id', req.user.id)
+        .from("workspace_members")
+        .select("role")
+        .eq("workspace_id", req.workspaceId)
+        .eq("user_id", req.user.id)
         .maybeSingle();
 
-      const userRole = membership?.role || 'viewer';
+      const userRole = membership?.role || "viewer";
 
       if (!allowedRoles.includes(userRole)) {
         throw new AuthorizationError(
-          `Insufficient permissions. Required roles: ${allowedRoles.join(', ')}`
+          `Insufficient permissions. Required roles: ${allowedRoles.join(", ")}`
         );
       }
 

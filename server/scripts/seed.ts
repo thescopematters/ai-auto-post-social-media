@@ -1,6 +1,5 @@
-// @ts-nocheck
-import supabaseAdmin from '../config/database';
-import logger from '../config/logger';
+import supabaseAdmin from '../config/database.ts';
+import logger from '../config/logger.ts';
 
 const seedDatabase = async () => {
   try {
