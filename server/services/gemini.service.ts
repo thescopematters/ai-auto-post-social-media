@@ -11,7 +11,7 @@ class GeminiService {
       logger.warn('GEMINI_API_KEY is not set. AI content generation will fail.');
     }
     this.genAI = new GoogleGenerativeAI(config.gemini.apiKey);
-    this.model = this.genAI.getGenerativeModel({ model: 'gemini-2.0-flash-exp' });
+    this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   }
 
   async generateSocialMediaPost(
