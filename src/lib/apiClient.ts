@@ -194,6 +194,33 @@ export const contentApi = {
 
   moderatePost: (workspaceId: string, postId: string, action: string, reason?: string) =>
     apiClient.post(`/workspaces/${workspaceId}/posts/${postId}/moderate`, { action, reason }),
+
+  getScheduledPosts: (workspaceId: string) =>
+    apiClient.get(`/workspaces/${workspaceId}/scheduled-posts`),
+
+  schedulePost: (workspaceId: string, data: {
+    postId: string;
+    socialAccountId: string;
+    scheduledTime: string;
+  }) =>
+    apiClient.post(`/workspaces/${workspaceId}/schedule`, data),
+
+  deleteScheduledPost: (workspaceId: string, postId: string) =>
+    apiClient.delete(`/workspaces/${workspaceId}/schedule/${postId}`),
+};
+
+export const socialAccountsApi = {
+  getAccounts: (workspaceId: string) =>
+    apiClient.get(`/workspaces/${workspaceId}/social-accounts`),
+
+  connectAccount: (workspaceId: string, data: any) =>
+    apiClient.post(`/workspaces/${workspaceId}/social-accounts`, data),
+
+  disconnectAccount: (workspaceId: string, platform: string) =>
+    apiClient.delete(`/workspaces/${workspaceId}/social-accounts/${platform}`),
+
+  updateAccount: (workspaceId: string, accountId: string, data: any) =>
+    apiClient.put(`/workspaces/${workspaceId}/social-accounts/${accountId}`, data),
 };
 
 export const dashboardApi = {
@@ -205,6 +232,11 @@ export const dashboardApi = {
 
   getAnalytics: (workspaceId: string) =>
     apiClient.get(`/workspaces/${workspaceId}/analytics`),
+};
+
+export const schedulerApi = {
+  publishNow: (data: { postId: string }) =>
+    apiClient.post('/publish-now', data),
 };
 
 export default apiClient;
