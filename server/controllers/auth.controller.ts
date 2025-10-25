@@ -1,20 +1,20 @@
 // @ts-nocheck
-import { Response, NextFunction } from 'express';
-import bcrypt from 'bcryptjs';
-import { AuthRequest } from '../middleware/auth';
-import supabaseAdmin from '../config/database';
+import { Response, NextFunction } from "express";
+import bcrypt from "bcryptjs";
+import { AuthRequest } from "../middleware/auth";
+import supabaseAdmin from "../config/database";
 import {
   generateAccessToken,
   generateRefreshToken,
-  verifyRefreshToken
-} from '../utils/jwt';
+  verifyRefreshToken,
+} from "../utils/jwt";
 import {
   AuthenticationError,
   ConflictError,
   ValidationError,
-} from '../utils/errors';
-import { successResponse } from '../utils/response';
-import logger from '../config/logger';
+} from "../utils/errors";
+import { successResponse } from "../utils/response";
+import logger from "../config/logger";
 
 export const register = async (
   req: AuthRequest,
@@ -25,36 +25,39 @@ export const register = async (
     const { email, password, fullName } = req.body;
 
     const { data: existingUser } = await supabaseAdmin
-      .from('profiles')
-      .select('id')
-      .eq('email', email)
+      .from("profiles")
+      .select("id")
+      .eq("email", email)
       .maybeSingle();
 
     if (existingUser) {
-      throw new ConflictError('User with this email already exists');
+      throw new ConflictError("User with this email already exists");
     }
 
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
+    const { data: authData, error: authError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+      });
 
     if (authError || !authData.user) {
-      throw new AuthenticationError('Failed to create user account');
+      throw new AuthenticationError("Failed to create user account");
     }
 
-    const { error: profileError } = await supabaseAdmin.from('profiles').insert({
-      id: authData.user.id,
-      email,
-      full_name: fullName,
-      role: 'user',
-    } as any);
+    const { error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .insert({
+        id: authData.user.id,
+        email,
+        full_name: fullName,
+        role: "user",
+      } as any);
 
     if (profileError) {
-      logger.error('Profile creation error:', profileError);
+      logger.error("Profile creation error:", profileError);
       await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
-      throw new AuthenticationError('Failed to create user profile');
+      throw new AuthenticationError("Failed to create user profile");
     }
 
     const accessToken = generateAccessToken({
@@ -80,7 +83,7 @@ export const register = async (
         accessToken,
         refreshToken,
       },
-      'Registration successful',
+      "Registration successful",
       201
     );
   } catch (error) {
@@ -102,17 +105,17 @@ export const login = async (
     });
 
     if (error || !data.user) {
-      throw new AuthenticationError('Invalid email or password');
+      throw new AuthenticationError("Invalid email or password");
     }
 
     const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email, full_name, role')
-      .eq('id', data.user.id)
+      .from("profiles")
+      .select("id, email, full_name, role")
+      .eq("id", data.user.id)
       .single();
 
     if (!profile) {
-      throw new AuthenticationError('User profile not found');
+      throw new AuthenticationError("User profile not found");
     }
 
     const accessToken = generateAccessToken({
@@ -127,16 +130,20 @@ export const login = async (
 
     logger.info(`User logged in: ${email}`);
 
-    successResponse(res, {
-      user: {
-        id: (profile as any as any).id,
-        email: (profile as any as any).email,
-        fullName: (profile as any as any).full_name,
-        role: (profile as any as any).role,
+    successResponse(
+      res,
+      {
+        user: {
+          id: (profile as any as any).id,
+          email: (profile as any as any).email,
+          fullName: (profile as any as any).full_name,
+          role: (profile as any as any).role,
+        },
+        accessToken,
+        refreshToken,
       },
-      accessToken,
-      refreshToken,
-    }, 'Login successful');
+      "Login successful"
+    );
   } catch (error) {
     next(error);
   }
@@ -151,19 +158,19 @@ export const refreshToken = async (
     const { refreshToken: token } = req.body;
 
     if (!token) {
-      throw new ValidationError('Refresh token is required');
+      throw new ValidationError("Refresh token is required");
     }
 
     const decoded = verifyRefreshToken(token);
 
     const { data: user } = await supabaseAdmin
-      .from('profiles')
-      .select('id, email')
-      .eq('id', decoded.userId)
+      .from("profiles")
+      .select("id, email")
+      .eq("id", decoded.userId)
       .single();
 
     if (!user) {
-      throw new AuthenticationError('User not found');
+      throw new AuthenticationError("User not found");
     }
 
     const accessToken = generateAccessToken({
@@ -176,10 +183,14 @@ export const refreshToken = async (
       email: (user as any as any).email,
     });
 
-    successResponse(res, {
-      accessToken,
-      refreshToken: newRefreshToken,
-    }, 'Token refreshed successfully');
+    successResponse(
+      res,
+      {
+        accessToken,
+        refreshToken: newRefreshToken,
+      },
+      "Token refreshed successfully"
+    );
   } catch (error) {
     next(error);
   }
@@ -195,7 +206,7 @@ export const logout = async (
       logger.info(`User logged out: ${req.user.email}`);
     }
 
-    successResponse(res, null, 'Logout successful');
+    successResponse(res, null, "Logout successful");
   } catch (error) {
     next(error);
   }
@@ -208,20 +219,20 @@ export const getCurrentUser = async (
 ): Promise<void> => {
   try {
     if (!req.user) {
-      throw new AuthenticationError('User not authenticated');
+      throw new AuthenticationError("User not authenticated");
     }
 
     const { data: profile } = await supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('id', req.user.id)
+      .from("profiles")
+      .select("*")
+      .eq("id", req.user.id)
       .single();
 
     if (!profile) {
-      throw new AuthenticationError('User profile not found');
+      throw new AuthenticationError("User profile not found");
     }
 
-    successResponse(res, profile, 'User profile retrieved successfully');
+    successResponse(res, profile, "User profile retrieved successfully");
   } catch (error) {
     next(error);
   }

@@ -1,11 +1,11 @@
 // @ts-nocheck
-import { Response, NextFunction } from 'express';
-import { AuthRequest } from '../middleware/auth';
-import supabaseAdmin from '../config/database';
-import { NotFoundError } from '../utils/errors';
-import { successResponse, paginatedResponse } from '../utils/response';
-import logger from '../config/logger';
-import geminiService from '../services/gemini.service';
+import { Response, NextFunction } from "express";
+import { AuthRequest } from "../middleware/auth";
+import supabaseAdmin from "../config/database";
+import { NotFoundError } from "../utils/errors";
+import { successResponse, paginatedResponse } from "../utils/response";
+import logger from "../config/logger";
+import geminiService from "../services/gemini.service";
 
 export const generateContent = async (
   req: AuthRequest,
@@ -14,32 +14,37 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const { documentId, platform, tone, agentConfigId, variantCount } = req.body;
+    const { documentId, platform, tone, agentConfigId, variantCount } =
+      req.body;
 
     if (!req.user) {
-      throw new Error('User not authenticated');
+      throw new Error("User not authenticated");
     }
 
     const { data: document } = await supabaseAdmin
-      .from('documents')
-      .select('content_text, title')
-      .eq('id', documentId)
-      .eq('workspace_id', workspaceId)
+      .from("documents")
+      .select("content_text, title")
+      .eq("id", documentId)
+      .eq("workspace_id", workspaceId)
       .single();
 
     if (!document) {
-      throw new NotFoundError('Document not found');
+      throw new NotFoundError("Document not found");
     }
 
     if (!document.content_text) {
-      throw new Error('Document has no content to generate posts from');
+      throw new Error("Document has no content to generate posts from");
     }
 
-    logger.info(`Generating ${variantCount || 3} posts for document ${documentId} on ${platform} with ${tone} tone`);
+    logger.info(
+      `Generating ${
+        variantCount || 3
+      } posts for document ${documentId} on ${platform} with ${tone} tone`
+    );
 
     const posts = await geminiService.generateWithRetry(
       document.content_text,
-      platform as 'linkedin' | 'twitter',
+      platform as "linkedin" | "twitter",
       tone,
       variantCount || 3
     );
@@ -48,7 +53,7 @@ export const generateContent = async (
 
     for (let i = 0; i < posts.length; i++) {
       const { data, error } = await supabaseAdmin
-        .from('generated_posts')
+        .from("generated_posts")
         .insert({
           workspace_id: workspaceId,
           document_id: documentId,
@@ -59,7 +64,7 @@ export const generateContent = async (
           hashtags: [],
           media_urls: [],
           predicted_score: Math.random() * 10,
-          moderation_status: 'pending',
+          moderation_status: "pending",
         })
         .select()
         .single();
@@ -69,9 +74,11 @@ export const generateContent = async (
       }
     }
 
-    logger.info(`Generated ${generatedPosts.length} posts for document ${documentId}`);
+    logger.info(
+      `Generated ${generatedPosts.length} posts for document ${documentId}`
+    );
 
-    successResponse(res, generatedPosts, 'Content generated successfully', 201);
+    successResponse(res, generatedPosts, "Content generated successfully", 201);
   } catch (error) {
     next(error);
   }
@@ -91,27 +98,34 @@ export const getAllPosts = async (
     const offset = (page - 1) * limit;
 
     let query = supabaseAdmin
-      .from('generated_posts')
-      .select('*, documents(title)', { count: 'exact' })
-      .eq('workspace_id', workspaceId)
-      .order('generated_at', { ascending: false })
+      .from("generated_posts")
+      .select("*, documents(title)", { count: "exact" })
+      .eq("workspace_id", workspaceId)
+      .order("generated_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (status) {
-      query = query.eq('moderation_status', status);
+      query = query.eq("moderation_status", status);
     }
 
     if (platform) {
-      query = query.eq('platform', platform);
+      query = query.eq("platform", platform);
     }
 
     const { data, error, count } = await query;
 
     if (error) {
-      throw new Error('Failed to fetch posts');
+      throw new Error("Failed to fetch posts");
     }
 
-    paginatedResponse(res, data || [], page, limit, count || 0, 'Posts retrieved successfully');
+    paginatedResponse(
+      res,
+      data || [],
+      page,
+      limit,
+      count || 0,
+      "Posts retrieved successfully"
+    );
   } catch (error) {
     next(error);
   }
@@ -126,17 +140,17 @@ export const getPostById = async (
     const { workspaceId, postId } = req.params;
 
     const { data, error } = await supabaseAdmin
-      .from('generated_posts')
-      .select('*, documents(title)')
-      .eq('id', postId)
-      .eq('workspace_id', workspaceId)
+      .from("generated_posts")
+      .select("*, documents(title)")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
       .single();
 
     if (error || !data) {
-      throw new NotFoundError('Post not found');
+      throw new NotFoundError("Post not found");
     }
 
-    successResponse(res, data, 'Post retrieved successfully');
+    successResponse(res, data, "Post retrieved successfully");
   } catch (error) {
     next(error);
   }
@@ -157,18 +171,18 @@ export const updatePost = async (
     if (mediaUrls) updateData.media_urls = mediaUrls;
 
     const { data, error } = await supabaseAdmin
-      .from('generated_posts')
+      .from("generated_posts")
       .update(updateData)
-      .eq('id', postId)
-      .eq('workspace_id', workspaceId)
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
       .select()
       .single();
 
     if (error || !data) {
-      throw new NotFoundError('Post not found');
+      throw new NotFoundError("Post not found");
     }
 
-    successResponse(res, data, 'Post updated successfully');
+    successResponse(res, data, "Post updated successfully");
   } catch (error) {
     next(error);
   }
@@ -183,18 +197,18 @@ export const deletePost = async (
     const { workspaceId, postId } = req.params;
 
     const { error } = await supabaseAdmin
-      .from('generated_posts')
+      .from("generated_posts")
       .delete()
-      .eq('id', postId)
-      .eq('workspace_id', workspaceId);
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId);
 
     if (error) {
-      throw new NotFoundError('Post not found');
+      throw new NotFoundError("Post not found");
     }
 
     logger.info(`Post deleted: ${postId}`);
 
-    successResponse(res, null, 'Post deleted successfully');
+    successResponse(res, null, "Post deleted successfully");
   } catch (error) {
     next(error);
   }
@@ -210,51 +224,56 @@ export const moderatePost = async (
     const { action, reason } = req.body;
 
     if (!req.user) {
-      throw new Error('User not authenticated');
+      throw new Error("User not authenticated");
     }
 
     const { data: post } = await supabaseAdmin
-      .from('generated_posts')
-      .select('moderation_status')
-      .eq('id', postId)
-      .eq('workspace_id', workspaceId)
+      .from("generated_posts")
+      .select("moderation_status")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
       .single();
 
     if (!post) {
-      throw new NotFoundError('Post not found');
+      throw new NotFoundError("Post not found");
     }
 
-    const newStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'flagged';
+    const newStatus =
+      action === "approve"
+        ? "approved"
+        : action === "reject"
+        ? "rejected"
+        : "flagged";
 
     const { data, error } = await supabaseAdmin
-      .from('generated_posts')
+      .from("generated_posts")
       .update({
         moderation_status: newStatus,
         moderation_notes: reason,
         moderated_by: req.user.id,
         moderated_at: new Date().toISOString(),
       } as any)
-      .eq('id', postId)
-      .eq('workspace_id', workspaceId)
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
       .select()
       .single();
 
     if (error) {
-      throw new Error('Failed to moderate post');
+      throw new Error("Failed to moderate post");
     }
 
-    await supabaseAdmin.from('moderation_logs').insert({
+    await supabaseAdmin.from("moderation_logs").insert({
       post_id: postId,
       user_id: req.user.id,
       action,
       reason,
       previous_status: post.moderation_status,
       new_status: newStatus,
-      } as any);
+    } as any);
 
     logger.info(`Post ${postId} moderated: ${action} by ${req.user.email}`);
 
-    successResponse(res, data, 'Post moderated successfully');
+    successResponse(res, data, "Post moderated successfully");
   } catch (error) {
     next(error);
   }
