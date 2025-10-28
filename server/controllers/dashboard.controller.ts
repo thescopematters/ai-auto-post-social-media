@@ -18,15 +18,18 @@ export const getDashboardStats = async (
           .from("documents")
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", workspaceId),
+
         supabaseAdmin
           .from("generated_posts")
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", workspaceId),
+
         supabaseAdmin
           .from("scheduled_posts")
           .select("id", { count: "exact", head: true })
           .eq("workspace_id", workspaceId)
-          .eq("status", "scheduled"),
+          .or(`status.eq.scheduled,status.eq.pending,status.eq.published`),
+
         supabaseAdmin
           .from("generated_posts")
           .select("id", { count: "exact", head: true })
@@ -45,6 +48,7 @@ export const getDashboardStats = async (
 
     successResponse(res, stats, "Dashboard statistics retrieved successfully");
   } catch (error) {
+    console.error("Error fetching stats:", error);
     next(error);
   }
 };

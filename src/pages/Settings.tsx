@@ -11,7 +11,7 @@ import {
   Linkedin,
   Twitter,
 } from "lucide-react";
-import logger from "../utils/logger";
+import { toast } from "sonner";
 
 interface SocialAccount {
   id: string;
@@ -38,21 +38,8 @@ export function Settings() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
-    logger.info("=== Settings Component Mounted ===");
-    logger.info("Current auth state:", {
-      hasProfile: !!profile,
-      profileId: profile?.id,
-      profileEmail: profile?.email,
-      hasWorkspace: !!currentWorkspace,
-      loading: loading,
-    });
-
-    if (loading) {
-      logger.info("Still loading auth data...");
-    }
-
     if (!loading && !profile) {
-      logger.warn("User not authenticated, redirecting to signin");
+      console.warn("User not authenticated, redirecting to signin");
       navigate("/signin");
     }
   }, [profile, loading, navigate]);
@@ -68,7 +55,7 @@ export function Settings() {
     setConnecting(true);
     try {
       if (!profile?.id) {
-        alert("Please log in first");
+        toast.error("Please log in first");
         setConnecting(false);
         return;
       }
@@ -79,13 +66,12 @@ export function Settings() {
       window.location.href = `${backendUrl}/auth/linkedin?userId=${profile.id}`;
     } catch (error: any) {
       console.error("Error:", error);
-      alert("Error connecting to LinkedIn");
+      toast.error("Error connecting to LinkedIn");
       setConnecting(false);
     }
   };
 
   const handleDisconnectAccount = async (platform: string) => {
-    logger.info("Disconnecting account:", { platform });
     try {
       const backendUrl =
         import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
@@ -93,7 +79,7 @@ export function Settings() {
       const token = localStorage.getItem("accessToken");
 
       if (!token) {
-        alert("Please sign in to disconnect account");
+        toast.error("Please sign in to disconnect account");
         return;
       }
 
@@ -107,27 +93,24 @@ export function Settings() {
 
       if (response.ok) {
         fetchSocialAccounts();
-        alert(`✅ ${platform} account disconnected successfully`);
-        logger.info("Account disconnected:", { platform });
+        toast.success(`${platform} account disconnected successfully`);
       } else {
         throw new Error("Failed to disconnect account");
       }
     } catch (error) {
-      logger.error("Error disconnecting account:", error);
-      alert("Error disconnecting account. Please try again.");
+      console.error("Error disconnecting account:", error);
+      toast.error("Error disconnecting account. Please try again.");
     }
   };
 
   const fetchSocialAccounts = async () => {
-    logger.info("Fetching social accounts...");
-
     try {
       const backendUrl =
         import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
       const token = localStorage.getItem("accessToken");
 
       if (!token) {
-        logger.warn("No token for fetching social accounts");
+        console.warn("No token for fetching social accounts");
         return;
       }
 
@@ -144,17 +127,14 @@ export function Settings() {
         const data = await response.json();
         if (data.success) {
           setSocialAccounts(data.data);
-          logger.info("Social accounts fetched:", {
-            count: data.data?.length || 0,
-          });
         }
       } else {
-        logger.error("Failed to fetch social accounts:", {
+        console.error("Failed to fetch social accounts:", {
           status: response.status,
         });
       }
     } catch (error) {
-      logger.error("Error fetching social accounts:", error);
+      console.error("Error fetching social accounts:", error);
       setSocialAccounts([]);
     }
   };
@@ -165,15 +145,17 @@ export function Settings() {
     const account = searchParams.get("account");
 
     if (success === "linkedin_connected") {
-      logger.info("LinkedIn connection successful:", { account });
-      alert(`✅ LinkedIn connected successfully! Connected as: ${account}`);
+      toast.success("LinkedIn Connected Successfully!", {
+        description: `Connected as: ${account}`,
+      });
       fetchSocialAccounts();
       window.history.replaceState({}, "", "/settings");
     }
 
     if (error) {
-      logger.error("LinkedIn connection failed:", { error });
-      alert(`❌ LinkedIn connection failed: ${error}`);
+      toast.error("LinkedIn Connection Failed", {
+        description: error,
+      });
       window.history.replaceState({}, "", "/settings");
     }
   }, [searchParams]);

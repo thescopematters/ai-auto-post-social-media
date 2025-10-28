@@ -1,10 +1,9 @@
-// services/gemini.service.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import config from "../config/environment";
 
 class GeminiService {
   private genAI: GoogleGenerativeAI;
-  private availableModels = ["gemini-1.0-pro", "gemini-1.5-pro", "gemini-pro"];
+  private availableModels = ["gemini-1.0-pro", "gemini-1.5-pro", "gemini-pro", "gemini-2.0-flash-exp"];
   private currentModelIndex = 0;
 
   constructor() {
@@ -40,7 +39,7 @@ class GeminiService {
     variantCount: number = 3
   ): Promise<string[]> {
     try {
-      const prompt = this.buildSimplePrompt(
+      const prompt = this.buildCleanPrompt(
         documentContent,
         platform,
         tone,
@@ -58,7 +57,6 @@ class GeminiService {
     } catch (error: any) {
       console.error("❌ Gemini API error:", error.message);
 
-      // Try next model if available
       if (this.currentModelIndex < this.availableModels.length - 1) {
         this.currentModelIndex++;
         return this.generateSocialMediaPost(
@@ -73,7 +71,7 @@ class GeminiService {
     }
   }
 
-  private buildSimplePrompt(
+  private buildCleanPrompt(
     documentContent: string,
     platform: string,
     tone: string,
@@ -91,8 +89,10 @@ PLATFORM: ${platform}
 TONE: ${tone}
 VARIATIONS: ${variantCount}
 
-INSTRUCTIONS:
-- Create ${variantCount} different posts
+IMPORTANT FORMATTING RULES:
+- DO NOT number the posts (no "POST 1", "2", "3")
+- DO NOT use markdown formatting (no **bold**, no headers)
+- Create clean, plain text posts
 - Each post should be unique and engaging
 - Use appropriate hashtags
 - Keep it professional
@@ -105,22 +105,29 @@ Now generate ${variantCount} ${platform} posts:`;
   }
 
   private parseResponse(text: string, expectedCount: number): string[] {
+    let cleanText = text
+      .replace(/\*\*POST\s*\d+\*\*/gi, '') 
+      .replace(/POST\s*\d+\s*[:-]?\s*/gi, '') 
+      .replace(/^#\s?POST\s*\d+.*$/gim, '') 
+      .replace(/^Variation\s*\d+.*$/gim, '')
+      .trim();
+
     // Try multiple delimiters
     const delimiters = ["===POST===", "---POST---", "POST:", "Variation"];
 
     let posts: string[] = [];
 
     for (const delimiter of delimiters) {
-      posts = text
+      posts = cleanText
         .split(delimiter)
         .map((post) => post.trim())
         .filter((post) => {
-          // Filter valid posts
           return (
             post.length > 20 &&
             !post.toLowerCase().includes("sorry") &&
             !post.toLowerCase().includes("i cannot") &&
-            !post.toLowerCase().includes("as an ai")
+            !post.toLowerCase().includes("as an ai") &&
+            !post.match(/^(post\s*\d+|variation\s*\d+)/i)
           );
         });
 
@@ -129,21 +136,30 @@ Now generate ${variantCount} ${platform} posts:`;
       }
     }
 
-    // If no posts found with delimiters, split by newlines and take meaningful chunks
+    // If no posts found with delimiters, split by double newlines
     if (posts.length === 0) {
-      const lines = text
-        .split("\n")
-        .map((line) => line.trim())
-        .filter((line) => line.length > 30);
-
-      posts = lines.slice(0, expectedCount);
+      posts = cleanText
+        .split('\n\n')
+        .map((post) => post.trim())
+        .filter((post) => 
+          post.length > 30 &&
+          !post.match(/^(post\s*\d+|variation\s*\d+)/i)
+        )
+        .slice(0, expectedCount);
     }
 
-    // If still no posts, return the entire text as one post
-    if (posts.length === 0) {
-      posts = [text.substring(0, 500)];
-    }
+    // Final cleanup - remove any remaining numbering
+    posts = posts.map(post => {
+      return post
+        .replace(/^\d+[\.\)]\s*/, '') 
+        .replace(/^[\*\-#]\s*/, '')
+        .trim();
+    });
 
+    // If still no posts, create from the clean text
+    if (posts.length === 0) {
+      posts = [cleanText.substring(0, 500)];
+    }
     return posts.slice(0, expectedCount);
   }
 
@@ -192,7 +208,6 @@ Now generate ${variantCount} ${platform} posts:`;
     return this.getFallbackContent(platform, tone, variantCount);
   }
 
-  // services/gemini.service.ts - Better fallback content
   private getFallbackContent(
     platform: "linkedin" | "twitter",
     tone: string,
@@ -232,7 +247,6 @@ Now generate ${variantCount} ${platform} posts:`;
     return posts.slice(0, variantCount);
   }
 
-  // Test method to check available models
   async testConnection(): Promise<boolean> {
     try {
       const model = this.genAI.getGenerativeModel({ model: "gemini-pro" });

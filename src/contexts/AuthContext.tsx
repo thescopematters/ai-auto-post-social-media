@@ -6,7 +6,6 @@ import {
   ReactNode,
 } from "react";
 import { authApi, workspaceApi } from "../lib/apiClient";
-import logger from "../utils/logger";
 
 interface User {
   id: string;
@@ -66,32 +65,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const initAuth = async () => {
-      logger.info("=== AuthContext Initialization ===");
-
       const token = localStorage.getItem("accessToken");
-      logger.info("Checking for stored token:", {
-        hasToken: !!token,
-        tokenPreview: token ? token.substring(0, 20) + "..." : "none",
-      });
 
       if (token) {
         try {
-          logger.info("Token found, loading user data...");
           await loadUserData();
-          logger.info("User data loaded successfully");
         } catch (error) {
-          logger.error("Failed to load user data:", error);
           localStorage.removeItem("accessToken");
           localStorage.removeItem("refreshToken");
           setUser(null);
           setProfile(null);
         }
       } else {
-        logger.info("No token found, user is not logged in");
+        console.warn("No token found, user is not logged in");
       }
 
       setLoading(false);
-      logger.info("=== AuthContext Initialization Complete ===");
     };
 
     initAuth();
@@ -99,24 +88,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const loadUserData = async () => {
     try {
-      logger.info("Loading user data from API...");
-
       const response = await authApi.getCurrentUser();
-
-      logger.info("getCurrentUser response:", {
-        success: response.success,
-        hasData: !!response.data,
-        error: response.error,
-      });
 
       if (response.success && response.data) {
         const userData = response.data as any;
-
-        logger.info("User profile received:", {
-          id: userData.id,
-          email: userData.email,
-          role: userData.role,
-        });
 
         setUser({
           id: userData.id,
@@ -127,15 +102,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         setProfile(userData);
 
-        logger.info("Fetching workspaces...");
         const workspacesResponse = await workspaceApi.getAll();
-
-        logger.info("Workspaces response:", {
-          success: workspacesResponse.success,
-          count: Array.isArray(workspacesResponse.data)
-            ? workspacesResponse.data.length
-            : 0,
-        });
 
         if (workspacesResponse.success && workspacesResponse.data) {
           const allWorkspaces = workspacesResponse.data as Workspace[];
@@ -154,38 +121,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 allWorkspaces[0]
               : allWorkspaces[0];
 
-            logger.info("Current workspace set:", {
-              id: workspace.id,
-              name: workspace.name,
-            });
-
             setCurrentWorkspaceState(workspace);
           } else {
-            logger.warn("No workspaces found for user");
+            console.warn("No workspaces found for user");
             setWorkspaces([]);
             setCurrentWorkspaceState(null);
           }
         }
       } else {
-        logger.error("Failed to load user data:", response.error);
+        console.error("Failed to load user data:", response.error);
         throw new Error(response.error || "Failed to load user data");
       }
     } catch (error) {
-      logger.error("Error loading user data:", error);
+      console.error("Error loading user data:", error);
       throw error;
     }
   };
 
   const signUp = async (email: string, password: string, fullName: string) => {
     try {
-      logger.info("Signing up user:", { email, fullName });
-
       const response = await authApi.register(email, password, fullName);
-
-      logger.info("Registration response:", {
-        success: response.success,
-        error: response.error,
-      });
 
       if (response.success && response.data) {
         const {
@@ -193,8 +148,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           refreshToken,
           user: userData,
         } = response.data as any;
-
-        logger.info("Registration successful, saving tokens");
 
         localStorage.setItem("accessToken", accessToken);
         localStorage.setItem("refreshToken", refreshToken);
@@ -213,21 +166,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       return { error: new Error(response.error || "Registration failed") };
     } catch (error) {
-      logger.error("Sign up error:", error);
       return { error: error as Error };
     }
   };
 
   const signIn = async (email: string, password: string) => {
     try {
-      logger.info("Signing in user:", { email });
-
       const response = await authApi.login(email, password);
-
-      logger.info("Login response:", {
-        success: response.success,
-        error: response.error,
-      });
 
       if (response.success && response.data) {
         const {
@@ -235,8 +180,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           refreshToken,
           user: userData,
         } = response.data as any;
-
-        logger.info("Login successful, saving tokens");
 
         localStorage.setItem("accessToken", accessToken);
         localStorage.setItem("refreshToken", refreshToken);
@@ -250,25 +193,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         await loadUserData();
 
-        logger.info("User data loaded after login");
-
         return { error: null };
       }
 
       return { error: new Error(response.error || "Login failed") };
     } catch (error) {
-      logger.error("Sign in error:", error);
       return { error: error as Error };
     }
   };
 
   const signOut = async () => {
     try {
-      logger.info("Signing out user...");
-
       await authApi.logout();
     } catch (error) {
-      logger.error("Logout error:", error);
+      console.error("Logout error:", error);
     } finally {
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
@@ -277,25 +215,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null);
       setWorkspaces([]);
       setCurrentWorkspaceState(null);
-
-      logger.info("User logged out and state cleared");
     }
   };
 
   const setCurrentWorkspace = (workspace: Workspace) => {
     setCurrentWorkspaceState(workspace);
     localStorage.setItem("currentWorkspaceId", workspace.id);
-    logger.info("Workspace changed:", {
-      id: workspace.id,
-      name: workspace.name,
-    });
   };
 
   const refreshProfile = async () => {
     if (user) {
-      logger.info("Refreshing profile...");
       await loadUserData();
-      logger.info("Profile refreshed");
     }
   };
 

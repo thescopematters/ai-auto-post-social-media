@@ -1,18 +1,19 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { AuthProvider } from './contexts/AuthContext';
-import { ProtectedRoute } from './components/ProtectedRoute';
-import { AppLayout } from './components/AppLayout';
-import { Landing } from './pages/Landing';
-import { SignIn } from './pages/SignIn';
-import { SignUp } from './pages/SignUp';
-import { Onboarding } from './pages/Onboarding';
-import { Dashboard } from './pages/Dashboard';
-import { Documents } from './pages/Documents';
-import { Generator } from './pages/Generator';
-import { Moderation } from './pages/Moderation';
-import { Schedule } from './pages/Schedule';
-import { Analytics } from './pages/Analytics';
-import { Settings } from './pages/Settings';
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./contexts/AuthContext";
+import { ProtectedRoute } from "./components/ProtectedRoute";
+import { AppLayout } from "./components/AppLayout";
+import { Landing } from "./pages/Landing";
+import { SignIn } from "./pages/SignIn";
+import { SignUp } from "./pages/SignUp";
+import { Onboarding } from "./pages/Onboarding";
+import { Dashboard } from "./pages/Dashboard";
+import { Documents } from "./pages/Documents";
+import { Generator } from "./pages/Generator";
+import { Moderation } from "./pages/Moderation";
+import { Schedule } from "./pages/Schedule";
+import { Analytics } from "./pages/Analytics";
+import { Settings } from "./pages/Settings";
+import { Toaster } from "sonner";
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>
+        <Toaster position="top-right" richColors />
       </AuthProvider>
     </BrowserRouter>
   );
