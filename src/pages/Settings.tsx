@@ -38,6 +38,13 @@ export function Settings() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!loading && !profile) {
       console.warn("User not authenticated, redirecting to signin");
       navigate("/signin");

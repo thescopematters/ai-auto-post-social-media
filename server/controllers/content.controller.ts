@@ -21,6 +21,8 @@ export const generateContent = async (
       throw new Error("User not authenticated");
     }
 
+    const userId = req.user.id;
+
     const { data: document } = await supabaseAdmin
       .from("documents")
       .select("content_text, title")
@@ -37,7 +39,7 @@ export const generateContent = async (
     }
 
     logger.info(
-      `Generating ${
+      `User ${userId} generating ${
         variantCount || 3
       } posts for document ${documentId} on ${platform} with ${tone} tone`
     );
@@ -56,6 +58,7 @@ export const generateContent = async (
         .from("generated_posts")
         .insert({
           workspace_id: workspaceId,
+          user_id: userId,
           document_id: documentId,
           agent_config_id: agentConfigId,
           platform,
@@ -75,7 +78,7 @@ export const generateContent = async (
     }
 
     logger.info(
-      `Generated ${generatedPosts.length} posts for document ${documentId}`
+      `User ${userId} generated ${generatedPosts.length} posts for document ${documentId}`
     );
 
     successResponse(res, generatedPosts, "Content generated successfully", 201);
@@ -99,7 +102,12 @@ export const getAllPosts = async (
 
     let query = supabaseAdmin
       .from("generated_posts")
-      .select("*, documents(title)", { count: "exact" })
+      .select(
+        "*, documents(title), profiles!generated_posts_user_id_fkey(full_name, email)",
+        {
+          count: "exact",
+        }
+      )
       .eq("workspace_id", workspaceId)
       .order("generated_at", { ascending: false })
       .range(offset, offset + limit - 1);
