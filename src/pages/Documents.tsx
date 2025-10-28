@@ -4,7 +4,6 @@ import { documentApi } from '../lib/apiClient';
 import {
   Upload,
   FileText,
-  Link as LinkIcon,
   CheckCircle,
   Clock,
   AlertCircle,
@@ -31,7 +30,6 @@ export function Documents() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [uploadType, setUploadType] = useState<'file' | 'url' | 'text'>('file');
   const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
@@ -55,56 +53,6 @@ export function Documents() {
       console.error('Error loading documents:', error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !currentWorkspace) return;
-
-    setUploading(true);
-
-    try {
-      const fileExt = file.name.split('.').pop()?.toLowerCase() || 'unknown';
-
-      const response = await documentApi.create(currentWorkspace.id, {
-        title: file.name,
-        fileType: fileExt,
-        fileUrl: '',
-        metadata: { size: file.size },
-      });
-
-      if (response.success) {
-        await loadDocuments();
-        setShowUploadModal(false);
-      }
-    } catch (error) {
-      console.error('Error uploading file:', error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleUrlUpload = async (url: string, title: string) => {
-    if (!currentWorkspace) return;
-
-    setUploading(true);
-
-    try {
-      const response = await documentApi.create(currentWorkspace.id, {
-        title: title || url,
-        fileType: 'url',
-        fileUrl: url,
-      });
-
-      if (response.success) {
-        await loadDocuments();
-        setShowUploadModal(false);
-      }
-    } catch (error) {
-      console.error('Error uploading URL:', error);
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -204,12 +152,8 @@ export function Documents() {
       {showUploadModal && (
         <UploadModal
           onClose={() => setShowUploadModal(false)}
-          onFileUpload={handleFileUpload}
-          onUrlUpload={handleUrlUpload}
           onTextUpload={handleTextUpload}
           uploading={uploading}
-          uploadType={uploadType}
-          setUploadType={setUploadType}
         />
       )}
     </div>
@@ -289,17 +233,25 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
   );
 }
 
-function UploadModal({ onClose, onFileUpload, onUrlUpload, onTextUpload, uploading, uploadType, setUploadType }: any) {
-  const [url, setUrl] = useState('');
+// ✅ SIMPLIFIED MODAL - TEXT ONLY
+function UploadModal({ 
+  onClose, 
+  onTextUpload, 
+  uploading 
+}: { 
+  onClose: () => void;
+  onTextUpload: (text: string, title: string) => Promise<void>;
+  uploading: boolean;
+}) {
   const [text, setText] = useState('');
   const [title, setTitle] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (uploadType === 'url' && url) {
-      await onUrlUpload(url, title);
-    } else if (uploadType === 'text' && text) {
+    if (title && text) {
       await onTextUpload(text, title);
+      setText('');
+      setTitle('');
     }
   };
 
@@ -308,130 +260,41 @@ function UploadModal({ onClose, onFileUpload, onUrlUpload, onTextUpload, uploadi
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Upload Document</h2>
-          <p className="text-gray-600 mt-1">Choose how you want to add content</p>
+          <p className="text-gray-600 mt-1">Add content by pasting or typing text</p>
         </div>
 
         <div className="p-6">
-          <div className="flex gap-2 mb-6">
-            <button
-              onClick={() => setUploadType('file')}
-              className={`flex-1 py-3 px-4 rounded-lg border-2 transition ${
-                uploadType === 'file'
-                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <Upload className="w-5 h-5 mx-auto mb-1" />
-              <span className="block text-sm font-medium">File Upload</span>
-            </button>
-            <button
-              onClick={() => setUploadType('url')}
-              className={`flex-1 py-3 px-4 rounded-lg border-2 transition ${
-                uploadType === 'url'
-                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <LinkIcon className="w-5 h-5 mx-auto mb-1" />
-              <span className="block text-sm font-medium">URL</span>
-            </button>
-            <button
-              onClick={() => setUploadType('text')}
-              className={`flex-1 py-3 px-4 rounded-lg border-2 transition ${
-                uploadType === 'text'
-                  ? 'border-blue-600 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <FileText className="w-5 h-5 mx-auto mb-1" />
-              <span className="block text-sm font-medium">Text</span>
-            </button>
-          </div>
-
-          {uploadType === 'file' && (
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block w-full border-2 border-dashed border-gray-300 rounded-lg p-12 text-center hover:border-blue-400 transition cursor-pointer">
-                <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <span className="block text-gray-700 font-medium mb-2">
-                  Click to upload or drag and drop
-                </span>
-                <span className="block text-sm text-gray-500">PDF, DOCX, TXT (max. 10MB)</span>
-                <input
-                  type="file"
-                  accept=".pdf,.docx,.txt"
-                  onChange={onFileUpload}
-                  disabled={uploading}
-                  className="hidden"
-                />
-              </label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Enter a title"
+                required
+              />
             </div>
-          )}
-
-          {uploadType === 'url' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter a title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">URL</label>
-                <input
-                  type="url"
-                  required
-                  value={url}
-                  onChange={(e) => setUrl(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="https://example.com/article"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={uploading}
-                className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {uploading ? 'Uploading...' : 'Upload URL'}
-              </button>
-            </form>
-          )}
-
-          {uploadType === 'text' && (
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter a title"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
-                <textarea
-                  required
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  rows={8}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Paste or type your content here..."
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={uploading}
-                className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {uploading ? 'Saving...' : 'Save Content'}
-              </button>
-            </form>
-          )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+              <textarea
+                required
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={8}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="Paste or type your content here..."
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={uploading}
+              className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {uploading ? 'Saving...' : 'Save Content'}
+            </button>
+          </form>
         </div>
 
         <div className="p-6 border-t border-gray-200 flex justify-end">
