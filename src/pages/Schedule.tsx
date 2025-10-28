@@ -105,7 +105,6 @@ export function Schedule() {
 
       if (response.success) {
         toast.success("Post published! Refreshing...");
-        // Wait 2 seconds then refresh
         await new Promise((r) => setTimeout(r, 2000));
         await loadScheduledPosts();
       } else {
@@ -239,7 +238,7 @@ export function Schedule() {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <p className="text-gray-800 whitespace-pre-wrap mb-2">
+                    <p className="text-gray-800 whitespace-pre-wrap mb-2 line-clamp-3">
                       {post.content}
                     </p>
 
@@ -254,7 +253,7 @@ export function Schedule() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ml-4 flex-wrap justify-end">
                     {post.status === "scheduled" && (
                       <button
                         onClick={() => handlePublishNow(post.id)}

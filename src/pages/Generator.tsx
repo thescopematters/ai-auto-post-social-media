@@ -8,6 +8,8 @@ import {
   Twitter,
   RefreshCw,
   Calendar,
+  Edit2,
+  Eye,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,10 +43,15 @@ export function Generator() {
   const [generating, setGenerating] = useState(false);
   const [scheduling, setScheduling] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedPost, setSelectedPost] = useState<GeneratedPost | null>(null);
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [generatedPosts, setGeneratedPosts] = useState<GeneratedPost[]>([]);
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [editedContent, setEditedContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -78,7 +85,6 @@ export function Generator() {
 
       if (response.success && response.data) {
         setSocialAccounts(response.data as SocialAccount[]);
-        // Set default selected account if available
         const activeAccounts = (response.data as SocialAccount[]).filter(
           (acc) => acc.is_active && acc.platform === platform
         );
@@ -144,7 +150,6 @@ export function Generator() {
         setGeneratedPosts(response.data as GeneratedPost[]);
       } else {
         console.error("Failed to generate posts:", response.error);
-        // Fallback to mock data if API fails
         const mockPosts: GeneratedPost[] = [
           {
             content: `🚀 Exciting insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
@@ -172,7 +177,6 @@ export function Generator() {
       }
     } catch (error) {
       console.error("Error generating content:", error);
-      // Fallback to mock data
       const mockPosts: GeneratedPost[] = [
         {
           content: `🚀 Exciting insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
@@ -214,6 +218,84 @@ export function Generator() {
     setShowScheduleModal(true);
   };
 
+  const handlePreviewClick = (post: GeneratedPost) => {
+    setSelectedPost(post);
+    setShowPreviewModal(true);
+  };
+
+  const handleEditClick = (post: GeneratedPost) => {
+    setSelectedPost(post);
+    setEditedContent(post.content);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedPost || !currentWorkspace || !selectedPost.id) return;
+
+    setIsSaving(true);
+    try {
+      console.log("Saving edited post:", {
+        workspaceId: currentWorkspace.id,
+        postId: selectedPost.id,
+        contentLength: editedContent.length,
+      });
+
+      // For demo posts, just update local state
+      if (selectedPost.id.startsWith("mock_")) {
+        setGeneratedPosts(
+          generatedPosts.map((post) =>
+            post.id === selectedPost.id
+              ? { ...post, content: editedContent }
+              : post
+          )
+        );
+        toast.success("Post updated successfully!");
+        setShowEditModal(false);
+        setSelectedPost(null);
+        setEditedContent("");
+        return;
+      }
+
+      // For real posts, update in database
+      const response = await contentApi.updatePost(
+        currentWorkspace.id,
+        selectedPost.id,
+        { content: editedContent }
+      );
+
+      if (response.success) {
+        // Update local state
+        setGeneratedPosts(
+          generatedPosts.map((post) =>
+            post.id === selectedPost.id
+              ? { ...post, content: editedContent }
+              : post
+          )
+        );
+        toast.success("Post updated successfully!");
+        setShowEditModal(false);
+        setSelectedPost(null);
+        setEditedContent("");
+      } else {
+        console.error("Update failed:", response);
+        toast.error("Failed to update post", {
+          description: response.error || "Unknown error",
+        });
+      }
+    } catch (error: any) {
+      console.error("Error saving post:", {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      });
+      toast.error("Error saving post", {
+        description: error.response?.data?.error || error.message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleSchedulePost = async () => {
     if (
       !currentWorkspace ||
@@ -225,7 +307,6 @@ export function Generator() {
       return;
     }
 
-    // Validate if post has an ID (for mock posts, we can't schedule them)
     if (!selectedPost.id || selectedPost.id.startsWith("mock_")) {
       toast.info("Demo post limitation", {
         description:
@@ -264,17 +345,14 @@ export function Generator() {
     }
   };
 
-  // Filter social accounts by current platform and active status
   const filteredAccounts = socialAccounts.filter(
     (account) => account.platform === platform && account.is_active
   );
 
-  // Set minimum datetime to current time
   const minDateTime = new Date();
-  minDateTime.setMinutes(minDateTime.getMinutes() + 5); // At least 5 minutes from now
+  minDateTime.setMinutes(minDateTime.getMinutes() + 5);
   const minDateTimeString = minDateTime.toISOString().slice(0, 16);
 
-  // Update social accounts when platform changes
   useEffect(() => {
     if (currentWorkspace) {
       loadSocialAccounts();
@@ -341,23 +419,31 @@ export function Generator() {
                     />
                     <span className="block text-sm font-medium">LinkedIn</span>
                   </button>
-                  <button
-                    onClick={() => setPlatform("twitter")}
-                    className={`p-4 rounded-lg border-2 transition ${
-                      platform === "twitter"
-                        ? "border-sky-600 bg-sky-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
+
+                  {/* ✅ Twitter Button - Disabled with Tooltip */}
+                  <div 
+                    className="relative"
+                    onMouseEnter={() => setShowTooltip(true)}
+                    onMouseLeave={() => setShowTooltip(false)}
                   >
-                    <Twitter
-                      className={`w-6 h-6 mx-auto mb-2 ${
-                        platform === "twitter"
-                          ? "text-sky-600"
-                          : "text-gray-400"
-                      }`}
-                    />
-                    <span className="block text-sm font-medium">Twitter</span>
-                  </button>
+                    <button
+                      disabled
+                      className={`w-full p-4 rounded-lg border-2 transition cursor-not-allowed opacity-50 border-gray-200`}
+                    >
+                      <Twitter className="w-6 h-6 mx-auto mb-2 text-gray-400" />
+                      <span className="block text-sm font-medium text-gray-400">
+                        Twitter
+                      </span>
+                    </button>
+
+                    {/* ✅ Tooltip - Shows only on hover */}
+                    {showTooltip && (
+                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none">
+                        Coming Soon
+                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -431,12 +517,34 @@ export function Generator() {
                       Variant {post.variant_number || index + 1}
                     </span>
                     <div className="flex gap-2">
+                      {/* NEW: Preview Button */}
+                      <button
+                        onClick={() => handlePreviewClick(post)}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                        title="Preview Post"
+                      >
+                        <Eye className="w-4 h-4" />
+                        Preview
+                      </button>
+                      
+                      {/* NEW: Edit Button */}
+                      <button
+                        onClick={() => handleEditClick(post)}
+                        className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm"
+                        title="Edit Post"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                        Edit
+                      </button>
+                      
+                      {/* EXISTING: Schedule Button */}
                       <button
                         onClick={() => handleScheduleClick(post)}
-                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                        className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                        title="Schedule Post"
                       >
                         <Calendar className="w-4 h-4" />
-                        Schedule Post
+                        Schedule
                       </button>
                     </div>
                   </div>
@@ -537,6 +645,124 @@ export function Generator() {
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
               >
                 {scheduling ? "Scheduling..." : "Schedule Post"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal - Read Only */}
+      {showPreviewModal && selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900">Preview Post</h2>
+              <p className="text-gray-600 mt-1">
+                Platform: {selectedPost.platform || "LinkedIn"}
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
+                <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
+                  {selectedPost.content}
+                </p>
+              </div>
+
+              <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600 font-medium">Platform</p>
+                  <p className="text-gray-900 capitalize">{selectedPost.platform}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-medium">Variant</p>
+                  <p className="text-gray-900">{selectedPost.variant_number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-medium">Character Count</p>
+                  <p className="text-gray-900">{selectedPost.content.length}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600 font-medium">Status</p>
+                  <p className="text-gray-900">Generated</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200">
+              <h2 className="text-2xl font-bold text-gray-900">Edit Post</h2>
+              <p className="text-gray-600 mt-1">
+                Make changes to your post content
+              </p>
+            </div>
+
+            <div className="p-6">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Post Content
+                </label>
+                <textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  rows={12}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                />
+                <p className="text-sm text-gray-500 mt-2">
+                  {editedContent.length} characters
+                </p>
+              </div>
+
+              {selectedPost?.id?.startsWith("mock_") && (
+                <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">
+                    <strong>Note:</strong> This is a demo post. Changes will be saved locally only.
+                  </p>
+                </div>
+              )}
+
+              <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-700">
+                  <strong>Note:</strong> {selectedPost?.id?.startsWith("mock_") 
+                    ? "Changes will be saved locally for demo posts." 
+                    : "Changes will be saved to the database when you click Save."}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-200 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setSelectedPost(null);
+                  setEditedContent("");
+                }}
+                disabled={isSaving}
+                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving || editedContent === selectedPost.content}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
+              >
+                {isSaving ? "Saving..." : "Save Changes"}
               </button>
             </div>
           </div>
