@@ -13,38 +13,38 @@ const MAX_RETRIES = 3;
 export class SchedulerController {
   private isRunning = false;
 
-startScheduler() {
-  // Run every minute
-  cron.schedule("* * * * *", async () => {
-    if (this.isRunning) {
-      logger.info("⏭️ Scheduler already running, skipping");
-      return;
-    }
+  startScheduler() {
+    // Run every minute
+    cron.schedule("* * * * *", async () => {
+      if (this.isRunning) {
+        logger.info("⏭️ Scheduler already running, skipping");
+        return;
+      }
 
-    this.isRunning = true;
+      this.isRunning = true;
+      try {
+        await this.processScheduledPosts();
+      } catch (error) {
+        logger.error("❌ Scheduler error:", error);
+      } finally {
+        this.isRunning = false;
+      }
+    });
+
+    logger.info("✅ Scheduler started - runs every 1 minute");
+  }
+
+  private async processScheduledPosts() {
+    const now = new Date();
+    const nowISOString = now.toISOString();
+
+    logger.info(`🔍 Checking for posts due at ${nowISOString}`);
+
     try {
-      await this.processScheduledPosts();
-    } catch (error) {
-      logger.error("❌ Scheduler error:", error);
-    } finally {
-      this.isRunning = false;
-    }
-  });
-
-  logger.info("✅ Scheduler started - runs every 1 minute");
-}
-
-private async processScheduledPosts() {
-  const now = new Date();
-  const nowISOString = now.toISOString();
-
-  logger.info(`🔍 Checking for posts due at ${nowISOString}`);
-
-  try {
-    const { data: scheduledPosts, error: postsError } = await supabase
-      .from("scheduled_posts")
-      .select(
-        `
+      const { data: scheduledPosts, error: postsError } = await supabase
+        .from("scheduled_posts")
+        .select(
+          `
         id,
         post_id,
         social_account_id,
@@ -54,47 +54,48 @@ private async processScheduledPosts() {
         generated_posts(content, platform),
         social_accounts(account_name, platform, is_active, token_expires_at, access_token, account_id)
       `
-      )
-      .lte("scheduled_time", nowISOString) 
-      .eq("status", "scheduled")
-      .lt("retry_count", MAX_RETRIES);
+        )
+        .lte("scheduled_time", nowISOString)
+        .eq("status", "scheduled")
+        .lt("retry_count", MAX_RETRIES);
 
-    if (postsError) {
-      logger.error("❌ Error fetching scheduled posts:", postsError);
-      return;
+      if (postsError) {
+        logger.error("❌ Error fetching scheduled posts:", postsError);
+        return;
+      }
+
+      if (!scheduledPosts || scheduledPosts.length === 0) {
+        logger.info("✅ No posts to publish right now");
+        return;
+      }
+
+      logger.info(`📤 Found ${scheduledPosts.length} post(s) to publish`);
+
+      for (const scheduledPost of scheduledPosts) {
+        const flatPost = {
+          id: scheduledPost.id,
+          post_id: scheduledPost.post_id,
+          social_account_id: scheduledPost.social_account_id,
+          scheduled_time: scheduledPost.scheduled_time,
+          status: scheduledPost.status,
+          retry_count: scheduledPost.retry_count,
+          content: scheduledPost.generated_posts?.[0]?.content,
+          platform: scheduledPost.generated_posts?.[0]?.platform,
+          account_name: scheduledPost.social_accounts?.[0]?.account_name,
+          is_active: scheduledPost.social_accounts?.[0]?.is_active,
+          token_expires_at:
+            scheduledPost.social_accounts?.[0]?.token_expires_at,
+          access_token: scheduledPost.social_accounts?.[0]?.access_token,
+          account_id: scheduledPost.social_accounts?.[0]?.account_id,
+        };
+
+        await this.sleep(500);
+        await this.publishToLinkedIn(flatPost);
+      }
+    } catch (error) {
+      logger.error("❌ Error in processScheduledPosts:", error);
     }
-
-    if (!scheduledPosts || scheduledPosts.length === 0) {
-      logger.info("✅ No posts to publish right now");
-      return;
-    }
-
-    logger.info(`📤 Found ${scheduledPosts.length} post(s) to publish`);
-
-    for (const scheduledPost of scheduledPosts) {
-      const flatPost = {
-        id: scheduledPost.id,
-        post_id: scheduledPost.post_id,
-        social_account_id: scheduledPost.social_account_id,
-        scheduled_time: scheduledPost.scheduled_time,
-        status: scheduledPost.status,
-        retry_count: scheduledPost.retry_count,
-        content: scheduledPost.generated_posts?.[0]?.content,
-        platform: scheduledPost.generated_posts?.[0]?.platform,
-        account_name: scheduledPost.social_accounts?.[0]?.account_name,
-        is_active: scheduledPost.social_accounts?.[0]?.is_active,
-        token_expires_at: scheduledPost.social_accounts?.[0]?.token_expires_at,
-        access_token: scheduledPost.social_accounts?.[0]?.access_token,
-        account_id: scheduledPost.social_accounts?.[0]?.account_id,
-      };
-
-      await this.sleep(500);
-      await this.publishToLinkedIn(flatPost);
-    }
-  } catch (error) {
-    logger.error("❌ Error in processScheduledPosts:", error);
   }
-}
 
   public async publishToLinkedIn(scheduledPost: any) {
     const postId = scheduledPost.id;

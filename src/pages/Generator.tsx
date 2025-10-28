@@ -31,6 +31,7 @@ type GeneratedPost = {
   content: string;
   platform: string;
   variant_number?: number;
+  user_id?: string;
 };
 
 export function Generator() {
@@ -421,7 +422,7 @@ export function Generator() {
                   </button>
 
                   {/* ✅ Twitter Button - Disabled with Tooltip */}
-                  <div 
+                  <div
                     className="relative"
                     onMouseEnter={() => setShowTooltip(true)}
                     onMouseLeave={() => setShowTooltip(false)}
@@ -526,7 +527,7 @@ export function Generator() {
                         <Eye className="w-4 h-4" />
                         Preview
                       </button>
-                      
+
                       {/* NEW: Edit Button */}
                       <button
                         onClick={() => handleEditClick(post)}
@@ -536,7 +537,7 @@ export function Generator() {
                         <Edit2 className="w-4 h-4" />
                         Edit
                       </button>
-                      
+
                       {/* EXISTING: Schedule Button */}
                       <button
                         onClick={() => handleScheduleClick(post)}
@@ -672,7 +673,9 @@ export function Generator() {
               <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <p className="text-gray-600 font-medium">Platform</p>
-                  <p className="text-gray-900 capitalize">{selectedPost.platform}</p>
+                  <p className="text-gray-900 capitalize">
+                    {selectedPost.platform}
+                  </p>
                 </div>
                 <div>
                   <p className="text-gray-600 font-medium">Variant</p>
@@ -731,15 +734,17 @@ export function Generator() {
               {selectedPost?.id?.startsWith("mock_") && (
                 <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-800">
-                    <strong>Note:</strong> This is a demo post. Changes will be saved locally only.
+                    <strong>Note:</strong> This is a demo post. Changes will be
+                    saved locally only.
                   </p>
                 </div>
               )}
 
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  <strong>Note:</strong> {selectedPost?.id?.startsWith("mock_") 
-                    ? "Changes will be saved locally for demo posts." 
+                  <strong>Note:</strong>{" "}
+                  {selectedPost?.id?.startsWith("mock_")
+                    ? "Changes will be saved locally for demo posts."
                     : "Changes will be saved to the database when you click Save."}
                 </p>
               </div>

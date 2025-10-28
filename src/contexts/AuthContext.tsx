@@ -4,6 +4,7 @@ import {
   useEffect,
   useState,
   ReactNode,
+  useRef,
 } from "react";
 import { authApi, workspaceApi } from "../lib/apiClient";
 
@@ -63,28 +64,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const initAuth = async () => {
-      const token = localStorage.getItem("accessToken");
+const initializedRef = useRef(false);
 
-      if (token) {
-        try {
-          await loadUserData();
-        } catch (error) {
-          localStorage.removeItem("accessToken");
-          localStorage.removeItem("refreshToken");
-          setUser(null);
-          setProfile(null);
-        }
-      } else {
-        console.warn("No token found, user is not logged in");
+useEffect(() => {
+  const initAuth = async () => {
+    if (initializedRef.current) return;
+    initializedRef.current = true;
+
+    const token = localStorage.getItem("accessToken");
+
+    if (token) {
+      try {
+        await loadUserData();
+      } catch (error) {
+        console.error("Error loading user data:", error);
+        localStorage.removeItem("accessToken");
+        localStorage.removeItem("refreshToken");
+        setUser(null);
+        setProfile(null);
       }
+    } else {
+      console.warn("No token found, user is not logged in");
+    }
 
-      setLoading(false);
-    };
+    setLoading(false);
+  };
 
-    initAuth();
-  }, []);
+  initAuth();
+}, []);
 
   const loadUserData = async () => {
     try {
