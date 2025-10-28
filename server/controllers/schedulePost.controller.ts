@@ -109,10 +109,21 @@ export class SchedulePostController {
       // Validate scheduled time is in the future
       const scheduledDate = new Date(scheduledTime);
       const now = new Date();
+
+      const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
+
       if (scheduledDate <= now) {
         res.status(400).json({
           success: false,
           error: "Scheduled time must be in the future",
+        });
+        return;
+      }
+
+      if (scheduledDate < minScheduleTime) {
+        res.status(400).json({
+          success: false,
+          error: "Scheduled time must be at least 5 minutes in the future",
         });
         return;
       }

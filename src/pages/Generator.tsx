@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Calendar,
 } from "lucide-react";
+import { toast } from "sonner";
 
 type Document = {
   id: string;
@@ -204,7 +205,9 @@ export function Generator() {
 
   const handleScheduleClick = (post: GeneratedPost) => {
     if (!post.id || post.id.startsWith("mock_")) {
-      alert("❌ Cannot schedule demo posts. Please save the post first.");
+      toast.error("Cannot schedule demo posts", {
+        description: "Please save the post first.",
+      });
       return;
     }
     setSelectedPost(post);
@@ -218,15 +221,16 @@ export function Generator() {
       !selectedAccount ||
       !scheduledTime
     ) {
-      alert("Please fill all required fields");
+      toast.error("Please fill all required fields");
       return;
     }
 
     // Validate if post has an ID (for mock posts, we can't schedule them)
     if (!selectedPost.id || selectedPost.id.startsWith("mock_")) {
-      alert(
-        "This is a demo post. In a real scenario, this would be scheduled."
-      );
+      toast.info("Demo post limitation", {
+        description:
+          "This is a demo post. In a real scenario, this would be scheduled.",
+      });
       setShowScheduleModal(false);
       return;
     }
@@ -241,16 +245,20 @@ export function Generator() {
       });
 
       if (response.success) {
-        alert("✅ Post scheduled successfully!");
+        toast.success("Post scheduled successfully!");
         setShowScheduleModal(false);
         setSelectedPost(null);
         setScheduledTime("");
       } else {
-        alert("❌ Failed to schedule post: " + response.error);
+        toast.error("Failed to schedule post", {
+          description: response.error,
+        });
       }
     } catch (error: any) {
       console.error("Error scheduling post:", error);
-      alert("❌ Error scheduling post. Please try again.");
+      toast.error("Error scheduling post", {
+        description: "Please try again.",
+      });
     } finally {
       setScheduling(null);
     }

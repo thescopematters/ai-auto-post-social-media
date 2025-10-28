@@ -10,6 +10,7 @@ import {
   Play,
   RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 
 type ScheduledPost = {
   id: string;
@@ -81,13 +82,15 @@ export function Schedule() {
 
       if (response.success) {
         setPosts(posts.filter((post) => post.id !== postId));
-        alert("✅ Scheduled post deleted successfully!");
+        toast.success("Scheduled post deleted successfully!");
       } else {
-        alert("❌ Failed to delete scheduled post: " + response.error);
+        toast.error("Failed to delete scheduled post", {
+          description: response.error,
+        });
       }
     } catch (error) {
       console.error("Error deleting scheduled post:", error);
-      alert("❌ Error deleting scheduled post");
+      toast.error("Error deleting scheduled post");
     } finally {
       setDeleting(null);
     }
@@ -101,15 +104,19 @@ export function Schedule() {
       const response = await schedulerApi.publishNow({ postId });
 
       if (response.success) {
-        alert("✅ Post published! Refreshing...");
+        toast.success("Post published! Refreshing...");
         // Wait 2 seconds then refresh
         await new Promise((r) => setTimeout(r, 2000));
         await loadScheduledPosts();
       } else {
-        alert("❌ " + response.error);
+        toast.error("Failed to publish post", {
+          description: response.error,
+        });
       }
     } catch (error: any) {
-      alert("❌ Error: " + error.message);
+      toast.error("Error publishing post", {
+        description: error.message,
+      });
     } finally {
       setDeleting(null);
     }
