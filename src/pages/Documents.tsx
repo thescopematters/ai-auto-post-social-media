@@ -26,7 +26,7 @@ type Document = {
 };
 
 export function Documents() {
-  const { currentWorkspace, user } = useAuth();
+  const { currentWorkspace } = useAuth();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
