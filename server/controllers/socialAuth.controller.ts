@@ -15,7 +15,6 @@ export const initiateLinkedInAuth = async (
   res: Response
 ): Promise<void> => {
   try {
-    // Just check query param or hardcode for now
     let userId = req.query.userId as string;
 
     if (!userId) {
@@ -142,28 +141,25 @@ export const handleLinkedInCallback = async (
       Date.now() + expires_in * 1000
     ).toISOString();
 
-    // First, delete old account if exists
-    await supabaseAdmin
-      .from("social_accounts")
-      .delete()
-      .eq("workspace_id", workspaceId)
-      .eq("platform", "linkedin");
-
-    // Then insert new one
     const { error: dbError } = await supabaseAdmin
       .from("social_accounts")
-      .insert({
-        workspace_id: workspaceId,
-        platform: "linkedin",
-        account_name: fullName,
-        account_id: linkedinUserId,
-        access_token: access_token,
-        refresh_token: refresh_token || null,
-        token_expires_at: tokenExpiresAt,
-        is_active: true,
-        connected_at: new Date().toISOString(),
-        last_sync: new Date().toISOString(),
-      } as any);
+      .upsert(
+        {
+          workspace_id: workspaceId,
+          platform: "linkedin",
+          account_name: fullName,
+          account_id: linkedinUserId,
+          access_token: access_token,
+          refresh_token: refresh_token || null,
+          token_expires_at: tokenExpiresAt,
+          is_active: true,
+          connected_at: new Date().toISOString(),
+          last_sync: new Date().toISOString(),
+        },
+        {
+          onConflict: "workspace_id,platform",
+        }
+      );
 
     if (dbError) throw dbError;
 
@@ -183,6 +179,98 @@ export const handleLinkedInCallback = async (
         error.message
       )}`
     );
+  }
+};
+
+export const refreshLinkedInToken = async (
+  workspaceId: string,
+  refreshToken: string
+) => {
+  try {
+    const tokenParams = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: refreshToken,
+      client_id: process.env.LINKEDIN_CLIENT_ID!,
+      client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
+    });
+
+    const response = await axios.post(
+      "https://www.linkedin.com/oauth/v2/accessToken",
+      tokenParams,
+      {
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
+      }
+    );
+
+    const { access_token, expires_in, refresh_token } = response.data;
+    const tokenExpiresAt = new Date(
+      Date.now() + expires_in * 1000
+    ).toISOString();
+
+    // DB update करो
+    await supabaseAdmin
+      .from("social_accounts")
+      .update({
+        access_token: access_token,
+        refresh_token: refresh_token || null,
+        token_expires_at: tokenExpiresAt,
+        last_sync: new Date().toISOString(),
+      })
+      .eq("workspace_id", workspaceId)
+      .eq("platform", "linkedin");
+
+    logger.info("Token refreshed successfully");
+    return true;
+  } catch (error) {
+    logger.error("Token refresh failed:", error);
+    return false;
+  }
+};
+
+export const validateAndRefreshToken = async (
+  req: AuthenticatedRequest,
+  res: Response,
+  next: Function
+) => {
+  try {
+    if (!req.user) return next();
+
+    const userId = req.user.id;
+
+    const { data: workspaces } = await supabaseAdmin
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("user_id", userId);
+
+    if (!workspaces?.length) return next();
+
+    const workspaceIds = workspaces.map((w: any) => w.workspace_id);
+
+    const { data: accounts } = await supabaseAdmin
+      .from("social_accounts")
+      .select("*")
+      .in("workspace_id", workspaceIds)
+      .eq("is_active", true);
+
+    // Check if token expired
+    for (const account of accounts || []) {
+      const expiresAt = new Date(account.token_expires_at);
+      const now = new Date();
+      const timeUntilExpiry = expiresAt.getTime() - now.getTime();
+      const fiveMinutes = 5 * 60 * 1000;
+
+      // Refresh if expires in 5 minutes
+      if (timeUntilExpiry < fiveMinutes && account.refresh_token) {
+        await refreshLinkedInToken(account.workspace_id, account.refresh_token);
+      }
+    }
+
+    next();
+  } catch (error) {
+    logger.warn("Token validation error:", error);
+    next();
   }
 };
 
@@ -209,7 +297,6 @@ export const getUserSocialAccounts = async (
       return res.json({ success: true, data: [] });
     }
 
-    // Type-safe mapping
     const workspaceIds = (workspaces as Array<{ workspace_id: string }>).map(
       (w) => w.workspace_id
     );
@@ -244,9 +331,10 @@ export const disconnectSocialAccount = async (
       .select("workspace_id")
       .eq("user_id", userId);
 
-    const workspaceIds = ((workspaces as any) || []).map((w: any) => w.workspace_id);
+    const workspaceIds = ((workspaces as any) || []).map(
+      (w: any) => w.workspace_id
+    );
 
-    // @ts-ignore
     await supabaseAdmin
       .from("social_accounts")
       .update({
