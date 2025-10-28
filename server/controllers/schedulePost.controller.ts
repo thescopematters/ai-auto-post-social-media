@@ -259,6 +259,143 @@ export class SchedulePostController {
     }
   }
 
+  async updateScheduledPost(req: Request, res: Response): Promise<void> {
+    try {
+      const { workspaceId, postId } = req.params;
+      const { content } = req.body;
+
+      logger.info("Received update request:", {
+        workspaceId,
+        postId,
+        hasContent: !!content,
+        contentLength: content?.length,
+      });
+
+      // Enhanced validation
+      if (
+        !content ||
+        typeof content !== "string" ||
+        content.trim().length === 0
+      ) {
+        logger.warn("Invalid content provided:", {
+          contentType: typeof content,
+          contentLength: content?.length,
+        });
+        res.status(400).json({
+          success: false,
+          error: "Content is required and must be a non-empty string",
+        });
+        return;
+      }
+
+      // Verify the scheduled post exists and belongs to the workspace
+      logger.info("Verifying scheduled post existence:", {
+        postId,
+        workspaceId,
+      });
+
+      const { data: existingPost, error: fetchError } = await supabaseAdmin
+        .from("scheduled_posts")
+        .select("id, post_id, workspace_id, status")
+        .eq("id", postId)
+        .eq("workspace_id", workspaceId)
+        .single();
+
+      if (fetchError) {
+        logger.error("Database error fetching scheduled post:", {
+          error: fetchError,
+          postId,
+          workspaceId,
+        });
+        res.status(500).json({
+          success: false,
+          error: "Database error while verifying post",
+        });
+        return;
+      }
+
+      if (!existingPost) {
+        logger.warn("Scheduled post not found:", { postId, workspaceId });
+        res.status(404).json({
+          success: false,
+          error: "Scheduled post not found or access denied",
+        });
+        return;
+      }
+
+      logger.info("Found scheduled post:", {
+        postId: existingPost.id,
+        generatedPostId: existingPost.post_id,
+        status: existingPost.status,
+      });
+
+      // Only allow editing if post is scheduled
+      if (existingPost.status !== "scheduled") {
+        logger.warn("Attempt to edit non-scheduled post:", {
+          postId,
+          currentStatus: existingPost.status,
+        });
+        res.status(400).json({
+          success: false,
+          error: `Cannot edit ${existingPost.status} posts. Only scheduled posts can be edited.`,
+        });
+        return;
+      }
+
+      // Update the generated post content
+      logger.info("Updating generated post content:", {
+        generatedPostId: existingPost.post_id,
+        contentLength: content.length,
+      });
+
+      const { error: updateError } = await supabaseAdmin
+        .from("generated_posts")
+        .update({
+          content: content.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingPost.post_id);
+
+      if (updateError) {
+        logger.error("Error updating generated post content:", {
+          error: updateError,
+          generatedPostId: existingPost.post_id,
+        });
+        res.status(500).json({
+          success: false,
+          error: "Failed to update post content in database",
+          details: updateError.message,
+        });
+        return;
+      }
+
+      logger.info("Post content updated successfully:", {
+        postId,
+        generatedPostId: existingPost.post_id,
+      });
+
+      res.json({
+        success: true,
+        message: "Post updated successfully",
+        data: {
+          id: postId,
+          content: content.trim(),
+          updated_at: new Date().toISOString(),
+        },
+      });
+    } catch (error: any) {
+      logger.error("Unexpected error in updateScheduledPost:", {
+        error: error.message,
+        stack: error.stack,
+        postId: req.params.postId,
+        workspaceId: req.params.workspaceId,
+      });
+      res.status(500).json({
+        success: false,
+        error: "Internal server error while updating post",
+      });
+    }
+  }
   async deleteScheduledPost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId, postId } = req.params;

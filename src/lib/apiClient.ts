@@ -86,6 +86,11 @@ class ApiClient {
     return response.data;
   }
 
+  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+    const response = await this.client.patch<ApiResponse<T>>(url, data, config);
+    return response.data;
+  }
+
   async delete<T>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
     const response = await this.client.delete<ApiResponse<T>>(url, config);
     return response.data;
@@ -205,8 +210,11 @@ export const contentApi = {
   }) =>
     apiClient.post(`/workspaces/${workspaceId}/schedule`, data),
 
+  updateScheduledPost: (workspaceId: string, postId: string, data: { content: string }) =>
+    apiClient.patch(`/workspaces/${workspaceId}/scheduled-posts/${postId}`, data),
+
   deleteScheduledPost: (workspaceId: string, postId: string) =>
-    apiClient.delete(`/workspaces/${workspaceId}/schedule/${postId}`),
+    apiClient.delete(`/workspaces/${workspaceId}/scheduled-posts/${postId}`),
 };
 
 export const socialAccountsApi = {
