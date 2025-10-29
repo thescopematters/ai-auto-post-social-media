@@ -15,6 +15,7 @@ router.post(
     body('documentId').isUUID().withMessage('Valid document ID is required'),
     body('platform').isIn(['linkedin', 'twitter']).withMessage('Invalid platform'),
     body('tone').isIn(['professional', 'casual', 'thought_leader', 'educational', 'promotional']).withMessage('Invalid tone'),
+    body('framework').optional().isIn(['auto', 'sla', 'pas', 'hvcta', 'mrs', 'cms', 'htof']).withMessage('Invalid framework'),
     body('variantCount').optional().isInt({ min: 1, max: 5 }).withMessage('Variant count must be between 1 and 5'),
   ]),
   requireWorkspace,
