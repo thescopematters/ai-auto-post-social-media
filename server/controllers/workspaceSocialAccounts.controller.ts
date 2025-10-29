@@ -8,8 +8,6 @@ export class WorkspaceSocialAccountsController {
     try {
       const { workspaceId } = req.params;
 
-      logger.info('Fetching social accounts for workspace:', { workspaceId });
-
       const { data: socialAccounts, error } = await supabaseAdmin
         .from('social_accounts')
         .select('*')
@@ -25,11 +23,6 @@ export class WorkspaceSocialAccountsController {
         });
         return;
       }
-
-      logger.info('Found social accounts:', { 
-        workspaceId, 
-        count: socialAccounts?.length || 0 
-      });
 
       res.json({
         success: true,
@@ -49,12 +42,6 @@ export class WorkspaceSocialAccountsController {
     try {
       const { workspaceId } = req.params;
       const { platform, accessToken, accountId, accountName } = req.body;
-
-      logger.info('Connecting social account to workspace:', { 
-        workspaceId, 
-        platform, 
-        accountName 
-      });
 
       // Check if account already exists for this workspace and platform
       const { data: existingAccount, error: checkError } = await supabaseAdmin
@@ -115,11 +102,6 @@ export class WorkspaceSocialAccountsController {
         return;
       }
 
-      logger.info('Social account connected successfully to workspace:', { 
-        workspaceId, 
-        accountId: result.data.id 
-      });
-
       res.json({
         success: true,
         data: result.data,
@@ -140,11 +122,6 @@ export class WorkspaceSocialAccountsController {
     try {
       const { workspaceId, accountId } = req.params;
 
-      logger.info('Disconnecting social account from workspace:', { 
-        workspaceId, 
-        accountId 
-      });
-
       const { error } = await supabaseAdmin
         .from('social_accounts')
         .update({
@@ -163,11 +140,6 @@ export class WorkspaceSocialAccountsController {
         });
         return;
       }
-
-      logger.info('Social account disconnected successfully from workspace:', { 
-        workspaceId, 
-        accountId 
-      });
 
       res.json({
         success: true,
@@ -189,11 +161,6 @@ export class WorkspaceSocialAccountsController {
       const { workspaceId, accountId } = req.params;
       const updateData = req.body;
 
-      logger.info('Updating workspace social account:', { 
-        workspaceId, 
-        accountId 
-      });
-
       const { data: account, error } = await supabaseAdmin
         .from('social_accounts')
         .update({
@@ -213,9 +180,7 @@ export class WorkspaceSocialAccountsController {
         });
         return;
       }
-
-      logger.info('Workspace social account updated successfully:', { accountId });
-
+      
       res.json({
         success: true,
         data: account,

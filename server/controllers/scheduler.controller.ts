@@ -17,7 +17,6 @@ export class SchedulerController {
     // Run every minute
     cron.schedule("* * * * *", async () => {
       if (this.isRunning) {
-        logger.info("⏭️ Scheduler already running, skipping");
         return;
       }
 
@@ -30,15 +29,11 @@ export class SchedulerController {
         this.isRunning = false;
       }
     });
-
-    logger.info("✅ Scheduler started - runs every 1 minute");
   }
 
   private async processScheduledPosts() {
     const now = new Date();
     const nowISOString = now.toISOString();
-
-    logger.info(`🔍 Checking for posts due at ${nowISOString}`);
 
     try {
       const { data: scheduledPosts, error: postsError } = await supabase
@@ -65,11 +60,8 @@ export class SchedulerController {
       }
 
       if (!scheduledPosts || scheduledPosts.length === 0) {
-        logger.info("✅ No posts to publish right now");
         return;
       }
-
-      logger.info(`📤 Found ${scheduledPosts.length} post(s) to publish`);
 
       for (const scheduledPost of scheduledPosts) {
         const flatPost = {
@@ -103,11 +95,6 @@ export class SchedulerController {
     try {
       const socialAccountId = scheduledPost.social_account_id;
       const generatedPostId = scheduledPost.post_id;
-
-      logger.info(`📝 Publishing post ${postId}`, {
-        socialAccountId,
-        generatedPostId,
-      });
 
       if (!socialAccountId || !generatedPostId) {
         throw new Error(
@@ -157,17 +144,6 @@ export class SchedulerController {
         socialAccount = fetchedAccount;
       }
 
-      logger.info(`✅ Generated post found:`, {
-        content: generatedPost.content.substring(0, 50) + "...",
-        platform: generatedPost.platform,
-      });
-
-      logger.info(`✅ Social account found:`, {
-        accountName: socialAccount.account_name,
-        platform: socialAccount.platform,
-        isActive: socialAccount.is_active,
-      });
-
       // Validate account
       if (!socialAccount.is_active) {
         logger.error("❌ Social account is not active", {
@@ -193,11 +169,6 @@ export class SchedulerController {
         throw new Error("LinkedIn access token has expired");
       }
 
-      logger.info(`✅ Token valid until: ${socialAccount.token_expires_at}`);
-      logger.info(
-        "⏭️ Skipping token validation, attempting to post directly..."
-      );
-
       // Try to publish to LinkedIn
       const result = await this.makeLinkedInPost(
         generatedPost.content,
@@ -207,9 +178,6 @@ export class SchedulerController {
 
       if (result.success && result.postId) {
         await this.markPostAsPublished(postId, result.postId);
-        logger.info(`✅ Post ${postId} published successfully`, {
-          linkedInPostId: result.postId,
-        });
       } else {
         await this.incrementRetryCount(postId);
         logger.error(`❌ Failed to publish post ${postId}: ${result.error}`);
@@ -230,11 +198,6 @@ export class SchedulerController {
 
         if (currentPost && currentPost.retry_count < MAX_RETRIES) {
           await this.incrementRetryCount(postId);
-          logger.info(
-            `🔄 Retry ${
-              currentPost.retry_count + 1
-            }/${MAX_RETRIES} for post ${postId}`
-          );
         } else {
           await this.markPostAsFailed(postId, error.message);
           logger.error(`❌ Post ${postId} failed after ${MAX_RETRIES} retries`);
@@ -250,11 +213,6 @@ export class SchedulerController {
     personUrn: string
   ): Promise<{ success: boolean; postId?: string; error?: string }> {
     try {
-      logger.info(`📤 Preparing LinkedIn post`, {
-        personUrn,
-        contentLength: content.length,
-      });
-
       const postData = {
         author: `urn:li:person:${personUrn}`,
         lifecycleState: "PUBLISHED",
@@ -271,11 +229,6 @@ export class SchedulerController {
         },
       };
 
-      logger.info(
-        "📤 LinkedIn API Request Payload:",
-        JSON.stringify(postData, null, 2)
-      );
-
       const response = await fetch("https://api.linkedin.com/v2/ugcPosts", {
         method: "POST",
         headers: {
@@ -286,11 +239,6 @@ export class SchedulerController {
           "User-Agent": "ContentAI/1.0",
         },
         body: JSON.stringify(postData),
-      });
-
-      logger.info("LinkedIn API Response Status:", {
-        status: response.status,
-        statusText: response.statusText,
       });
 
       if (!response.ok) {
@@ -325,9 +273,6 @@ export class SchedulerController {
       }
 
       const data = await response.json();
-      logger.info("✅ LinkedIn post created successfully:", {
-        postId: data.id,
-      });
 
       return {
         success: true,
@@ -347,13 +292,6 @@ export class SchedulerController {
 
   private async validateLinkedInToken(accessToken: string): Promise<boolean> {
     try {
-      logger.info("🔐 Validating LinkedIn access token...");
-
-      logger.info("Token preview:", {
-        tokenStart: accessToken.substring(0, 20) + "...",
-        tokenLength: accessToken.length,
-      });
-
       const response = await fetch("https://api.linkedin.com/v2/me", {
         method: "GET",
         headers: {
@@ -363,14 +301,8 @@ export class SchedulerController {
         },
       });
 
-      logger.info("LinkedIn validation response:", {
-        status: response.status,
-        statusText: response.statusText,
-      });
-
       if (response.ok) {
         const data = await response.json();
-        logger.info("✅ LinkedIn token is valid", { sub: data.sub });
         return true;
       }
 
@@ -484,7 +416,6 @@ export class SchedulerController {
 
   async manualPublish(req: Request, res: Response): Promise<void> {
     try {
-      logger.info("🚀 Manual publish triggered");
       await this.processScheduledPosts();
       res.json({
         success: true,

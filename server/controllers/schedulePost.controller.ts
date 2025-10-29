@@ -21,8 +21,6 @@ export class SchedulePostController {
     try {
       const { workspaceId } = req.params;
 
-      logger.info("Fetching scheduled posts for workspace:", { workspaceId });
-
       const { data: scheduledPosts, error } = await supabaseAdmin
         .from("scheduled_posts")
         .select(
@@ -50,10 +48,6 @@ export class SchedulePostController {
         });
         return;
       }
-
-      logger.info("Found scheduled posts:", {
-        count: scheduledPosts?.length || 0,
-      });
 
       // Format the response
       const formattedPosts: ScheduledPostResponse[] = (
@@ -88,13 +82,6 @@ export class SchedulePostController {
     try {
       const { workspaceId } = req.params;
       const { postId, socialAccountId, scheduledTime } = req.body;
-
-      logger.info("Scheduling post:", {
-        workspaceId,
-        postId,
-        socialAccountId,
-        scheduledTime,
-      });
 
       // Validate required fields
       if (!postId || !socialAccountId || !scheduledTime) {
@@ -228,11 +215,6 @@ export class SchedulePostController {
         return;
       }
 
-      logger.info("Post scheduled successfully:", {
-        scheduledPostId: scheduledPost.id,
-        workspaceId,
-      });
-
       // Format the response
       const responseData: ScheduledPostResponse = {
         id: scheduledPost.id,
@@ -264,13 +246,6 @@ export class SchedulePostController {
       const { workspaceId, postId } = req.params;
       const { content } = req.body;
 
-      logger.info("Received update request:", {
-        workspaceId,
-        postId,
-        hasContent: !!content,
-        contentLength: content?.length,
-      });
-
       // Enhanced validation
       if (
         !content ||
@@ -287,12 +262,6 @@ export class SchedulePostController {
         });
         return;
       }
-
-      // Verify the scheduled post exists and belongs to the workspace
-      logger.info("Verifying scheduled post existence:", {
-        postId,
-        workspaceId,
-      });
 
       const { data: existingPost, error: fetchError } = await supabaseAdmin
         .from("scheduled_posts")
@@ -323,12 +292,6 @@ export class SchedulePostController {
         return;
       }
 
-      logger.info("Found scheduled post:", {
-        postId: existingPost.id,
-        generatedPostId: existingPost.post_id,
-        status: existingPost.status,
-      });
-
       // Only allow editing if post is scheduled
       if (existingPost.status !== "scheduled") {
         logger.warn("Attempt to edit non-scheduled post:", {
@@ -341,12 +304,6 @@ export class SchedulePostController {
         });
         return;
       }
-
-      // Update the generated post content
-      logger.info("Updating generated post content:", {
-        generatedPostId: existingPost.post_id,
-        contentLength: content.length,
-      });
 
       const { error: updateError } = await supabaseAdmin
         .from("generated_posts")
@@ -368,11 +325,6 @@ export class SchedulePostController {
         });
         return;
       }
-
-      logger.info("Post content updated successfully:", {
-        postId,
-        generatedPostId: existingPost.post_id,
-      });
 
       res.json({
         success: true,
@@ -399,8 +351,6 @@ export class SchedulePostController {
   async deleteScheduledPost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId, postId } = req.params;
-
-      logger.info("Deleting scheduled post:", { workspaceId, postId });
 
       // Verify the post belongs to the workspace before deleting
       const { data: existingPost, error: fetchError } = await supabaseAdmin
@@ -433,8 +383,6 @@ export class SchedulePostController {
         return;
       }
 
-      logger.info("Scheduled post deleted successfully:", { postId });
-
       res.json({
         success: true,
         message: "Scheduled post deleted successfully",
@@ -459,8 +407,6 @@ export class SchedulePostController {
         });
         return;
       }
-
-      logger.info("Publishing post immediately:", { postId });
 
       // Get the scheduled post with related data
       const { data: scheduledPost, error: fetchError } = await supabaseAdmin

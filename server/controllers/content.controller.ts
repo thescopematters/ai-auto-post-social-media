@@ -14,8 +14,14 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const { documentId, platform, tone, agentConfigId, variantCount } =
-      req.body;
+    const {
+      documentId,
+      platform,
+      tone,
+      framework,
+      agentConfigId,
+      variantCount,
+    } = req.body;
 
     if (!req.user) {
       throw new Error("User not authenticated");
@@ -23,14 +29,16 @@ export const generateContent = async (
 
     const userId = req.user.id;
 
-    const { data: document } = await supabaseAdmin
+    // Fetch document
+    const { data: document, error: docError } = await supabaseAdmin
       .from("documents")
       .select("content_text, title")
       .eq("id", documentId)
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (!document) {
+    if (docError || !document) {
+      console.error("Document fetch error:", docError);
       throw new NotFoundError("Document not found");
     }
 
@@ -38,51 +46,60 @@ export const generateContent = async (
       throw new Error("Document has no content to generate posts from");
     }
 
-    logger.info(
-      `User ${userId} generating ${
-        variantCount || 3
-      } posts for document ${documentId} on ${platform} with ${tone} tone`
-    );
-
-    const posts = await geminiService.generateWithRetry(
+    // Generate posts from Gemini
+    const generatedContent = await geminiService.generateWithRetry(
       document.content_text,
       platform as "linkedin" | "twitter",
       tone,
-      variantCount || 3
+      variantCount || 3,
+      2,
+      framework
     );
 
-    const generatedPosts: any[] = [];
-
-    for (let i = 0; i < posts.length; i++) {
-      const { data, error } = await supabaseAdmin
-        .from("generated_posts")
-        .insert({
-          workspace_id: workspaceId,
-          user_id: userId,
-          document_id: documentId,
-          agent_config_id: agentConfigId,
-          platform,
-          content: posts[i],
-          variant_number: i + 1,
-          hashtags: [],
-          media_urls: [],
-          predicted_score: Math.random() * 10,
-          moderation_status: "pending",
-        })
-        .select()
-        .single();
-
-      if (!error && data) {
-        generatedPosts.push(data as any);
-      }
+    if (!generatedContent || generatedContent.length === 0) {
+      throw new Error("Failed to generate posts from AI service");
     }
 
-    logger.info(
-      `User ${userId} generated ${generatedPosts.length} posts for document ${documentId}`
-    );
+    // Prepare all inserts
+    const postsToInsert = generatedContent.map((content, index) => ({
+      workspace_id: workspaceId,
+      user_id: userId,
+      document_id: documentId,
+      agent_config_id: agentConfigId || null,
+      platform,
+      content,
+      variant_number: index + 1,
+      framework: framework || "auto",
+      hashtags: [],
+      media_urls: [],
+      predicted_score: Math.random() * 10,
+      moderation_status: "pending",
+    }));
 
-    successResponse(res, generatedPosts, "Content generated successfully", 201);
-  } catch (error) {
+    // Insert all posts at once
+    const { data: savedPosts, error: insertError } = await supabaseAdmin
+      .from("generated_posts")
+      .insert(postsToInsert)
+      .select();
+
+    if (insertError) {
+      console.error("❌ Insert error:", insertError.message);
+      throw new Error(`Failed to save posts: ${insertError.message}`);
+    }
+
+    if (!savedPosts || savedPosts.length === 0) {
+      throw new Error("No posts were saved to database");
+    }
+
+    successResponse(
+      res,
+      savedPosts,
+      "Content generated successfully",
+      201
+    );
+  } catch (error: any) {
+    console.error("❌ Error in generateContent:", error.message);
+    logger.error("Generation error:", error.message);
     next(error);
   }
 };
@@ -189,7 +206,6 @@ export const updatePost = async (
     if (error || !data) {
       throw new NotFoundError("Post not found");
     }
-
     successResponse(res, data, "Post updated successfully");
   } catch (error) {
     next(error);
@@ -213,8 +229,6 @@ export const deletePost = async (
     if (error) {
       throw new NotFoundError("Post not found");
     }
-
-    logger.info(`Post deleted: ${postId}`);
 
     successResponse(res, null, "Post deleted successfully");
   } catch (error) {
@@ -279,9 +293,62 @@ export const moderatePost = async (
       new_status: newStatus,
     } as any);
 
-    logger.info(`Post ${postId} moderated: ${action} by ${req.user.email}`);
-
     successResponse(res, data, "Post moderated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const schedulePost = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { workspaceId } = req.params;
+    const { postId, socialAccountId, scheduledTime } = req.body;
+
+    if (!req.user) {
+      throw new Error("User not authenticated");
+    }
+
+    // Verify post exists and belongs to workspace
+    const { data: post, error: postError } = await supabaseAdmin
+      .from("generated_posts")
+      .select("id")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .single();
+
+    if (postError || !post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    // Create scheduled post record
+    const { data, error } = await supabaseAdmin
+      .from("scheduled_posts")
+      .insert({
+        post_id: postId,
+        workspace_id: workspaceId,
+        social_account_id: socialAccountId,
+        scheduled_time: scheduledTime,
+        status: "scheduled",
+        created_by: req.user.id,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to schedule post: ${error.message}`);
+    }
+
+    // Update post status
+    await supabaseAdmin
+      .from("generated_posts")
+      .update({ moderation_status: "scheduled" })
+      .eq("id", postId);
+
+    successResponse(res, data, "Post scheduled successfully", 201);
   } catch (error) {
     next(error);
   }

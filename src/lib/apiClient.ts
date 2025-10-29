@@ -178,6 +178,7 @@ export const contentApi = {
     documentId: string;
     platform: string;
     tone: string;
+    framework?: string;
     agentConfigId?: string;
     variantCount?: number;
   }) =>

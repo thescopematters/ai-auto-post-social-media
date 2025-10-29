@@ -36,7 +36,6 @@ export const authenticateOptional = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      logger.info("No authentication token provided - continuing as anonymous");
       req.user = undefined;
       return next();
     }
@@ -45,7 +44,6 @@ export const authenticateOptional = async (
 
     try {
       const decoded = verifyAccessToken(token);
-      logger.info("Token decoded successfully:", { userId: decoded.userId });
 
       const { data: user, error: userError } = await supabaseAdmin
         .from("profiles")
@@ -66,10 +64,6 @@ export const authenticateOptional = async (
           id: userProfile.id,
           role: userProfile.role,
         };
-        logger.info("User authenticated:", {
-          userId: userProfile.id,
-          email: userProfile.email,
-        });
       }
     } catch (jwtError) {
       logger.warn("JWT verification failed:", jwtError);
@@ -99,7 +93,6 @@ export const authenticate = async (
 
     try {
       const decoded = verifyAccessToken(token);
-      logger.info("Token decoded:", { userId: decoded.userId });
 
       const { data: user, error: userError } = await supabaseAdmin
         .from("profiles")
@@ -118,7 +111,6 @@ export const authenticate = async (
           id: userProfile.id,
           role: userProfile.role,
         };
-        logger.info("User authenticated:", { userId: userProfile.id });
         return next();
       }
     } catch (jwtError) {

@@ -129,8 +129,6 @@ export const createWorkspace = async (
       logger.error('AI config creation error:', configError);
     }
 
-    logger.info(`Workspace created: ${workspace.id} by ${req.user.email}`);
-
     successResponse(res, workspace, 'Workspace created successfully', 201);
   } catch (error) {
     next(error);
@@ -162,8 +160,6 @@ export const updateWorkspace = async (
       throw new NotFoundError('Workspace not found');
     }
 
-    logger.info(`Workspace updated: ${workspaceId}`);
-
     successResponse(res, data, 'Workspace updated successfully');
   } catch (error) {
     next(error);
@@ -186,8 +182,6 @@ export const deleteWorkspace = async (
     if (error) {
       throw new NotFoundError('Workspace not found');
     }
-
-    logger.info(`Workspace deleted: ${workspaceId}`);
 
     successResponse(res, null, 'Workspace deleted successfully');
   } catch (error) {
@@ -240,8 +234,6 @@ export const addWorkspaceMember = async (
     if (error) {
       throw new Error('Failed to add workspace member');
     }
-
-    logger.info(`Member added to workspace ${workspaceId}: ${userId}`);
 
     successResponse(res, data, 'Member added successfully', 201);
   } catch (error) {

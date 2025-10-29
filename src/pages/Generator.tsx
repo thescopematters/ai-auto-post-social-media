@@ -10,6 +10,12 @@ import {
   Calendar,
   Edit2,
   Eye,
+  BookOpen,
+  Target,
+  Anchor,
+  RefreshCcw,
+  Clock,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,11 +33,25 @@ type SocialAccount = {
 };
 
 type GeneratedPost = {
-  id?: string;
+  id: string;
   content: string;
   platform: string;
   variant_number?: number;
   user_id?: string;
+  framework?: string;
+  workspace_id?: string;
+  document_id?: string;
+  agent_config_id?: string | null;
+};
+
+const FRAMEWORKS = {
+  auto: { name: "Auto Select", icon: Sparkles, description: "AI chooses the best framework automatically" },
+  hvcta: { name: "HVCTA", icon: Anchor, description: "Hook → Value → Call to Action" },
+  pas: { name: "PAS", icon: Target, description: "Problem → Agitate → Solution" },
+  sla: { name: "SLA", icon: BookOpen, description: "Story → Lesson → Application" },
+  mrs: { name: "MRS", icon: RefreshCcw, description: "Mistake → Realization → Shift" },
+  cms: { name: "CMS", icon: Clock, description: "Chronological Micro-Story" },
+  htof: { name: "HTOF", icon: Zap, description: "Hot Take / Opinion Framework" },
 };
 
 export function Generator() {
@@ -41,6 +61,7 @@ export function Generator() {
   const [selectedDocument, setSelectedDocument] = useState<string>("");
   const [platform, setPlatform] = useState<"linkedin" | "twitter">("linkedin");
   const [tone, setTone] = useState("professional");
+  const [framework, setFramework] = useState<keyof typeof FRAMEWORKS>("hvcta");
   const [generating, setGenerating] = useState(false);
   const [scheduling, setScheduling] = useState<string | null>(null);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -144,77 +165,34 @@ export function Generator() {
         documentId: selectedDocument,
         platform,
         tone,
+        framework,
         variantCount: 3,
       });
 
-      if (response.success && Array.isArray(response.data)) {
-        setGeneratedPosts(response.data as GeneratedPost[]);
+      if (response.success && Array.isArray(response.data) && response.data.length > 0) {
+        const postsWithFramework = (response.data as GeneratedPost[]).map((post) => ({
+          ...post,
+          framework: post.framework || framework,
+          platform: post.platform || platform,
+        }));
+        setGeneratedPosts(postsWithFramework);
+        toast.success("Posts generated!", {
+          description: `Created ${postsWithFramework.length} posts using ${FRAMEWORKS[framework].name} framework`,
+        });
       } else {
         console.error("Failed to generate posts:", response.error);
-        const mockPosts: GeneratedPost[] = [
-          {
-            content: `🚀 Exciting insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
-            platform: platform,
-          },
-          {
-            content: `Just analyzed the latest trends in ${
-              platform === "linkedin" ? "B2B marketing" : "social media"
-            }. The results might surprise you 📊\n\nKey takeaways:\n✅ Authentic content wins\n✅ Engagement over reach\n✅ Value-first approach\n\nWant to learn more? Drop a comment below!\n\n#Marketing #Strategy`,
-            platform: platform,
-          },
-          {
-            content: `${
-              platform === "linkedin" ? "💡" : "🔥"
-            } Hot take: The future of content creation is here.\n\nAI isn't replacing creativity – it's amplifying it. Teams using smart automation tools are producing 3x more content while maintaining quality.\n\nThe question isn't whether to adopt AI, but how fast you can integrate it.\n\n#ContentMarketing #DigitalTransformation`,
-            platform: platform,
-          },
-        ].map((post, index) => ({
-          ...post,
-          variant_number: index + 1,
-          id: `mock_${Date.now()}_${index}`,
-        }));
-
-        setGeneratedPosts(mockPosts);
+        toast.error("Generation failed", {
+          description: response.error || "Unable to generate posts",
+        });
       }
     } catch (error) {
       console.error("Error generating content:", error);
-      const mockPosts: GeneratedPost[] = [
-        {
-          content: `🚀 Exciting insights from our latest research!\n\nWe've discovered that companies leveraging AI automation see a 40% increase in productivity. This isn't just about efficiency – it's about empowering teams to focus on strategic work that drives real value.\n\nWhat's your experience with AI in the workplace?\n\n#AI #Productivity #Innovation`,
-          platform: platform,
-          variant_number: 1,
-          id: `mock_${Date.now()}_1`,
-        },
-        {
-          content: `Just analyzed the latest trends in ${
-            platform === "linkedin" ? "B2B marketing" : "social media"
-          }. The results might surprise you 📊\n\nKey takeaways:\n✅ Authentic content wins\n✅ Engagement over reach\n✅ Value-first approach\n\nWant to learn more? Drop a comment below!\n\n#Marketing #Strategy`,
-          platform: platform,
-          variant_number: 2,
-          id: `mock_${Date.now()}_2`,
-        },
-        {
-          content: `${
-            platform === "linkedin" ? "💡" : "🔥"
-          } Hot take: The future of content creation is here.\n\nAI isn't replacing creativity – it's amplifying it. Teams using smart automation tools are producing 3x more content while maintaining quality.\n\nThe question isn't whether to adopt AI, but how fast you can integrate it.\n\n#ContentMarketing #DigitalTransformation`,
-          platform: platform,
-          variant_number: 3,
-          id: `mock_${Date.now()}_3`,
-        },
-      ];
-      setGeneratedPosts(mockPosts);
     } finally {
       setGenerating(false);
     }
   };
 
   const handleScheduleClick = (post: GeneratedPost) => {
-    if (!post.id || post.id.startsWith("mock_")) {
-      toast.error("Cannot schedule demo posts", {
-        description: "Please save the post first.",
-      });
-      return;
-    }
     setSelectedPost(post);
     setShowScheduleModal(true);
   };
@@ -235,29 +213,6 @@ export function Generator() {
 
     setIsSaving(true);
     try {
-      console.log("Saving edited post:", {
-        workspaceId: currentWorkspace.id,
-        postId: selectedPost.id,
-        contentLength: editedContent.length,
-      });
-
-      // For demo posts, just update local state
-      if (selectedPost.id.startsWith("mock_")) {
-        setGeneratedPosts(
-          generatedPosts.map((post) =>
-            post.id === selectedPost.id
-              ? { ...post, content: editedContent }
-              : post
-          )
-        );
-        toast.success("Post updated successfully!");
-        setShowEditModal(false);
-        setSelectedPost(null);
-        setEditedContent("");
-        return;
-      }
-
-      // For real posts, update in database
       const response = await contentApi.updatePost(
         currentWorkspace.id,
         selectedPost.id,
@@ -265,7 +220,6 @@ export function Generator() {
       );
 
       if (response.success) {
-        // Update local state
         setGeneratedPosts(
           generatedPosts.map((post) =>
             post.id === selectedPost.id
@@ -278,19 +232,14 @@ export function Generator() {
         setSelectedPost(null);
         setEditedContent("");
       } else {
-        console.error("Update failed:", response);
         toast.error("Failed to update post", {
           description: response.error || "Unknown error",
         });
       }
     } catch (error: any) {
-      console.error("Error saving post:", {
-        message: error.message,
-        response: error.response?.data,
-        status: error.response?.status,
-      });
+      console.error("Error saving post:", error);
       toast.error("Error saving post", {
-        description: error.response?.data?.error || error.message,
+        description: error.message,
       });
     } finally {
       setIsSaving(false);
@@ -300,20 +249,11 @@ export function Generator() {
   const handleSchedulePost = async () => {
     if (
       !currentWorkspace ||
-      !selectedPost ||
+      !selectedPost?.id ||
       !selectedAccount ||
       !scheduledTime
     ) {
       toast.error("Please fill all required fields");
-      return;
-    }
-
-    if (!selectedPost.id || selectedPost.id.startsWith("mock_")) {
-      toast.info("Demo post limitation", {
-        description:
-          "This is a demo post. In a real scenario, this would be scheduled.",
-      });
-      setShowScheduleModal(false);
       return;
     }
 
@@ -360,6 +300,11 @@ export function Generator() {
     }
   }, [platform, currentWorkspace]);
 
+  const getFrameworkIcon = (frameworkKey: keyof typeof FRAMEWORKS) => {
+    const FrameworkIcon = FRAMEWORKS[frameworkKey].icon;
+    return <FrameworkIcon className="w-4 h-4" />;
+  };
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="mb-8">
@@ -367,7 +312,7 @@ export function Generator() {
           Content Generator
         </h1>
         <p className="text-gray-600">
-          Create engaging social media posts from your documents
+          Create engaging social media posts from your documents using proven frameworks
         </p>
       </div>
 
@@ -421,7 +366,6 @@ export function Generator() {
                     <span className="block text-sm font-medium">LinkedIn</span>
                   </button>
 
-                  {/* ✅ Twitter Button - Disabled with Tooltip */}
                   <div
                     className="relative"
                     onMouseEnter={() => setShowTooltip(true)}
@@ -437,7 +381,6 @@ export function Generator() {
                       </span>
                     </button>
 
-                    {/* ✅ Tooltip - Shows only on hover */}
                     {showTooltip && (
                       <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none">
                         Coming Soon
@@ -446,6 +389,23 @@ export function Generator() {
                     )}
                   </div>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Content Framework
+                </label>
+                <select
+                  value={framework}
+                  onChange={(e) => setFramework(e.target.value as keyof typeof FRAMEWORKS)}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  {Object.entries(FRAMEWORKS).map(([key, config]) => (
+                    <option key={key} value={key}>
+                      {config.name} - {config.description}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -494,8 +454,7 @@ export function Generator() {
                 No posts generated yet
               </h3>
               <p className="text-gray-600 mb-6">
-                Select a document and click generate to create AI-powered
-                content
+                Select a document and click generate to create AI-powered content using {FRAMEWORKS[framework].name} framework
               </p>
               {documents.length === 0 && (
                 <p className="text-sm text-yellow-600">
@@ -505,20 +464,37 @@ export function Generator() {
             </div>
           ) : (
             <div className="space-y-4">
-              <h2 className="text-xl font-semibold text-gray-900">
-                Generated Variants
-              </h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-gray-900">
+                  Generated Variants
+                </h2>
+                <div className="flex items-center gap-2 text-sm text-gray-600">
+                  <span className="flex items-center gap-1">
+                    {getFrameworkIcon(framework)}
+                    {FRAMEWORKS[framework].name}
+                  </span>
+                  <span>•</span>
+                  <span>{generatedPosts.length} variants</span>
+                </div>
+              </div>
               {generatedPosts.map((post, index) => (
                 <div
                   key={post.id || index}
                   className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                      Variant {post.variant_number || index + 1}
-                    </span>
+                    <div className="flex items-center gap-3">
+                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
+                        Variant {post.variant_number || index + 1}
+                      </span>
+                      {post.framework && FRAMEWORKS[post.framework as keyof typeof FRAMEWORKS] && (
+                        <span className="px-3 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-purple-200">
+                          {getFrameworkIcon(post.framework as keyof typeof FRAMEWORKS)}
+                          {FRAMEWORKS[post.framework as keyof typeof FRAMEWORKS].name}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-2">
-                      {/* NEW: Preview Button */}
                       <button
                         onClick={() => handlePreviewClick(post)}
                         className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
@@ -528,7 +504,6 @@ export function Generator() {
                         Preview
                       </button>
 
-                      {/* NEW: Edit Button */}
                       <button
                         onClick={() => handleEditClick(post)}
                         className="flex items-center gap-2 px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm"
@@ -538,7 +513,6 @@ export function Generator() {
                         Edit
                       </button>
 
-                      {/* EXISTING: Schedule Button */}
                       <button
                         onClick={() => handleScheduleClick(post)}
                         className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
@@ -658,9 +632,16 @@ export function Generator() {
           <div className="bg-white rounded-xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-gray-200">
               <h2 className="text-2xl font-bold text-gray-900">Preview Post</h2>
-              <p className="text-gray-600 mt-1">
-                Platform: {selectedPost.platform || "LinkedIn"}
-              </p>
+              <div className="flex items-center gap-4 mt-2">
+                <p className="text-gray-600">
+                  Platform: {selectedPost.platform || "LinkedIn"}
+                </p>
+                {selectedPost.framework && (
+                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                    {FRAMEWORKS[selectedPost.framework as keyof typeof FRAMEWORKS]?.name || selectedPost.framework}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="p-6">
@@ -686,8 +667,10 @@ export function Generator() {
                   <p className="text-gray-900">{selectedPost.content.length}</p>
                 </div>
                 <div>
-                  <p className="text-gray-600 font-medium">Status</p>
-                  <p className="text-gray-900">Generated</p>
+                  <p className="text-gray-600 font-medium">Framework</p>
+                  <p className="text-gray-900">
+                    {FRAMEWORKS[selectedPost.framework as keyof typeof FRAMEWORKS]?.name || selectedPost.framework || 'Auto'}
+                  </p>
                 </div>
               </div>
             </div>
@@ -731,7 +714,7 @@ export function Generator() {
                 </p>
               </div>
 
-              {selectedPost?.id?.startsWith("mock_") && (
+              {selectedPost?.id.startsWith?.("mock_") && (
                 <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
                   <p className="text-sm text-yellow-800">
                     <strong>Note:</strong> This is a demo post. Changes will be
@@ -742,10 +725,7 @@ export function Generator() {
 
               <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <p className="text-sm text-blue-700">
-                  <strong>Note:</strong>{" "}
-                  {selectedPost?.id?.startsWith("mock_")
-                    ? "Changes will be saved locally for demo posts."
-                    : "Changes will be saved to the database when you click Save."}
+                  <strong>Note:</strong> Changes will be saved to the database when you click Save.
                 </p>
               </div>
             </div>

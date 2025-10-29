@@ -70,8 +70,6 @@ export const register = async (
       email,
     });
 
-    logger.info(`User registered: ${email}`);
-
     successResponse(
       res,
       {
@@ -127,8 +125,6 @@ export const login = async (
       userId: (profile as any as any).id,
       email: (profile as any as any).email,
     });
-
-    logger.info(`User logged in: ${email}`);
 
     successResponse(
       res,

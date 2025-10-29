@@ -23,8 +23,6 @@ export const initiateLinkedInAuth = async (
       return res.redirect(`${frontendUrl}/signin?error=user_id_required`);
     }
 
-    logger.info("LinkedIn OAuth for user:", { userId });
-
     const state = JSON.stringify({
       userId: userId,
       timestamp: Date.now(),
@@ -50,8 +48,6 @@ export const initiateLinkedInAuth = async (
       "openid profile email w_member_social"
     );
     linkedInAuthUrl.searchParams.append("state", encodedState);
-
-    logger.info("Redirecting to LinkedIn");
     res.redirect(linkedInAuthUrl.toString());
   } catch (error: any) {
     logger.error("LinkedIn auth failed:", error);
@@ -88,8 +84,6 @@ export const handleLinkedInCallback = async (
 
     const userId = decodedState.userId;
     if (!userId) throw new Error("No userId in state");
-
-    logger.info("LinkedIn callback for user:", { userId });
 
     // Exchange code for token
     const tokenParams = new URLSearchParams({
@@ -163,8 +157,6 @@ export const handleLinkedInCallback = async (
 
     if (dbError) throw dbError;
 
-    logger.info("LinkedIn account saved successfully");
-
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const successUrl = `${frontendUrl}/settings?tab=connections&success=linkedin_connected&account=${encodeURIComponent(
       fullName
@@ -221,7 +213,6 @@ export const refreshLinkedInToken = async (
       .eq("workspace_id", workspaceId)
       .eq("platform", "linkedin");
 
-    logger.info("Token refreshed successfully");
     return true;
   } catch (error) {
     logger.error("Token refresh failed:", error);

@@ -107,8 +107,6 @@ export const createDocument = async (
       throw new Error("Failed to create document");
     }
 
-    logger.info(`Document created: ${data.id} in workspace ${workspaceId}`);
-
     successResponse(res, data, "Document created successfully", 201);
   } catch (error) {
     next(error);
@@ -165,8 +163,6 @@ export const deleteDocument = async (
     if (error) {
       throw new NotFoundError("Document not found");
     }
-
-    logger.info(`Document deleted: ${documentId}`);
 
     successResponse(res, null, "Document deleted successfully");
   } catch (error) {
