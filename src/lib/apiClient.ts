@@ -1,6 +1,7 @@
-import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
+import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
 
 interface ApiResponse<T = any> {
   success: boolean;
@@ -22,14 +23,14 @@ class ApiClient {
     this.client = axios.create({
       baseURL: API_BASE_URL,
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       timeout: 30000,
     });
 
     this.client.interceptors.request.use(
       (config) => {
-        const token = localStorage.getItem('accessToken');
+        const token = localStorage.getItem("accessToken");
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -44,26 +45,29 @@ class ApiClient {
       (response) => response,
       async (error: AxiosError<ApiResponse>) => {
         if (error.response?.status === 401) {
-          const refreshToken = localStorage.getItem('refreshToken');
+          const refreshToken = localStorage.getItem("refreshToken");
           if (refreshToken) {
             try {
-              const { data } = await axios.post(`${API_BASE_URL}/auth/refresh`, {
-                refreshToken,
-              });
-              localStorage.setItem('accessToken', data.data.accessToken);
-              localStorage.setItem('refreshToken', data.data.refreshToken);
+              const { data } = await axios.post(
+                `${API_BASE_URL}/auth/refresh`,
+                {
+                  refreshToken,
+                }
+              );
+              localStorage.setItem("accessToken", data.data.accessToken);
+              localStorage.setItem("refreshToken", data.data.refreshToken);
 
               if (error.config) {
                 error.config.headers.Authorization = `Bearer ${data.data.accessToken}`;
                 return axios(error.config);
               }
             } catch (refreshError) {
-              localStorage.removeItem('accessToken');
-              localStorage.removeItem('refreshToken');
-              window.location.href = '/signin';
+              localStorage.removeItem("accessToken");
+              localStorage.removeItem("refreshToken");
+              window.location.href = "/signin";
             }
           } else {
-            window.location.href = '/signin';
+            window.location.href = "/signin";
           }
         }
         return Promise.reject(error);
@@ -71,28 +75,58 @@ class ApiClient {
     );
   }
 
-  async get<T>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async get<T>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<T>> {
     const response = await this.client.get<ApiResponse<T>>(url, config);
     return response.data;
   }
 
-  async post<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async post<T>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<T>> {
     const response = await this.client.post<ApiResponse<T>>(url, data, config);
     return response.data;
   }
 
-  async put<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async put<T>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<T>> {
     const response = await this.client.put<ApiResponse<T>>(url, data, config);
     return response.data;
   }
 
-  async patch<T>(url: string, data?: any, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async patch<T>(
+    url: string,
+    data?: any,
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<T>> {
     const response = await this.client.patch<ApiResponse<T>>(url, data, config);
     return response.data;
   }
 
-  async delete<T>(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<T>> {
+  async delete<T>(
+    url: string,
+    config?: AxiosRequestConfig
+  ): Promise<ApiResponse<T>> {
     const response = await this.client.delete<ApiResponse<T>>(url, config);
+    return response.data;
+  }
+
+  async uploadFile<T>(
+    url: string,
+    formData: FormData
+  ): Promise<ApiResponse<T>> {
+    const response = await this.client.post<ApiResponse<T>>(url, formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
     return response.data;
   }
 }
@@ -101,32 +135,33 @@ export const apiClient = new ApiClient();
 
 export const authApi = {
   register: (email: string, password: string, fullName: string) =>
-    apiClient.post('/auth/register', { email, password, fullName }),
+    apiClient.post("/auth/register", { email, password, fullName }),
 
   login: (email: string, password: string) =>
-    apiClient.post('/auth/login', { email, password }),
+    apiClient.post("/auth/login", { email, password }),
 
-  logout: () =>
-    apiClient.post('/auth/logout'),
+  logout: () => apiClient.post("/auth/logout"),
 
   refreshToken: (refreshToken: string) =>
-    apiClient.post('/auth/refresh', { refreshToken }),
+    apiClient.post("/auth/refresh", { refreshToken }),
 
-  getCurrentUser: () =>
-    apiClient.get('/auth/me'),
+  getCurrentUser: () => apiClient.get("/auth/me"),
 };
 
 export const workspaceApi = {
-  getAll: () =>
-    apiClient.get('/workspaces'),
+  getAll: () => apiClient.get("/workspaces"),
 
-  getById: (workspaceId: string) =>
-    apiClient.get(`/workspaces/${workspaceId}`),
+  getById: (workspaceId: string) => apiClient.get(`/workspaces/${workspaceId}`),
 
   create: (name: string, brandColor?: string, logoUrl?: string) =>
-    apiClient.post('/workspaces', { name, brandColor, logoUrl }),
+    apiClient.post("/workspaces", { name, brandColor, logoUrl }),
 
-  update: (workspaceId: string, name: string, brandColor?: string, logoUrl?: string) =>
+  update: (
+    workspaceId: string,
+    name: string,
+    brandColor?: string,
+    logoUrl?: string
+  ) =>
     apiClient.put(`/workspaces/${workspaceId}`, { name, brandColor, logoUrl }),
 
   delete: (workspaceId: string) =>
@@ -154,14 +189,16 @@ export const documentApi = {
   getById: (workspaceId: string, documentId: string) =>
     apiClient.get(`/workspaces/${workspaceId}/documents/${documentId}`),
 
-  create: (workspaceId: string, data: {
-    title: string;
-    fileType: string;
-    fileUrl?: string;
-    contentText?: string;
-    metadata?: any;
-  }) =>
-    apiClient.post(`/workspaces/${workspaceId}/documents`, data),
+  create: (
+    workspaceId: string,
+    data: {
+      title: string;
+      fileType: string;
+      fileUrl?: string;
+      contentText?: string;
+      metadata?: any;
+    }
+  ) => apiClient.post(`/workspaces/${workspaceId}/documents`, data),
 
   update: (workspaceId: string, documentId: string, data: any) =>
     apiClient.put(`/workspaces/${workspaceId}/documents/${documentId}`, data),
@@ -174,17 +211,25 @@ export const documentApi = {
 };
 
 export const contentApi = {
-  generate: (workspaceId: string, data: {
-    documentId: string;
-    platform: string;
-    tone: string;
-    framework?: string;
-    agentConfigId?: string;
-    variantCount?: number;
-  }) =>
-    apiClient.post(`/workspaces/${workspaceId}/generate`, data),
+  generate: (
+    workspaceId: string,
+    data: {
+      documentId: string;
+      platform: string;
+      tone: string;
+      framework?: string;
+      agentConfigId?: string;
+      variantCount?: number;
+    }
+  ) => apiClient.post(`/workspaces/${workspaceId}/generate`, data),
 
-  getAllPosts: (workspaceId: string, page = 1, limit = 20, status?: string, platform?: string) =>
+  getAllPosts: (
+    workspaceId: string,
+    page = 1,
+    limit = 20,
+    status?: string,
+    platform?: string
+  ) =>
     apiClient.get(`/workspaces/${workspaceId}/posts`, {
       params: { page, limit, status, platform },
     }),
@@ -198,24 +243,51 @@ export const contentApi = {
   deletePost: (workspaceId: string, postId: string) =>
     apiClient.delete(`/workspaces/${workspaceId}/posts/${postId}`),
 
-  moderatePost: (workspaceId: string, postId: string, action: string, reason?: string) =>
-    apiClient.post(`/workspaces/${workspaceId}/posts/${postId}/moderate`, { action, reason }),
+  moderatePost: (
+    workspaceId: string,
+    postId: string,
+    action: string,
+    reason?: string
+  ) =>
+    apiClient.post(`/workspaces/${workspaceId}/posts/${postId}/moderate`, {
+      action,
+      reason,
+    }),
 
   getScheduledPosts: (workspaceId: string) =>
     apiClient.get(`/workspaces/${workspaceId}/scheduled-posts`),
 
-  schedulePost: (workspaceId: string, data: {
-    postId: string;
-    socialAccountId: string;
-    scheduledTime: string;
-  }) =>
-    apiClient.post(`/workspaces/${workspaceId}/schedule`, data),
+  schedulePost: (
+    workspaceId: string,
+    data: {
+      postId: string;
+      socialAccountId: string;
+      scheduledTime: string;
+    }
+  ) => apiClient.post(`/workspaces/${workspaceId}/schedule`, data),
 
-  updateScheduledPost: (workspaceId: string, postId: string, data: { content: string }) =>
-    apiClient.patch(`/workspaces/${workspaceId}/scheduled-posts/${postId}`, data),
+  updateScheduledPost: (
+    workspaceId: string,
+    postId: string,
+    data: { content: string }
+  ) =>
+    apiClient.patch(
+      `/workspaces/${workspaceId}/scheduled-posts/${postId}`,
+      data
+    ),
 
   deleteScheduledPost: (workspaceId: string, postId: string) =>
     apiClient.delete(`/workspaces/${workspaceId}/scheduled-posts/${postId}`),
+
+  // NEW: Image upload methods
+  uploadPostImage: (workspaceId: string, postId: string, formData: FormData) =>
+    apiClient.uploadFile(
+      `/workspaces/${workspaceId}/posts/${postId}/upload-image`,
+      formData
+    ),
+
+  removePostImage: (workspaceId: string, postId: string) =>
+    apiClient.delete(`/workspaces/${workspaceId}/posts/${postId}/remove-image`),
 };
 
 export const socialAccountsApi = {
@@ -229,7 +301,10 @@ export const socialAccountsApi = {
     apiClient.delete(`/workspaces/${workspaceId}/social-accounts/${platform}`),
 
   updateAccount: (workspaceId: string, accountId: string, data: any) =>
-    apiClient.put(`/workspaces/${workspaceId}/social-accounts/${accountId}`, data),
+    apiClient.put(
+      `/workspaces/${workspaceId}/social-accounts/${accountId}`,
+      data
+    ),
 };
 
 export const dashboardApi = {
@@ -243,9 +318,49 @@ export const dashboardApi = {
     apiClient.get(`/workspaces/${workspaceId}/analytics`),
 };
 
+export const mediaApi = {
+  uploadMedia: async (
+    workspaceId: string,
+    postId: string,
+    formData: FormData
+  ) => {
+    return await apiClient.uploadFile(
+      `/workspaces/${workspaceId}/posts/${postId}/media`,
+      formData
+    );
+  },
+
+  // Get media for post
+  getPostMedia: async (workspaceId: string, postId: string) => {
+    return await apiClient.get(
+      `/workspaces/${workspaceId}/posts/${postId}/media`
+    );
+  },
+
+  // Delete media
+  deleteMedia: async (workspaceId: string, postId: string, mediaId: string) => {
+    return await apiClient.delete(
+      `/workspaces/${workspaceId}/posts/${postId}/media/${mediaId}`
+    );
+  },
+
+  // Update media status
+  updateMediaStatus: async (
+    workspaceId: string,
+    postId: string,
+    mediaId: string,
+    status: string
+  ) => {
+    return await apiClient.patch(
+      `/workspaces/${workspaceId}/posts/${postId}/media/${mediaId}/status`,
+      { status }
+    );
+  },
+};
+
 export const schedulerApi = {
-  publishNow: (data: { postId: string }) =>
-    apiClient.post('/publish-now', data),
+  publishNow: (data: { postId: string, socialAccountId: string }) =>
+    apiClient.post("/scheduler/publish-now", data),
 };
 
 export default apiClient;
