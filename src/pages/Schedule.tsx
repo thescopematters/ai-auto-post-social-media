@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { contentApi, schedulerApi } from "../lib/apiClient";
+import { contentApi } from "../lib/apiClient";
 import {
   Calendar as CalendarIcon,
   CheckCircle,
   XCircle,
   Clock,
   Trash2,
-  Play,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -94,31 +93,6 @@ export function Schedule() {
     } catch (error) {
       console.error("Error deleting scheduled post:", error);
       toast.error("Error deleting scheduled post");
-    } finally {
-      setDeleting(null);
-    }
-  };
-
-  const handlePublishNow = async (postId: string) => {
-    if (!currentWorkspace) return;
-
-    try {
-      setDeleting(postId);
-      const response = await schedulerApi.publishNow({ postId });
-
-      if (response.success) {
-        toast.success("Post published! Refreshing...");
-        await new Promise((r) => setTimeout(r, 2000));
-        await loadScheduledPosts();
-      } else {
-        toast.error("Failed to publish post", {
-          description: response.error,
-        });
-      }
-    } catch (error: any) {
-      toast.error("Error publishing post", {
-        description: error.message,
-      });
     } finally {
       setDeleting(null);
     }
@@ -303,15 +277,6 @@ export function Schedule() {
                   </div>
 
                   <div className="flex gap-2 ml-4 flex-wrap justify-end">
-                    {post.status === "scheduled" && (
-                      <button
-                        onClick={() => handlePublishNow(post.id)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                        title="Publish Now"
-                      >
-                        <Play className="w-4 h-4" />
-                      </button>
-                    )}
                     {post.status === "scheduled" && (
                       <button
                         onClick={() => handleDeletePost(post.id)}
