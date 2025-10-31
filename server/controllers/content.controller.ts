@@ -6,6 +6,7 @@ import { NotFoundError } from "../utils/errors";
 import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
 import geminiService from "../services/gemini.service";
+import { uploadToSupabaseStorage } from "../utils/fileUpload";
 
 export const generateContent = async (
   req: AuthRequest,
@@ -74,6 +75,9 @@ export const generateContent = async (
       media_urls: [],
       predicted_score: Math.random() * 10,
       moderation_status: "pending",
+      has_image: false,
+      image_url: null,
+      image_filename: null,
     }));
 
     // Insert all posts at once
@@ -91,15 +95,196 @@ export const generateContent = async (
       throw new Error("No posts were saved to database");
     }
 
-    successResponse(
-      res,
-      savedPosts,
-      "Content generated successfully",
-      201
-    );
+    successResponse(res, savedPosts, "Content generated successfully", 201);
   } catch (error: any) {
     console.error("❌ Error in generateContent:", error.message);
     logger.error("Generation error:", error.message);
+    next(error);
+  }
+};
+
+export const uploadPostImage = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    if (!req.file) {
+      throw new Error("No image file provided");
+    }
+
+    const { workspaceId, postId } = req.params;
+    const userId = req.user.id;
+
+    // Verify post exists and user has access
+    const { data: post, error: postError } = await supabaseAdmin
+      .from("generated_posts")
+      .select("id, workspace_id")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .single();
+
+    if (postError || !post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    // Upload image to Supabase Storage
+    const file = req.file;
+    const fileName = `posts/${workspaceId}/${postId}/${Date.now()}-${
+      file.originalname
+    }`;
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from("post-images")
+      .upload(fileName, file.buffer, {
+        contentType: file.mimetype,
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(`Failed to upload image: ${uploadError.message}`);
+    }
+
+    // Get public URL
+    const {
+      data: { publicUrl },
+    } = supabaseAdmin.storage.from("post-images").getPublicUrl(fileName);
+
+    // Update post with image info
+    const { data: updatedPost, error: updateError } = await supabaseAdmin
+      .from("generated_posts")
+      .update({
+        image_url: publicUrl,
+        image_filename: fileName,
+        has_image: true,
+        media_urls: [publicUrl],
+      })
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(
+        `Failed to update post with image: ${updateError.message}`
+      );
+    }
+
+    successResponse(
+      res,
+      {
+        post: updatedPost,
+        imageUrl: publicUrl,
+        fileName: fileName,
+      },
+      "Image uploaded successfully",
+      200
+    );
+  } catch (error: any) {
+    console.error("❌ Image upload error:", error.message);
+    next(error);
+  }
+};
+
+export const updatePost = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { workspaceId, postId } = req.params;
+    const { content, hashtags, mediaUrls, removeImage } = req.body;
+
+    const updateData: any = {};
+    if (content) updateData.content = content;
+    if (hashtags) updateData.hashtags = hashtags;
+    if (mediaUrls) updateData.media_urls = mediaUrls;
+
+    if (removeImage === true) {
+      updateData.has_image = false;
+      updateData.image_url = null;
+      updateData.image_filename = null;
+
+      if (updateData.media_urls && Array.isArray(updateData.media_urls)) {
+        updateData.media_urls = updateData.media_urls.filter(
+          (url: string) => !url.includes(updateData.image_url)
+        );
+      }
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from("generated_posts")
+      .update(updateData)
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error || !data) {
+      throw new NotFoundError("Post not found");
+    }
+    successResponse(res, data, "Post updated successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const removePostImage = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { workspaceId, postId } = req.params;
+
+    // Get current post to find image filename
+    const { data: post, error: postError } = await supabaseAdmin
+      .from("generated_posts")
+      .select("image_filename, image_url")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .single();
+
+    if (postError || !post) {
+      throw new NotFoundError("Post not found");
+    }
+
+    // Delete image from storage if exists
+    if (post.image_filename) {
+      const { error: deleteError } = await supabaseAdmin.storage
+        .from("post-images")
+        .remove([post.image_filename]);
+
+      if (deleteError) {
+        console.warn(
+          "Failed to delete image from storage:",
+          deleteError.message
+        );
+        // Continue with database update even if storage delete fails
+      }
+    }
+
+    // Update post to remove image references
+    const { data: updatedPost, error: updateError } = await supabaseAdmin
+      .from("generated_posts")
+      .update({
+        has_image: false,
+        image_url: null,
+        image_filename: null,
+        media_urls: [],
+      })
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (updateError) {
+      throw new Error(`Failed to remove image: ${updateError.message}`);
+    }
+
+    successResponse(res, updatedPost, "Image removed successfully", 200);
+  } catch (error: any) {
+    console.error("❌ Remove image error:", error.message);
     next(error);
   }
 };
@@ -176,37 +361,6 @@ export const getPostById = async (
     }
 
     successResponse(res, data, "Post retrieved successfully");
-  } catch (error) {
-    next(error);
-  }
-};
-
-export const updatePost = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { workspaceId, postId } = req.params;
-    const { content, hashtags, mediaUrls } = req.body;
-
-    const updateData: any = {};
-    if (content) updateData.content = content;
-    if (hashtags) updateData.hashtags = hashtags;
-    if (mediaUrls) updateData.media_urls = mediaUrls;
-
-    const { data, error } = await supabaseAdmin
-      .from("generated_posts")
-      .update(updateData)
-      .eq("id", postId)
-      .eq("workspace_id", workspaceId)
-      .select()
-      .single();
-
-    if (error || !data) {
-      throw new NotFoundError("Post not found");
-    }
-    successResponse(res, data, "Post updated successfully");
   } catch (error) {
     next(error);
   }

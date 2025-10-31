@@ -17,6 +17,7 @@ import schedulerRoutes from "./routes/scheduler.routes";
 import { schedulerController } from "./controllers/scheduler.controller";
 import schedulePostRoutes from "./routes/schedulePost.routes";
 import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.routes";
+import mediaRoutes from "./routes/media.routes"; 
 
 const app: Application = express();
 
@@ -68,10 +69,13 @@ app.use(`${config.api.prefix}/workspaces`, workspaceRoutes);
 app.use(`${config.api.prefix}/workspaces`, documentRoutes);
 app.use(`${config.api.prefix}/workspaces`, contentRoutes);
 app.use(`${config.api.prefix}/workspaces`, dashboardRoutes);
+app.use(`${config.api.prefix}/workspaces`, mediaRoutes);
 app.use(`${config.api.prefix}/auth`, socialAuthRoutes);
 app.use(`${config.api.prefix}/scheduler`, schedulerRoutes);
 app.use(config.api.prefix, schedulePostRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceSocialAccountsRoutes);
+
+app.use('/uploads', express.static('uploads'));
 
 app.use(notFoundHandler);
 app.use(errorHandler);
