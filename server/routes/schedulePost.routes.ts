@@ -28,10 +28,4 @@ router.delete(
   schedulePostController.deleteScheduledPost
 );
 
-router.post(
-  '/publish-now',
-  authenticate,
-  schedulePostController.publishNow
-);
-
 export default router;

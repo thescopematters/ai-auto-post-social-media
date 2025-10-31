@@ -4,8 +4,10 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.920.0",
     "@google/generative-ai": "^0.21.0",
     "accepts": "^2.0.0",
+    "aws-sdk": "^2.1692.0",
     "basic-auth": "^2.0.1",
     "body-parser": "^2.2.0",
     "bytes": "^3.1.2",
@@ -83,6 +85,7 @@
     "typescript": "^5.9.3",
     "undici-types": "^7.14.0",
     "unpipe": "^1.0.0",
+    "uuid": "^13.0.0",
     "vary": "^1.1.2",
     "wrappy": "^1.0.2"
   },
@@ -91,5 +94,12 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC"
+  "license": "ISC",
+  "devDependencies": {
+    "@types/aws-sdk": "^0.0.42",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^24.9.2",
+    "@types/uuid": "^10.0.0",
+    "multer": "^2.0.2"
+  }
 }
