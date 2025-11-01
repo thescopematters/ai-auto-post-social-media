@@ -516,3 +516,16 @@ CREATE INDEX IF NOT EXISTS idx_scheduled_posts_workspace_id ON scheduled_posts(w
 CREATE INDEX IF NOT EXISTS idx_scheduled_posts_status ON scheduled_posts(status);
 CREATE INDEX IF NOT EXISTS idx_scheduled_posts_scheduled_time ON scheduled_posts(scheduled_time);
 CREATE INDEX IF NOT EXISTS idx_post_analytics_scheduled_post_id ON post_analytics(scheduled_post_id);
+
+--create the tale for the payment-history or transaction-history 
+CREATE TABLE IF NOT EXISTS payment_transactions (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES profiles(id) ON DELETE CASCADE,  
+  merchant_transaction_id text UNIQUE NOT NULL,             
+  amount numeric(10,2) NOT NULL,
+  status text DEFAULT 'PENDING',
+  payment_method text,          
+  phonepe_reference_id text,    
+  created_at timestamptz DEFAULT now(),
+  updated_at timestamptz DEFAULT now()
+);

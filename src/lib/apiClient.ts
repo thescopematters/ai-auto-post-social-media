@@ -3,6 +3,7 @@ import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from 'axios';
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/v1';
 
 interface ApiResponse<T = any> {
+  redirectUrl: any;
   success: boolean;
   data?: T;
   message?: string;
@@ -237,6 +238,17 @@ export const dashboardApi = {
 export const schedulerApi = {
   publishNow: (data: { postId: string }) =>
     apiClient.post('/publish-now', data),
+};
+
+export const paymentApi = {
+  getHistory: (limit = 20) =>
+    apiClient.get(`/payment/history`, { params: { limit } }),
+  checkStatus: (merchantTransactionId: string) =>
+    apiClient.get<{
+      status: string;
+      transactionId: string;
+      amount: number;
+    }>(`/payment/checkstatus/${merchantTransactionId}`),
 };
 
 export default apiClient;
