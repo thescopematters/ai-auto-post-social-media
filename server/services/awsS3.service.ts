@@ -20,8 +20,8 @@ class AWSS3Service {
   private region: string;
 
   constructor() {
-    this.region = process.env.AWS_REGION || 'ap-south-1';
-    this.bucket = process.env.AWS_S3_BUCKET_NAME || 'social-media-post-media';
+    this.region = process.env.AWS_REGION || 'us-east-1';
+    this.bucket = process.env.AWS_S3_BUCKET_NAME || 'thescopematters';
 
     this.s3Client = new S3Client({
       region: this.region,
@@ -61,6 +61,7 @@ class AWSS3Service {
 
       const url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${fileName}`;
 
+      logger.info(`✅ File uploaded successfully: ${url}`);
       return url;
     } catch (error: unknown) {
       const err = error as S3Error;
@@ -70,6 +71,9 @@ class AWSS3Service {
         message: errorMessage,
         code: err.code,
         statusCode: err.statusCode,
+        filename: file.originalname,
+        mimetype: file.mimetype,
+        size: file.size,
       });
 
       throw new Error(`File upload failed: ${errorMessage}`);
@@ -92,6 +96,7 @@ class AWSS3Service {
       });
 
       await this.s3Client.send(command);
+      logger.info(`✅ File deleted successfully: ${key}`);
       
       return true;
     } catch (error: unknown) {
@@ -113,28 +118,42 @@ class AWSS3Service {
       throw new Error('No file buffer provided');
     }
 
-    // Check file type
+    // Check file size first (10MB max for better support)
+    const maxSize = 10 * 1024 * 1024;
+    if (file.size > maxSize) {
+      throw new Error(
+        `File size exceeds 10MB limit. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB`
+      );
+    }
+
+    // Expanded allowed types to match your getFileType function
     const allowedTypes = [
+      // Images
       'image/jpeg',
       'image/jpg',
       'image/png',
       'image/gif',
       'image/webp',
+      'image/svg+xml',
+      'image/bmp',
+      // PDFs
+      'application/pdf',
+      // Documents
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/plain',
     ];
 
     if (!allowedTypes.includes(file.mimetype)) {
+      logger.warn(`⚠️ Rejected file type: ${file.mimetype} for file: ${file.originalname}`);
       throw new Error(
-        `Invalid file type: ${file.mimetype}. Allowed: JPEG, PNG, GIF, WebP`
+        `Invalid file type: ${file.mimetype}. Allowed types: images, PDFs, and documents`
       );
     }
 
-    // Check file size (5MB max)
-    const maxSize = 5 * 1024 * 1024;
-    if (file.size > maxSize) {
-      throw new Error(
-        `File size exceeds 5MB limit. Your file: ${(file.size / 1024 / 1024).toFixed(2)}MB`
-      );
-    }
+    logger.info(`✅ File validation passed: ${file.originalname} (${file.mimetype})`);
   }
 
   private extractKeyFromUrl(fileUrl: string): string | null {

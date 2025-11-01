@@ -2,8 +2,7 @@ import { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
 import logger from "../config/logger";
-import * as fs from "fs";
-import * as path from "path";
+import fetch from "node-fetch";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -196,7 +195,7 @@ export class SchedulerController {
         };
       }
 
-      // Upload images to LinkedIn first
+      // Upload images to LinkedIn from S3 URLs
       let imageUrns: string[] = [];
       if (generatedPost.media_urls && generatedPost.media_urls.length > 0) {
         imageUrns = await this.uploadImagesToLinkedIn(
@@ -246,23 +245,27 @@ export class SchedulerController {
   }
 
   private async uploadImagesToLinkedIn(
-    mediaPaths: string[],
+    s3Urls: string[],
     accessToken: string,
     personUrn: string
   ): Promise<string[]> {
     const imageUrns: string[] = [];
 
-    for (const mediaPath of mediaPaths) {
+    for (const s3Url of s3Urls) {
       try {
-        const fullPath = path.join(process.cwd(), mediaPath);
-
-        if (!fs.existsSync(fullPath)) {
-          logger.warn(`Media file not found: ${fullPath}`);
+        logger.info(`Downloading image from S3: ${s3Url}`);
+        
+        // Download image from S3
+        const imageResponse = await fetch(s3Url);
+        if (!imageResponse.ok) {
+          logger.warn(`Failed to download image from S3: ${s3Url}`);
           continue;
         }
 
-        const imageBuffer = fs.readFileSync(fullPath);
-        const mimeType = this.getMimeType(mediaPath);
+        const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
+        const mimeType = this.getMimeTypeFromUrl(s3Url) || "image/jpeg";
+
+        logger.info(`Image downloaded, size: ${imageBuffer.length} bytes`);
 
         // Step 1: Initialize image upload
         const registerResponse = await fetch(
@@ -295,7 +298,7 @@ export class SchedulerController {
           continue;
         }
 
-        const registerData = await registerResponse.json();
+        const registerData: any = await registerResponse.json();
         const uploadUrl =
           registerData.value.uploadMechanism[
             "com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"
@@ -315,9 +318,11 @@ export class SchedulerController {
           logger.error("LinkedIn image upload failed:", uploadResponse.status);
           continue;
         }
+        
+        logger.info(`Successfully uploaded image to LinkedIn: ${assetUrn}`);
         imageUrns.push(assetUrn);
       } catch (error: any) {
-        logger.error(`Error uploading image ${mediaPath}:`, error.message);
+        logger.error(`Error uploading image ${s3Url}:`, error.message);
         continue;
       }
     }
@@ -332,7 +337,6 @@ export class SchedulerController {
     imageUrns: string[] = []
   ): Promise<{ success: boolean; postId?: string; error?: string }> {
     try {
-      const shareMediaCategory = imageUrns.length > 0 ? "IMAGE" : "NONE";
       const shareContent: any = {
         shareCommentary: {
           text: content,
@@ -402,7 +406,7 @@ export class SchedulerController {
         );
       }
 
-      const data = await response.json();
+      const data: any = await response.json();
 
       return {
         success: true,
@@ -420,16 +424,16 @@ export class SchedulerController {
     }
   }
 
-  private getMimeType(filePath: string): string {
-    const ext = path.extname(filePath).toLowerCase();
+  private getMimeTypeFromUrl(url: string): string {
+    const ext = url.split('.').pop()?.toLowerCase().split('?')[0];
     const mimeTypes: { [key: string]: string } = {
-      ".jpg": "image/jpeg",
-      ".jpeg": "image/jpeg",
-      ".png": "image/png",
-      ".gif": "image/gif",
-      ".webp": "image/webp",
+      "jpg": "image/jpeg",
+      "jpeg": "image/jpeg",
+      "png": "image/png",
+      "gif": "image/gif",
+      "webp": "image/webp",
     };
-    return mimeTypes[ext] || "image/jpeg";
+    return mimeTypes[ext || ''] || "image/jpeg";
   }
 
   private async markPostAsPublished(
@@ -550,7 +554,7 @@ export class SchedulerController {
       // Create a scheduled_post record with workspace_id
       const scheduledTime = new Date().toISOString();
       const scheduledPostData = {
-        workspace_id: generatedPost.workspace_id, // Add this line
+        workspace_id: generatedPost.workspace_id,
         post_id: postId,
         social_account_id: socialAccountId,
         scheduled_time: scheduledTime,

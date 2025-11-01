@@ -22,7 +22,7 @@ Successfully refactored the frontend codebase to remove all direct Supabase data
 ### Frontend `.env`
 ```env
 # Frontend Environment Variables (Client-Side)
-VITE_API_BASE_URL=http://localhost:3001/api/v1
+VITE_API_BASE_URL=http://localhost:3002/api/v1
 VITE_APP_NAME=ContentAI Pro
 VITE_APP_VERSION=1.0.0
 ```
@@ -39,7 +39,7 @@ SUPABASE_URL=https://fokkktdaowzevfroevkg.supabase.co
 SUPABASE_ANON_KEY=***
 SUPABASE_SERVICE_ROLE_KEY=***
 
-PORT=3001
+PORT=3002
 NODE_ENV=development
 
 JWT_SECRET=***

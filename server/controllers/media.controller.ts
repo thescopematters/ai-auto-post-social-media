@@ -5,8 +5,7 @@ import { NotFoundError, ValidationError } from "../utils/errors";
 import { successResponse } from "../utils/response";
 import logger from "../config/logger";
 import { v4 as uuidv4 } from "uuid";
-import * as fs from "fs";
-import * as path from "path";
+import AWSS3Service from "../services/awsS3.service";
 
 type MediaStatus = "active" | "inactive" | "deleted";
 
@@ -24,27 +23,32 @@ interface MediaRecord {
   updated_at: string;
 }
 
-// Create upload directory if it doesn't exist
-const UPLOAD_DIR = path.join(process.cwd(), "uploads", "media");
-if (!fs.existsSync(UPLOAD_DIR)) {
-  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
-}
-
 export const uploadPostMedia = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    logger.info("Upload request received", {
+      hasFiles: !!req.files,
+      filesType: Array.isArray(req.files) ? "array" : typeof req.files,
+      filesLength: Array.isArray(req.files) ? req.files.length : 0,
+    });
+
     if (!req.files || (Array.isArray(req.files) && req.files.length === 0)) {
       throw new ValidationError("No media files provided");
     }
 
     const { workspaceId, postId } = req.params;
+    logger.info(
+      `Processing upload for workspace: ${workspaceId}, post: ${postId}`
+    );
 
     const files = (
       Array.isArray(req.files) ? req.files : [req.files]
     ) as Express.Multer.File[];
+
+    logger.info(`Processing ${files.length} file(s)`);
 
     // Verify post exists
     const { data: post, error: postError } = await supabaseAdmin
@@ -68,38 +72,50 @@ export const uploadPostMedia = async (
       file_name: string;
     }> = [];
 
+    const failedUploads: Array<{ filename: string; error: string }> = [];
+
     for (const file of files) {
       try {
+        logger.info(`Processing file: ${file.originalname}`, {
+          mimetype: file.mimetype,
+          size: file.size,
+          hasBuffer: !!file.buffer,
+        });
+
         if (!file.mimetype) {
-          logger.warn(`Invalid file type: ${file.originalname}`);
+          const error = `Invalid file type for: ${file.originalname}`;
+          logger.warn(error);
+          failedUploads.push({ filename: file.originalname, error });
           continue;
         }
 
         const fileType = getFileType(file.mimetype);
         if (!fileType) {
-          logger.warn(`Unsupported file type: ${file.mimetype}`);
+          const error = `Unsupported file type: ${file.mimetype}`;
+          logger.warn(error);
+          failedUploads.push({ filename: file.originalname, error });
           continue;
         }
 
-        // Generate unique filename
-        const fileExtension = path.extname(file.originalname);
-        const uniqueFileName = `${uuidv4()}${fileExtension}`;
-        const filePath = path.join(UPLOAD_DIR, uniqueFileName);
-        const relativePath = `/uploads/media/${uniqueFileName}`;
+        // Upload to S3
+        logger.info(`Uploading file to S3: ${file.originalname}`);
+        const s3Url = await AWSS3Service.uploadFile(
+          {
+            buffer: file.buffer,
+            originalname: file.originalname,
+            mimetype: file.mimetype,
+            size: file.size,
+          },
+          `workspaces/${workspaceId}/posts/${postId}`
+        );
 
-        // Save file locally
-        try {
-          fs.writeFileSync(filePath, file.buffer);
-        } catch (writeError: any) {
-          logger.error(`Failed to save file: ${writeError.message}`);
-          continue;
-        }
+        logger.info(`File uploaded to S3: ${s3Url}`);
 
         const mediaData = {
           id: uuidv4(),
           workspace_id: workspaceId,
           post_id: postId,
-          media_path: relativePath,
+          media_path: s3Url,
           file_name: file.originalname,
           file_size: file.size,
           mime_type: file.mimetype,
@@ -116,15 +132,24 @@ export const uploadPostMedia = async (
           .single<MediaRecord>();
 
         if (mediaError || !mediaRecord) {
+          const errorMsg = mediaError?.message || "Unknown error";
           logger.error(
-            `Failed to create media record: ${mediaError?.message || "Unknown error"}`,
+            `Failed to create media record: ${errorMsg}`,
             mediaError
           );
+
+          // Delete from S3 if database insert fails
           try {
-            fs.unlinkSync(filePath);
+            await AWSS3Service.deleteFile(s3Url);
+            logger.info(`Cleaned up S3 file after DB error: ${s3Url}`);
           } catch (cleanupError) {
-            logger.warn(`Failed to cleanup file: ${cleanupError}`);
+            logger.warn(`Failed to cleanup S3 file: ${cleanupError}`);
           }
+
+          failedUploads.push({
+            filename: file.originalname,
+            error: `Database error: ${errorMsg}`,
+          });
           continue;
         }
 
@@ -136,6 +161,8 @@ export const uploadPostMedia = async (
           status: mediaRecord.status,
           file_name: mediaRecord.file_name,
         });
+
+        logger.info(`✅ Successfully processed: ${file.originalname}`);
       } catch (fileError: unknown) {
         const errorMessage =
           fileError instanceof Error
@@ -145,15 +172,36 @@ export const uploadPostMedia = async (
           `Error processing file ${file.originalname}: ${errorMessage}`,
           fileError
         );
+        failedUploads.push({
+          filename: file.originalname,
+          error: errorMessage,
+        });
       }
     }
 
+    // Log summary
+    logger.info("Upload summary:", {
+      total: files.length,
+      successful: uploadedMedias.length,
+      failed: failedUploads.length,
+      failedFiles: failedUploads,
+    });
+
     if (uploadedMedias.length === 0) {
-      logger.error(`No files were successfully uploaded`);
-      throw new ValidationError("No files were successfully uploaded");
+      logger.error(`No files were successfully uploaded`, {
+        failedUploads,
+      });
+      throw new ValidationError(
+        `No files were successfully uploaded. Errors: ${failedUploads
+          .map((f) => `${f.filename}: ${f.error}`)
+          .join("; ")}`
+      );
     }
 
     const mediaPaths = uploadedMedias.map((media) => media.media_path);
+
+    // Check if any uploaded media is an image
+    const hasImage = uploadedMedias.some((media) => media.type === "img");
 
     const { error: updateError } = await supabaseAdmin
       .from("generated_posts")
@@ -169,7 +217,9 @@ export const uploadPostMedia = async (
         updateError
       );
     } else {
-      logger.info(`Generated post updated with media URLs`);
+      logger.info(
+        `Generated post updated with ${mediaPaths.length} media URLs`
+      );
     }
 
     successResponse(
@@ -177,8 +227,11 @@ export const uploadPostMedia = async (
       {
         uploadedMedia: uploadedMedias,
         totalMedia: uploadedMedias.length,
+        failedUploads: failedUploads.length > 0 ? failedUploads : undefined,
       },
-      "Media uploaded successfully",
+      uploadedMedias.length === files.length
+        ? "All media uploaded successfully to S3"
+        : `${uploadedMedias.length} of ${files.length} files uploaded successfully`,
       200
     );
   } catch (error: unknown) {
@@ -240,18 +293,22 @@ export const deletePostMedia = async (
       throw new NotFoundError("Media not found");
     }
 
-    // Delete local file
+    // Delete from S3
     if (media.media_path) {
       try {
-        const fullPath = path.join(process.cwd(), media.media_path);
-        if (fs.existsSync(fullPath)) {
-          fs.unlinkSync(fullPath);
+        const deleted = await AWSS3Service.deleteFile(media.media_path);
+        if (deleted) {
+          logger.info(`Successfully deleted file from S3: ${media.media_path}`);
+        } else {
+          logger.warn(`Failed to delete file from S3: ${media.media_path}`);
         }
-      } catch (unlinkError) {
-        logger.warn(`Failed to delete local file: ${unlinkError}`);
+      } catch (s3Error) {
+        logger.warn(`S3 deletion error: ${s3Error}`);
+        // Continue even if S3 deletion fails
       }
     }
 
+    // Mark as deleted in database
     const { error: deleteError } = await supabaseAdmin
       .from("post_media")
       .update({
@@ -264,7 +321,7 @@ export const deletePostMedia = async (
       throw new Error(`Failed to delete media record: ${deleteError.message}`);
     }
 
-    successResponse(res, null, "Media deleted successfully", 200);
+    successResponse(res, null, "Media deleted successfully from S3", 200);
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error occurred";

@@ -3,6 +3,7 @@ import { AuthenticationError, AuthorizationError } from "../utils/errors";
 import { verifyAccessToken, TokenPayload } from "../utils/jwt";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
+import multer from "multer";
 
 interface UserProfile {
   id: string;
@@ -25,6 +26,9 @@ export interface AuthRequest extends Request {
     role?: string;
   };
   workspaceId?: string;
+
+  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
+  file?: Express.Multer.File;
 }
 
 export const authenticateOptional = async (
