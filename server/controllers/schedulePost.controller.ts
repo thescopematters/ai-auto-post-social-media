@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
-import { schedulerController } from "./scheduler.controller";
 
 interface ScheduledPostResponse {
   id: string;
@@ -51,14 +50,8 @@ interface ExistingPost {
   status: string;
 }
 
-interface UpdatedPost {
-  id: string;
-  status: string;
-  error_message?: string;
-  external_post_id?: string;
-}
-
 export class SchedulePostController {
+  
   async getScheduledPosts(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;

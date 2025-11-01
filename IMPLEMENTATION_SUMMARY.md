@@ -261,8 +261,8 @@ Demo credentials:
 ```bash
 npm run dev:server
 ```
-Server runs on: http://localhost:3001
-API Base: http://localhost:3001/api/v1
+Server runs on: http://localhost:3002
+API Base: http://localhost:3002/api/v1
 
 **Terminal 2 - Frontend:**
 ```bash
@@ -275,12 +275,12 @@ Frontend runs on: http://localhost:5173
 **Using cURL:**
 ```bash
 # Login
-curl -X POST http://localhost:3001/api/v1/auth/login \
+curl -X POST http://localhost:3002/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"demo@contentai.com","password":"Demo123456!"}'
 
 # Get workspaces (replace TOKEN with the accessToken from login)
-curl -X GET http://localhost:3001/api/v1/workspaces \
+curl -X GET http://localhost:3002/api/v1/workspaces \
   -H "Authorization: Bearer TOKEN"
 ```
 

@@ -51,8 +51,6 @@ type GeneratedPost = {
   workspace_id?: string;
   document_id?: string;
   agent_config_id?: string | null;
-  image_url?: string;
-  has_image?: boolean;
   media_urls?: string[];
 };
 
@@ -316,7 +314,7 @@ export function Generator() {
 
       const publishResponse = await schedulerApi.publishNow({
         postId: selectedPost.id,
-        socialAccountId: selectedAccount
+        socialAccountId: selectedAccount,
       });
 
       if (publishResponse.success) {
@@ -634,12 +632,6 @@ export function Generator() {
                             }
                           </span>
                         )}
-                      {post.has_image && (
-                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold flex items-center gap-1">
-                          <Image className="w-3 h-3" />
-                          Has Image
-                        </span>
-                      )}
                     </div>
                     <div className="flex gap-2">
                       <button
@@ -662,15 +654,6 @@ export function Generator() {
                   <p className="text-gray-800 whitespace-pre-wrap mb-4">
                     {post.content}
                   </p>
-                  {post.image_url && (
-                    <div className="mb-4">
-                      <img
-                        src={post.image_url}
-                        alt="Post attachment"
-                        className="max-w-xs rounded-lg border"
-                      />
-                    </div>
-                  )}
                   <div className="flex items-center justify-between pt-4 border-t border-gray-200">
                     <span className="text-sm text-gray-500">
                       {post.content.length} characters
@@ -956,7 +939,7 @@ export function Generator() {
                   {/* Images Preview */}
                   {modalImagePreviews.length > 0 && (
                     <div
-                      className={`grid gap-1 ${
+                      className={`grid gap-3 ${
                         modalImagePreviews.length === 1
                           ? "grid-cols-1"
                           : "grid-cols-2"
@@ -1037,16 +1020,6 @@ export function Generator() {
                   <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
                     {selectedPost.content}
                   </p>
-
-                  {selectedPost.image_url && (
-                    <div className="mt-4">
-                      <img
-                        src={selectedPost.image_url}
-                        alt="Post attachment"
-                        className="max-w-md rounded-lg border mx-auto"
-                      />
-                    </div>
-                  )}
                 </div>
 
                 <div className="mt-6 grid grid-cols-2 gap-4 text-sm">

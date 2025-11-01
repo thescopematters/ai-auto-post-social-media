@@ -75,9 +75,6 @@ export const generateContent = async (
       media_urls: [],
       predicted_score: Math.random() * 10,
       moderation_status: "pending",
-      has_image: false,
-      image_url: null,
-      image_filename: null,
     }));
 
     // Insert all posts at once
@@ -154,9 +151,6 @@ export const uploadPostImage = async (
     const { data: updatedPost, error: updateError } = await supabaseAdmin
       .from("generated_posts")
       .update({
-        image_url: publicUrl,
-        image_filename: fileName,
-        has_image: true,
         media_urls: [publicUrl],
       })
       .eq("id", postId)
@@ -200,18 +194,6 @@ export const updatePost = async (
     if (hashtags) updateData.hashtags = hashtags;
     if (mediaUrls) updateData.media_urls = mediaUrls;
 
-    if (removeImage === true) {
-      updateData.has_image = false;
-      updateData.image_url = null;
-      updateData.image_filename = null;
-
-      if (updateData.media_urls && Array.isArray(updateData.media_urls)) {
-        updateData.media_urls = updateData.media_urls.filter(
-          (url: string) => !url.includes(updateData.image_url)
-        );
-      }
-    }
-
     const { data, error } = await supabaseAdmin
       .from("generated_posts")
       .update(updateData)
@@ -240,7 +222,6 @@ export const removePostImage = async (
     // Get current post to find image filename
     const { data: post, error: postError } = await supabaseAdmin
       .from("generated_posts")
-      .select("image_filename, image_url")
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .single();
@@ -249,28 +230,10 @@ export const removePostImage = async (
       throw new NotFoundError("Post not found");
     }
 
-    // Delete image from storage if exists
-    if (post.image_filename) {
-      const { error: deleteError } = await supabaseAdmin.storage
-        .from("post-images")
-        .remove([post.image_filename]);
-
-      if (deleteError) {
-        console.warn(
-          "Failed to delete image from storage:",
-          deleteError.message
-        );
-        // Continue with database update even if storage delete fails
-      }
-    }
-
     // Update post to remove image references
     const { data: updatedPost, error: updateError } = await supabaseAdmin
       .from("generated_posts")
       .update({
-        has_image: false,
-        image_url: null,
-        image_filename: null,
         media_urls: [],
       })
       .eq("id", postId)
