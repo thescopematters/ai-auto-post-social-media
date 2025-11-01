@@ -13,6 +13,7 @@ import { Moderation } from "./pages/Moderation";
 import { Schedule } from "./pages/Schedule";
 import { Analytics } from "./pages/Analytics";
 import { Settings } from "./pages/Settings";
+import { Subscription } from "./pages/Subscription";
 import { Toaster } from "sonner";
 
 function App() {
@@ -46,6 +47,7 @@ function App() {
             <Route path="schedule" element={<Schedule />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="subscription" element={<Subscription />} />
             <Route path="*" element={<Navigate to="/dashboard" replace />} />
           </Route>
         </Routes>

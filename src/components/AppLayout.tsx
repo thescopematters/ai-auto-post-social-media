@@ -12,7 +12,8 @@ import {
   Menu,
   X,
   ChevronDown,
-  Building2
+  Building2,
+  Crown
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -35,6 +36,7 @@ export function AppLayout() {
     { icon: CheckCircle, label: 'Moderation', path: '/moderation' },
     { icon: Calendar, label: 'Schedule', path: '/schedule' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+    { icon: Crown, label: 'Subscription', path: '/subscription' },
     { icon: Settings, label: 'Settings', path: '/settings' },
   ];
 

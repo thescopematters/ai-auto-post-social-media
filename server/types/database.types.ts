@@ -439,6 +439,42 @@ export interface Database {
           updated_at?: string
         }
       }
+      /** NEW TABLE ADDED HERE */
+     payment_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          merchant_transaction_id: string
+          amount: number
+          status: string
+          payment_method: string | null
+          phonepe_reference_id: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string // DEFAULT gen_random_uuid()
+          user_id: string
+          merchant_transaction_id: string
+          amount: number
+          status?: string // DEFAULT 'PENDING'
+          payment_method?: string | null
+          phonepe_reference_id?: string | null
+          created_at?: string // DEFAULT now()
+          updated_at?: string // DEFAULT now()
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          merchant_transaction_id?: string
+          amount?: number
+          status?: string
+          payment_method?: string | null
+          phonepe_reference_id?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
