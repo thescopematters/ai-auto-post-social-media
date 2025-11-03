@@ -4,6 +4,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
 
 interface ApiResponse<T = any> {
+  redirectUrl: any;
   success: boolean;
   data?: T;
   message?: string;
