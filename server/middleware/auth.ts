@@ -3,6 +3,7 @@ import { AuthenticationError, AuthorizationError } from "../utils/errors";
 import { verifyAccessToken, TokenPayload } from "../utils/jwt";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
+import multer from "multer";
 
 interface UserProfile {
   id: string;
@@ -25,6 +26,9 @@ export interface AuthRequest extends Request {
     role?: string;
   };
   workspaceId?: string;
+
+  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
+  file?: Express.Multer.File;
 }
 
 export const authenticateOptional = async (
@@ -36,7 +40,6 @@ export const authenticateOptional = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      logger.info("No authentication token provided - continuing as anonymous");
       req.user = undefined;
       return next();
     }
@@ -45,7 +48,6 @@ export const authenticateOptional = async (
 
     try {
       const decoded = verifyAccessToken(token);
-      logger.info("Token decoded successfully:", { userId: decoded.userId });
 
       const { data: user, error: userError } = await supabaseAdmin
         .from("profiles")
@@ -66,10 +68,6 @@ export const authenticateOptional = async (
           id: userProfile.id,
           role: userProfile.role,
         };
-        logger.info("User authenticated:", {
-          userId: userProfile.id,
-          email: userProfile.email,
-        });
       }
     } catch (jwtError) {
       logger.warn("JWT verification failed:", jwtError);
@@ -99,7 +97,6 @@ export const authenticate = async (
 
     try {
       const decoded = verifyAccessToken(token);
-      logger.info("Token decoded:", { userId: decoded.userId });
 
       const { data: user, error: userError } = await supabaseAdmin
         .from("profiles")
@@ -118,7 +115,6 @@ export const authenticate = async (
           id: userProfile.id,
           role: userProfile.role,
         };
-        logger.info("User authenticated:", { userId: userProfile.id });
         return next();
       }
     } catch (jwtError) {

@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
-import { schedulerController } from "./scheduler.controller";
 
 interface ScheduledPostResponse {
   id: string;
@@ -16,30 +15,76 @@ interface ScheduledPostResponse {
   social_account?: string;
 }
 
+interface ScheduledPost {
+  id: string;
+  post_id: string;
+  social_account_id: string;
+  scheduled_time: string;
+  status: string;
+  retry_count: number;
+  published_at?: string;
+  error_message?: string;
+  external_post_id?: string;
+  generated_posts: Array<{
+    id: string;
+    content: string;
+    platform: string;
+    variant_number: number;
+    media_urls?: string[];
+  }>;
+  social_accounts: Array<{
+    id: string;
+    platform: string;
+    account_name: string;
+    is_active: boolean;
+    access_token: string;
+    account_id: string;
+    token_expires_at: string;
+  }>;
+}
+
+interface ExistingPost {
+  id: string;
+  post_id: string;
+  workspace_id: string;
+  status: string;
+}
+
 export class SchedulePostController {
+  
   async getScheduledPosts(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;
-
-      logger.info("Fetching scheduled posts for workspace:", { workspaceId });
 
       const { data: scheduledPosts, error } = await supabaseAdmin
         .from("scheduled_posts")
         .select(
           `
-          *,
-          generated_posts(
-            content,
-            platform,
-            variant_number
-          ),
-          social_accounts(
-            platform,
-            account_name
-          )
-        `
+        id,
+        post_id,
+        social_account_id,
+        scheduled_time,
+        status,
+        published_at,
+        error_message,
+        external_post_id,
+        retry_count,
+        generated_posts!inner(
+          id,
+          content,
+          platform,
+          variant_number,
+          media_urls
+        ),
+        social_accounts!inner(
+          platform,
+          account_name,
+          is_active
+        )
+      `
         )
         .eq("workspace_id", workspaceId)
+        .eq("generated_posts.workspace_id", workspaceId)
         .order("scheduled_time", { ascending: true });
 
       if (error) {
@@ -51,25 +96,41 @@ export class SchedulePostController {
         return;
       }
 
-      logger.info("Found scheduled posts:", {
-        count: scheduledPosts?.length || 0,
-      });
+      const formattedPosts: ScheduledPostResponse[] = (scheduledPosts || [])
+        .map((post: any) => {
+          // Multiple ways to get content
+          const content =
+            post.generated_posts?.content ||
+            post.generated_posts?.[0]?.content ||
+            "Content not available";
 
-      // Format the response
-      const formattedPosts: ScheduledPostResponse[] = (
-        scheduledPosts || []
-      ).map((post: any) => ({
-        id: post.id,
-        content: post.generated_posts?.content || "No content available",
-        scheduled_time: post.scheduled_time,
-        status: post.status || "scheduled",
-        published_at: post.published_at,
-        error_message: post.error_message,
-        external_post_id: post.external_post_id,
-        platform: post.generated_posts?.platform || "linkedin",
-        variant_number: post.generated_posts?.variant_number,
-        social_account: post.social_accounts?.account_name,
-      }));
+          const platform =
+            post.generated_posts?.platform ||
+            post.generated_posts?.[0]?.platform ||
+            "linkedin";
+
+          const variantNumber =
+            post.generated_posts?.variant_number ||
+            post.generated_posts?.[0]?.variant_number;
+
+          const socialAccount =
+            post.social_accounts?.account_name ||
+            post.social_accounts?.[0]?.account_name;
+
+          return {
+            id: post.id,
+            content: content,
+            scheduled_time: post.scheduled_time,
+            status: post.status || "scheduled",
+            published_at: post.published_at,
+            error_message: post.error_message,
+            external_post_id: post.external_post_id,
+            platform: platform,
+            variant_number: variantNumber,
+            social_account: socialAccount,
+          };
+        })
+        .filter((post) => post.content !== "Content not available");
 
       res.json({
         success: true,
@@ -83,20 +144,12 @@ export class SchedulePostController {
       });
     }
   }
-
+  
   async schedulePost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;
       const { postId, socialAccountId, scheduledTime } = req.body;
 
-      logger.info("Scheduling post:", {
-        workspaceId,
-        postId,
-        socialAccountId,
-        scheduledTime,
-      });
-
-      // Validate required fields
       if (!postId || !socialAccountId || !scheduledTime) {
         res.status(400).json({
           success: false,
@@ -106,10 +159,8 @@ export class SchedulePostController {
         return;
       }
 
-      // Validate scheduled time is in the future
       const scheduledDate = new Date(scheduledTime);
       const now = new Date();
-
       const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
 
       if (scheduledDate <= now) {
@@ -128,7 +179,6 @@ export class SchedulePostController {
         return;
       }
 
-      // Verify the post belongs to the workspace
       const { data: post, error: postError } = await supabaseAdmin
         .from("generated_posts")
         .select("id, workspace_id, content, platform")
@@ -145,25 +195,22 @@ export class SchedulePostController {
         return;
       }
 
-      // Verify the social account belongs to the workspace and is active
-      type SocialAccount = {
+      interface SocialAccount {
         id: string;
         workspace_id: string;
         platform: string;
         account_name: string;
         is_active: boolean;
-      };
+      }
 
       const { data: socialAccount, error: accountError } = await supabaseAdmin
         .from("social_accounts")
         .select("id, workspace_id, platform, account_name, is_active")
         .eq("id", socialAccountId)
         .eq("workspace_id", workspaceId)
-        .single();
+        .single<SocialAccount>();
 
-      const typedSocialAccount = socialAccount as SocialAccount | null;
-
-      if (accountError || !typedSocialAccount) {
+      if (accountError || !socialAccount) {
         logger.error("Social account verification failed:", accountError);
         res.status(404).json({
           success: false,
@@ -172,28 +219,13 @@ export class SchedulePostController {
         return;
       }
 
-      if (!typedSocialAccount.is_active) {
+      if (!socialAccount.is_active) {
         res.status(400).json({
           success: false,
           error: "Social account is not active",
         });
         return;
       }
-
-      // Create scheduled post
-      type ScheduledPostDB = {
-        id: string;
-        generated_posts: {
-          content: string;
-          platform: string;
-          variant_number: number;
-        } | null;
-        social_accounts: {
-          account_name: string;
-        } | null;
-        scheduled_time: string;
-        status: string;
-      };
 
       const { data: scheduledPost, error: scheduleError } = await supabaseAdmin
         .from("scheduled_posts")
@@ -203,7 +235,7 @@ export class SchedulePostController {
           social_account_id: socialAccountId,
           scheduled_time: scheduledTime,
           status: "scheduled",
-        } as any)
+        })
         .select(
           `
           *,
@@ -217,32 +249,28 @@ export class SchedulePostController {
           )
         `
         )
-        .single<ScheduledPostDB>();
+        .single<ScheduledPost>();
 
-      if (scheduleError) {
+      if (scheduleError || !scheduledPost) {
         logger.error("Schedule creation error:", scheduleError);
         res.status(500).json({
           success: false,
-          error: `Failed to schedule post: ${scheduleError.message}`,
+          error: `Failed to schedule post: ${
+            scheduleError?.message || "Unknown error"
+          }`,
         });
         return;
       }
 
-      logger.info("Post scheduled successfully:", {
-        scheduledPostId: scheduledPost.id,
-        workspaceId,
-      });
-
-      // Format the response
       const responseData: ScheduledPostResponse = {
         id: scheduledPost.id,
         content:
-          scheduledPost.generated_posts?.content || "No content available",
+          scheduledPost.generated_posts?.[0]?.content || "No content available",
         scheduled_time: scheduledPost.scheduled_time,
         status: scheduledPost.status,
-        platform: scheduledPost.generated_posts?.platform,
-        variant_number: scheduledPost.generated_posts?.variant_number,
-        social_account: scheduledPost.social_accounts?.account_name,
+        platform: scheduledPost.generated_posts?.[0]?.platform,
+        variant_number: scheduledPost.generated_posts?.[0]?.variant_number,
+        social_account: scheduledPost.social_accounts?.[0]?.account_name,
       };
 
       res.status(201).json({
@@ -259,13 +287,107 @@ export class SchedulePostController {
     }
   }
 
+  async updateScheduledPost(req: Request, res: Response): Promise<void> {
+    try {
+      const { workspaceId, postId } = req.params;
+      const { content } = req.body;
+
+      if (
+        !content ||
+        typeof content !== "string" ||
+        content.trim().length === 0
+      ) {
+        logger.warn("Invalid content provided:", {
+          contentType: typeof content,
+          contentLength: content?.length,
+        });
+        res.status(400).json({
+          success: false,
+          error: "Content is required and must be a non-empty string",
+        });
+        return;
+      }
+
+      const { data: existingPost, error: fetchError } = await supabaseAdmin
+        .from("scheduled_posts")
+        .select("id, post_id, workspace_id, status")
+        .eq("id", postId)
+        .eq("workspace_id", workspaceId)
+        .single<ExistingPost>();
+
+      if (fetchError || !existingPost) {
+        logger.error("Database error fetching scheduled post:", {
+          error: fetchError,
+          postId,
+          workspaceId,
+        });
+        res.status(404).json({
+          success: false,
+          error: "Scheduled post not found or access denied",
+        });
+        return;
+      }
+
+      if (existingPost.status !== "scheduled") {
+        logger.warn("Attempt to edit non-scheduled post:", {
+          postId,
+          currentStatus: existingPost.status,
+        });
+        res.status(400).json({
+          success: false,
+          error: `Cannot edit ${existingPost.status} posts. Only scheduled posts can be edited.`,
+        });
+        return;
+      }
+
+      const { error: updateError } = await supabaseAdmin
+        .from("generated_posts")
+        .update({
+          content: content.trim(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingPost.post_id);
+
+      if (updateError) {
+        logger.error("Error updating generated post content:", {
+          error: updateError,
+          generatedPostId: existingPost.post_id,
+        });
+        res.status(500).json({
+          success: false,
+          error: "Failed to update post content in database",
+          details: updateError.message,
+        });
+        return;
+      }
+
+      res.json({
+        success: true,
+        message: "Post updated successfully",
+        data: {
+          id: postId,
+          content: content.trim(),
+          updated_at: new Date().toISOString(),
+        },
+      });
+    } catch (error: any) {
+      logger.error("Unexpected error in updateScheduledPost:", {
+        error: error.message,
+        stack: error.stack,
+        postId: req.params.postId,
+        workspaceId: req.params.workspaceId,
+      });
+      res.status(500).json({
+        success: false,
+        error: "Internal server error while updating post",
+      });
+    }
+  }
+
   async deleteScheduledPost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId, postId } = req.params;
 
-      logger.info("Deleting scheduled post:", { workspaceId, postId });
-
-      // Verify the post belongs to the workspace before deleting
       const { data: existingPost, error: fetchError } = await supabaseAdmin
         .from("scheduled_posts")
         .select("id")
@@ -281,22 +403,20 @@ export class SchedulePostController {
         return;
       }
 
-      const { error } = await supabaseAdmin
+      const { error: deleteError } = await supabaseAdmin
         .from("scheduled_posts")
         .delete()
         .eq("id", postId)
         .eq("workspace_id", workspaceId);
 
-      if (error) {
-        logger.error("Delete error:", error);
+      if (deleteError) {
+        logger.error("Delete error:", deleteError);
         res.status(500).json({
           success: false,
           error: "Failed to delete scheduled post",
         });
         return;
       }
-
-      logger.info("Scheduled post deleted successfully:", { postId });
 
       res.json({
         success: true,
@@ -310,106 +430,8 @@ export class SchedulePostController {
       });
     }
   }
-
-  async publishNow(req: Request, res: Response): Promise<void> {
-    try {
-      const { postId } = req.body;
-
-      if (!postId) {
-        res.status(400).json({
-          success: false,
-          error: "postId is required",
-        });
-        return;
-      }
-
-      logger.info("Publishing post immediately:", { postId });
-
-      // Get the scheduled post with related data
-      const { data: scheduledPost, error: fetchError } = await supabaseAdmin
-        .from("scheduled_posts")
-        .select(
-          `
-        *,
-        generated_posts(
-          content,
-          platform
-        ),
-        social_accounts(
-          access_token,
-          account_id,
-          platform,
-          account_name
-        )
-      `
-        )
-        .eq("id", postId)
-        .single();
-
-      if (fetchError || !scheduledPost) {
-        logger.error("Post not found:", fetchError);
-        res.status(404).json({
-          success: false,
-          error: "Scheduled post not found",
-        });
-        return;
-      }
-
-      // Use the existing schedulerController instance
-      await schedulerController.publishToLinkedIn(scheduledPost);
-
-      // Check the status after publishing
-      type UpdatedPost = {
-        status: string;
-        error_message?: string;
-        external_post_id?: string;
-      };
-
-      const { data: updatedPost } = await supabaseAdmin
-        .from("scheduled_posts")
-        .select("status, error_message, external_post_id")
-        .eq("id", postId)
-        .single<UpdatedPost>();
-
-      if (updatedPost?.status === "published") {
-        logger.info("Post published successfully:", {
-          postId,
-          externalPostId: updatedPost.external_post_id,
-        });
-
-        res.json({
-          success: true,
-          message: "Post published successfully to LinkedIn",
-          data: {
-            id: postId,
-            published_at: new Date().toISOString(),
-            external_post_id: updatedPost.external_post_id,
-          },
-        });
-      } else {
-        logger.error("Post publishing failed:", {
-          postId,
-          error: updatedPost?.error_message,
-        });
-
-        res.status(500).json({
-          success: false,
-          error: `Failed to publish post: ${
-            updatedPost?.error_message || "Unknown error"
-          }`,
-        });
-      }
-    } catch (error: any) {
-      logger.error("Error in publishNow:", error);
-      res.status(500).json({
-        success: false,
-        error: error.message,
-      });
-    }
-  }
 }
 
-// Export singleton instance
 export const schedulePostController = new SchedulePostController();
 
 

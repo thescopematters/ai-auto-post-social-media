@@ -3,7 +3,12 @@ import config from "../config/environment";
 
 class GeminiService {
   private genAI: GoogleGenerativeAI;
-  private availableModels = ["gemini-1.0-pro", "gemini-1.5-pro", "gemini-pro", "gemini-2.0-flash-exp"];
+  private availableModels = [
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
+    "gemini-1.5-pro",
+  ];
   private currentModelIndex = 0;
 
   constructor() {
@@ -36,26 +41,28 @@ class GeminiService {
     documentContent: string,
     platform: "linkedin" | "twitter",
     tone: string,
-    variantCount: number = 3
+    variantCount: number = 3,
+    framework?: string
   ): Promise<string[]> {
     try {
       const prompt = this.buildCleanPrompt(
         documentContent,
         platform,
         tone,
-        variantCount
+        variantCount,
+        framework
       );
       const model = this.getCurrentModel();
 
+      console.log(`🚀 Generating ${variantCount} posts with framework: ${framework || 'auto'}`);
       const result = await model.generateContent(prompt);
       const response = await result.response;
       const text = response.text();
 
       const posts = this.parseResponse(text, variantCount);
-
       return posts;
     } catch (error: any) {
-      console.error("❌ Gemini API error:", error.message);
+      console.error(`❌ Gemini API error (Model: ${this.availableModels[this.currentModelIndex]}):`, error.message);
 
       if (this.currentModelIndex < this.availableModels.length - 1) {
         this.currentModelIndex++;
@@ -63,10 +70,12 @@ class GeminiService {
           documentContent,
           platform,
           tone,
-          variantCount
+          variantCount,
+          framework
         );
       }
 
+      console.error("❌ All models failed. Using fallback content.");
       throw new Error(`All Gemini models failed: ${error.message}`);
     }
   }
@@ -75,9 +84,43 @@ class GeminiService {
     documentContent: string,
     platform: string,
     tone: string,
-    variantCount: number
+    variantCount: number,
+    framework?: string
   ): string {
     const truncatedContent = documentContent.substring(0, 2000);
+
+    const frameworkPrompts = {
+      hvcta: `HOOK: Start with an attention-grabbing statement
+VALUE: Provide valuable insights from the document  
+CALL TO ACTION: Encourage comments/shares`,
+      
+      pas: `PROBLEM: Identify the main problem from the document
+AGITATE: Make the problem feel urgent and relatable
+SOLUTION: Present the solution from the document`,
+      
+      sla: `STORY: Share a brief personal/professional story from the document
+LESSON: Extract the key lesson learned  
+APPLICATION: Show how to apply this lesson`,
+      
+      mrs: `MISTAKE: Share a mistake or challenge from the document
+REALIZATION: What was learned or realized
+SHIFT: How things changed or improved`,
+      
+      cms: `Tell a short chronological story using time markers
+Structure: Beginning → Middle → End
+Keep it concise and engaging`,
+      
+      htof: `HOT TAKE: Present a bold opinion or perspective
+EXPLANATION: Explain why this perspective matters  
+DISCUSSION: Invite others to share their thoughts`,
+      
+      auto: `Use the most appropriate framework for the content
+Focus on engagement and value`
+    };
+
+    const frameworkInstruction = framework && frameworkPrompts[framework as keyof typeof frameworkPrompts] 
+      ? `\nFRAMEWORK: ${framework.toUpperCase()}\nSTRUCTURE:\n${frameworkPrompts[framework as keyof typeof frameworkPrompts]}`
+      : '\nFRAMEWORK: Auto (AI will choose the best structure)';
 
     return `
 Create ${variantCount} social media posts for ${platform} based on the content below.
@@ -87,7 +130,7 @@ ${truncatedContent}
 
 PLATFORM: ${platform}
 TONE: ${tone}
-VARIATIONS: ${variantCount}
+VARIATIONS: ${variantCount}${frameworkInstruction}
 
 IMPORTANT FORMATTING RULES:
 - DO NOT number the posts (no "POST 1", "2", "3")
@@ -112,9 +155,7 @@ Now generate ${variantCount} ${platform} posts:`;
       .replace(/^Variation\s*\d+.*$/gim, '')
       .trim();
 
-    // Try multiple delimiters
     const delimiters = ["===POST===", "---POST---", "POST:", "Variation"];
-
     let posts: string[] = [];
 
     for (const delimiter of delimiters) {
@@ -136,7 +177,6 @@ Now generate ${variantCount} ${platform} posts:`;
       }
     }
 
-    // If no posts found with delimiters, split by double newlines
     if (posts.length === 0) {
       posts = cleanText
         .split('\n\n')
@@ -148,7 +188,6 @@ Now generate ${variantCount} ${platform} posts:`;
         .slice(0, expectedCount);
     }
 
-    // Final cleanup - remove any remaining numbering
     posts = posts.map(post => {
       return post
         .replace(/^\d+[\.\)]\s*/, '') 
@@ -156,7 +195,6 @@ Now generate ${variantCount} ${platform} posts:`;
         .trim();
     });
 
-    // If still no posts, create from the clean text
     if (posts.length === 0) {
       posts = [cleanText.substring(0, 500)];
     }
@@ -168,7 +206,8 @@ Now generate ${variantCount} ${platform} posts:`;
     platform: "linkedin" | "twitter",
     tone: string,
     variantCount: number = 3,
-    maxRetries: number = 2
+    maxRetries: number = 2,
+    framework?: string 
   ): Promise<string[]> {
     let lastError: Error | null = null;
 
@@ -178,7 +217,8 @@ Now generate ${variantCount} ${platform} posts:`;
           documentContent,
           platform,
           tone,
-          variantCount
+          variantCount,
+          framework
         );
 
         if (posts && posts.length > 0) {
@@ -199,12 +239,13 @@ Now generate ${variantCount} ${platform} posts:`;
 
         if (attempt < maxRetries) {
           const delay = 1000 * (attempt + 1);
+          console.log(`⏳ Waiting ${delay}ms before retry...`);
           await new Promise((resolve) => setTimeout(resolve, delay));
         }
       }
     }
 
-    // If all retries failed, provide fallback content
+    console.warn("⚠️ All retry attempts failed, returning fallback content");
     return this.getFallbackContent(platform, tone, variantCount);
   }
 
@@ -249,7 +290,9 @@ Now generate ${variantCount} ${platform} posts:`;
 
   async testConnection(): Promise<boolean> {
     try {
-      const model = this.genAI.getGenerativeModel({ model: "gemini-pro" });
+      const model = this.genAI.getGenerativeModel({ 
+        model: "gemini-2.0-flash" 
+      });
       const result = await model.generateContent('Say "OK" if working.');
       const response = await result.response;
       return true;

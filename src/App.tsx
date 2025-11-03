@@ -9,7 +9,6 @@ import { Onboarding } from "./pages/Onboarding";
 import { Dashboard } from "./pages/Dashboard";
 import { Documents } from "./pages/Documents";
 import { Generator } from "./pages/Generator";
-import { Moderation } from "./pages/Moderation";
 import { Schedule } from "./pages/Schedule";
 import { Analytics } from "./pages/Analytics";
 import { Settings } from "./pages/Settings";
@@ -43,7 +42,6 @@ function App() {
             <Route path="dashboard" element={<Dashboard />} />
             <Route path="documents" element={<Documents />} />
             <Route path="generator" element={<Generator />} />
-            <Route path="moderation" element={<Moderation />} />
             <Route path="schedule" element={<Schedule />} />
             <Route path="analytics" element={<Analytics />} />
             <Route path="settings" element={<Settings />} />

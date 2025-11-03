@@ -7,9 +7,6 @@ import {
   Sparkles,
   Calendar,
   TrendingUp,
-  Clock,
-  CheckCircle,
-  AlertCircle,
   ArrowRight,
   Linkedin,
   Twitter,
@@ -47,7 +44,7 @@ export function Dashboard() {
 
     try {
       const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
       const token = localStorage.getItem("accessToken");
 
       if (!token) {
@@ -173,7 +170,7 @@ export function Dashboard() {
           onConnect={() => navigate("/settings?tab=connections")}
         />
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-8">
           <StatCard
             icon={<FileText className="w-6 h-6" />}
             label="Total Documents"
@@ -194,13 +191,6 @@ export function Dashboard() {
             value={stats.scheduledPosts}
             color="bg-green-500"
             link="/schedule"
-          />
-          <StatCard
-            icon={<Clock className="w-6 h-6" />}
-            label="Pending Review"
-            value={stats.pendingModeration}
-            color="bg-orange-500"
-            link="/moderation"
           />
         </div>
 
@@ -223,12 +213,6 @@ export function Dashboard() {
                 label="Generate Content"
                 description="Create new posts with AI"
                 to="/generator"
-              />
-              <QuickActionButton
-                icon={<CheckCircle className="w-5 h-5" />}
-                label="Review Posts"
-                description="Moderate pending content"
-                to="/moderation"
               />
             </div>
           </div>
@@ -302,28 +286,6 @@ export function Dashboard() {
             )}
           </div>
         </div>
-
-        {stats.pendingModeration > 0 && (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 flex items-start gap-4">
-            <AlertCircle className="w-6 h-6 text-yellow-600 flex-shrink-0" />
-            <div className="flex-1">
-              <h3 className="font-semibold text-yellow-900 mb-1">
-                {stats.pendingModeration}{" "}
-                {stats.pendingModeration === 1 ? "post" : "posts"} awaiting review
-              </h3>
-              <p className="text-yellow-800 mb-4">
-                Review and approve your generated content before scheduling.
-              </p>
-              <Link
-                to="/moderation"
-                className="inline-flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition"
-              >
-                Review now
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Link>
-            </div>
-          </div>
-        )}
       </div>
     </>
   );
