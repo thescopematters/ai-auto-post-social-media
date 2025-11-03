@@ -253,8 +253,6 @@ export class SchedulerController {
 
     for (const s3Url of s3Urls) {
       try {
-        logger.info(`Downloading image from S3: ${s3Url}`);
-        
         // Download image from S3
         const imageResponse = await fetch(s3Url);
         if (!imageResponse.ok) {
@@ -264,8 +262,6 @@ export class SchedulerController {
 
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
         const mimeType = this.getMimeTypeFromUrl(s3Url) || "image/jpeg";
-
-        logger.info(`Image downloaded, size: ${imageBuffer.length} bytes`);
 
         // Step 1: Initialize image upload
         const registerResponse = await fetch(
@@ -319,7 +315,6 @@ export class SchedulerController {
           continue;
         }
         
-        logger.info(`Successfully uploaded image to LinkedIn: ${assetUrn}`);
         imageUrns.push(assetUrn);
       } catch (error: any) {
         logger.error(`Error uploading image ${s3Url}:`, error.message);

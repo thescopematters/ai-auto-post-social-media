@@ -29,26 +29,15 @@ export const uploadPostMedia = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    logger.info("Upload request received", {
-      hasFiles: !!req.files,
-      filesType: Array.isArray(req.files) ? "array" : typeof req.files,
-      filesLength: Array.isArray(req.files) ? req.files.length : 0,
-    });
-
     if (!req.files || (Array.isArray(req.files) && req.files.length === 0)) {
       throw new ValidationError("No media files provided");
     }
 
     const { workspaceId, postId } = req.params;
-    logger.info(
-      `Processing upload for workspace: ${workspaceId}, post: ${postId}`
-    );
 
     const files = (
       Array.isArray(req.files) ? req.files : [req.files]
     ) as Express.Multer.File[];
-
-    logger.info(`Processing ${files.length} file(s)`);
 
     // Verify post exists
     const { data: post, error: postError } = await supabaseAdmin
@@ -76,12 +65,6 @@ export const uploadPostMedia = async (
 
     for (const file of files) {
       try {
-        logger.info(`Processing file: ${file.originalname}`, {
-          mimetype: file.mimetype,
-          size: file.size,
-          hasBuffer: !!file.buffer,
-        });
-
         if (!file.mimetype) {
           const error = `Invalid file type for: ${file.originalname}`;
           logger.warn(error);
@@ -97,8 +80,6 @@ export const uploadPostMedia = async (
           continue;
         }
 
-        // Upload to S3
-        logger.info(`Uploading file to S3: ${file.originalname}`);
         const s3Url = await AWSS3Service.uploadFile(
           {
             buffer: file.buffer,
@@ -108,8 +89,6 @@ export const uploadPostMedia = async (
           },
           `workspaces/${workspaceId}/posts/${postId}`
         );
-
-        logger.info(`File uploaded to S3: ${s3Url}`);
 
         const mediaData = {
           id: uuidv4(),
@@ -141,7 +120,6 @@ export const uploadPostMedia = async (
           // Delete from S3 if database insert fails
           try {
             await AWSS3Service.deleteFile(s3Url);
-            logger.info(`Cleaned up S3 file after DB error: ${s3Url}`);
           } catch (cleanupError) {
             logger.warn(`Failed to cleanup S3 file: ${cleanupError}`);
           }
@@ -161,8 +139,6 @@ export const uploadPostMedia = async (
           status: mediaRecord.status,
           file_name: mediaRecord.file_name,
         });
-
-        logger.info(`✅ Successfully processed: ${file.originalname}`);
       } catch (fileError: unknown) {
         const errorMessage =
           fileError instanceof Error
@@ -178,14 +154,6 @@ export const uploadPostMedia = async (
         });
       }
     }
-
-    // Log summary
-    logger.info("Upload summary:", {
-      total: files.length,
-      successful: uploadedMedias.length,
-      failed: failedUploads.length,
-      failedFiles: failedUploads,
-    });
 
     if (uploadedMedias.length === 0) {
       logger.error(`No files were successfully uploaded`, {

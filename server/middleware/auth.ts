@@ -20,14 +20,23 @@ interface Workspace {
   owner_id: string;
 }
 
+// Extended interface to support both JWT and Supabase session users
 export interface AuthRequest extends Request {
-  user?: TokenPayload & {
-    id: string;
-    role?: string;
-  };
+  user?:
+    | (TokenPayload & {
+        id: string;
+        role?: string;
+      })
+    | {
+        id: string;
+        email: string;
+        role?: string;
+      };
   workspaceId?: string;
 
-  files?: Express.Multer.File[] | { [fieldname: string]: Express.Multer.File[] };
+  files?:
+    | Express.Multer.File[]
+    | { [fieldname: string]: Express.Multer.File[] };
   file?: Express.Multer.File;
 }
 
@@ -90,7 +99,44 @@ export const authenticate = async (
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      throw new AuthenticationError("No token provided");
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabaseAdmin.auth.getSession();
+
+        if (error) {
+          logger.warn("Supabase session check failed:", error);
+          throw new AuthenticationError("No valid session found");
+        }
+
+        if (session && session.user) {
+          const { data: profile } = await supabaseAdmin
+            .from("profiles")
+            .select("id, email, role")
+            .eq("id", session.user.id)
+            .single();
+
+          if (profile) {
+            const userProfile = profile as UserProfile;
+            req.user = {
+              id: userProfile.id,
+              email: userProfile.email,
+              role: userProfile.role,
+            };
+            return next();
+          } else {
+            logger.warn("User profile not found for Supabase session user");
+            throw new AuthenticationError("User profile not found");
+          }
+        } else {
+          logger.warn("No Supabase session found");
+          throw new AuthenticationError("No authentication provided");
+        }
+      } catch (sessionError) {
+        logger.warn("Supabase session authentication failed:", sessionError);
+        throw new AuthenticationError("No valid authentication found");
+      }
     }
 
     const token = authHeader.substring(7);
@@ -244,4 +290,26 @@ export const requireRole = (allowedRoles: string[]) => {
       next(error);
     }
   };
+};
+
+export const isTokenPayloadUser = (
+  user: any
+): user is TokenPayload & { id: string; role?: string } => {
+  return user && "userId" in user;
+};
+
+export const isSupabaseSessionUser = (
+  user: any
+): user is { id: string; email: string; role?: string } => {
+  return user && "id" in user && "email" in user && !("userId" in user);
+};
+
+export const getUserId = (user: AuthRequest["user"]): string => {
+  if (!user) throw new AuthenticationError("User not authenticated");
+  return isTokenPayloadUser(user) ? user.userId : user.id;
+};
+
+export const getUserEmail = (user: AuthRequest["user"]): string => {
+  if (!user) throw new AuthenticationError("User not authenticated");
+  return isTokenPayloadUser(user) ? user.email : user.email;
 };

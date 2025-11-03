@@ -60,8 +60,6 @@ class AWSS3Service {
       const uploadResult = await this.s3Client.send(command);
 
       const url = `https://${this.bucket}.s3.${this.region}.amazonaws.com/${fileName}`;
-
-      logger.info(`✅ File uploaded successfully: ${url}`);
       return url;
     } catch (error: unknown) {
       const err = error as S3Error;
@@ -96,8 +94,6 @@ class AWSS3Service {
       });
 
       await this.s3Client.send(command);
-      logger.info(`✅ File deleted successfully: ${key}`);
-      
       return true;
     } catch (error: unknown) {
       const err = error as S3Error;
@@ -152,8 +148,6 @@ class AWSS3Service {
         `Invalid file type: ${file.mimetype}. Allowed types: images, PDFs, and documents`
       );
     }
-
-    logger.info(`✅ File validation passed: ${file.originalname} (${file.mimetype})`);
   }
 
   private extractKeyFromUrl(fileUrl: string): string | null {
