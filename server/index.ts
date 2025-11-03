@@ -17,12 +17,22 @@ import schedulerRoutes from "./routes/scheduler.routes";
 import { schedulerController } from "./controllers/scheduler.controller";
 import schedulePostRoutes from "./routes/schedulePost.routes";
 import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.routes";
-import mediaRoutes from "./routes/media.routes"; 
+import mediaRoutes from "./routes/media.routes";
+import paymentRoutes from "./routes/payment.routes";
+import bodyParser from "body-parser";
 
 const app: Application = express();
+app.set("trust proxy", 1);
 
+// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
+// (add your webhook logic here if needed)
+
+// Parse URL-encoded & JSON
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(bodyParser.json());
+
+// 🧱 SECURITY & UTILITY MIDDLEWARE
 app.use(helmet());
-
 app.use(
   cors({
     origin: config.cors.origin,
@@ -38,9 +48,10 @@ app.use(
   })
 );
 
+// ✅ Regular parsers for all other routes
 app.use(express.json({ limit: "10mb" }));
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 
+// 🧾 LOGGING
 if (config.nodeEnv === "development") {
   app.use(morgan("dev"));
 } else {
@@ -53,6 +64,7 @@ if (config.nodeEnv === "development") {
   );
 }
 
+// 💚 HEALTH CHECK
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -62,8 +74,11 @@ app.get("/health", (req, res) => {
   });
 });
 
-app.use(config.api.prefix, apiLimiter);
+// 📁 STATIC FILES (from feature branch)
+app.use("/uploads", express.static("uploads"));
 
+// 🧩 API ROUTES
+app.use(config.api.prefix, apiLimiter);
 app.use(`${config.api.prefix}/auth`, authRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceRoutes);
 app.use(`${config.api.prefix}/workspaces`, documentRoutes);
@@ -72,20 +87,23 @@ app.use(`${config.api.prefix}/workspaces`, dashboardRoutes);
 app.use(`${config.api.prefix}/workspaces`, mediaRoutes);
 app.use(`${config.api.prefix}/auth`, socialAuthRoutes);
 app.use(`${config.api.prefix}/scheduler`, schedulerRoutes);
+app.use(`${config.api.prefix}/payment`, paymentRoutes);
 app.use(config.api.prefix, schedulePostRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceSocialAccountsRoutes);
 
-app.use('/uploads', express.static('uploads'));
-
+// ❌ ERROR HANDLERS
 app.use(notFoundHandler);
 app.use(errorHandler);
+
+// 🕒 SCHEDULER
 schedulerController.startScheduler();
 
+// 🚀 SERVER STARTUP
 const startServer = () => {
   try {
     app.listen(config.port, () => {
-      logger.info(`🚀 Server is running on port ${config.port}`);
-      logger.info(`📝 Environment: ${config.nodeEnv}`);
+      logger.info(`🚀 Server running on port ${config.port}`);
+      logger.info(`📝 Env: ${config.nodeEnv}`);
       logger.info(
         `🔗 API Base URL: http://localhost:${config.port}${config.api.prefix}`
       );
@@ -97,6 +115,7 @@ const startServer = () => {
   }
 };
 
+// 🧩 GLOBAL ERROR HANDLERS
 process.on("unhandledRejection", (reason: any) => {
   logger.error("Unhandled Rejection:", reason);
   process.exit(1);
