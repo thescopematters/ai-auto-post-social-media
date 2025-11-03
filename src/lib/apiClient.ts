@@ -364,4 +364,17 @@ export const schedulerApi = {
     apiClient.post("/scheduler/publish-now", data),
 };
 
+export const paymentApi = {
+  getHistory: (limit = 20) =>
+    apiClient.get(`/payment/history`, { params: { limit } }),
+
+  checkStatus: (merchantTransactionId: string) =>
+    apiClient.get<{
+      status: string;
+      transactionId: string;
+      amount: number;
+    }>(`/payment/checkstatus/${merchantTransactionId}`),
+};
+
+
 export default apiClient;
