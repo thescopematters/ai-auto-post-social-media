@@ -38,6 +38,13 @@ export function Settings() {
   const [searchParams] = useSearchParams();
 
   useEffect(() => {
+    const tabParam = searchParams.get("tab");
+    if (tabParam) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
     if (!loading && !profile) {
       console.warn("User not authenticated, redirecting to signin");
       navigate("/signin");
@@ -61,7 +68,7 @@ export function Settings() {
       }
 
       const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
 
       window.location.href = `${backendUrl}/auth/linkedin?userId=${profile.id}`;
     } catch (error: any) {
@@ -74,7 +81,7 @@ export function Settings() {
   const handleDisconnectAccount = async (platform: string) => {
     try {
       const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
 
       const token = localStorage.getItem("accessToken");
 
@@ -106,7 +113,7 @@ export function Settings() {
   const fetchSocialAccounts = async () => {
     try {
       const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3001/api/v1";
+        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
       const token = localStorage.getItem("accessToken");
 
       if (!token) {

@@ -4,7 +4,6 @@ import {
   LayoutDashboard,
   FileText,
   Sparkles,
-  CheckCircle,
   Calendar,
   BarChart3,
   Settings,
@@ -33,7 +32,6 @@ export function AppLayout() {
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: FileText, label: 'Documents', path: '/documents' },
     { icon: Sparkles, label: 'Content Generator', path: '/generator' },
-    { icon: CheckCircle, label: 'Moderation', path: '/moderation' },
     { icon: Calendar, label: 'Schedule', path: '/schedule' },
     { icon: BarChart3, label: 'Analytics', path: '/analytics' },
     { icon: Crown, label: 'Subscription', path: '/subscription' },
@@ -72,7 +70,7 @@ export function AppLayout() {
                 <div className="flex items-center gap-3">
                   <div
                     className="w-10 h-10 rounded-lg flex items-center justify-center"
-                    style={{ backgroundColor: currentWorkspace.brand_color }}
+                    style={{ backgroundColor: currentWorkspace.brand_color || '#3b82f6' }}
                   >
                     <Building2 className="w-6 h-6 text-white" />
                   </div>
@@ -97,7 +95,7 @@ export function AppLayout() {
                     >
                       <div
                         className="w-8 h-8 rounded flex items-center justify-center flex-shrink-0"
-                        style={{ backgroundColor: workspace.brand_color }}
+                        style={{ backgroundColor: workspace.brand_color || '#3b82f6'}}
                       >
                         <Building2 className="w-4 h-4 text-white" />
                       </div>

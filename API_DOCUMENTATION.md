@@ -2,7 +2,7 @@
 
 ## Base URL
 ```
-http://localhost:3001/api/v1
+http://localhost:3002/api/v1
 ```
 
 ## Authentication
@@ -393,7 +393,7 @@ SUPABASE_URL=your_supabase_url
 SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 
-PORT=3001
+PORT=3002
 NODE_ENV=development
 JWT_SECRET=your_jwt_secret
 JWT_REFRESH_SECRET=your_refresh_secret
@@ -411,21 +411,21 @@ RATE_LIMIT_MAX_REQUESTS=100
 
 ### Register a new user
 ```bash
-curl -X POST http://localhost:3001/api/v1/auth/register \
+curl -X POST http://localhost:3002/api/v1/auth/register \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Test123456!","fullName":"Test User"}'
 ```
 
 ### Login
 ```bash
-curl -X POST http://localhost:3001/api/v1/auth/login \
+curl -X POST http://localhost:3002/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"email":"test@example.com","password":"Test123456!"}'
 ```
 
 ### Get workspaces (with token)
 ```bash
-curl -X GET http://localhost:3001/api/v1/workspaces \
+curl -X GET http://localhost:3002/api/v1/workspaces \
   -H "Authorization: Bearer YOUR_ACCESS_TOKEN"
 ```
 

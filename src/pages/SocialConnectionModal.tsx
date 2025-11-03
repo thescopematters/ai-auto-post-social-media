@@ -1,5 +1,6 @@
 import { X, Linkedin, Twitter, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
 
 interface SocialConnectionModalProps {
   isOpen: boolean;
@@ -11,11 +12,12 @@ export function SocialConnectionModal({
   onClose,
 }: SocialConnectionModalProps) {
   const navigate = useNavigate();
+  const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleConnect = () => {
-    navigate("/settings?tab=connections");
+    navigate("/settings?tab=connections", { replace: true });
     onClose();
   };
 
@@ -44,7 +46,15 @@ export function SocialConnectionModal({
 
           {/* Platform Options */}
           <div className="space-y-2 mb-4">
-            <div className="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition cursor-pointer">
+            {/* LinkedIn Option */}
+            <div
+              onClick={() => setSelectedPlatform("linkedin")}
+              className={`flex items-center gap-2 p-3 border-2 rounded-lg transition cursor-pointer ${
+                selectedPlatform === "linkedin"
+                  ? "border-blue-500 bg-blue-50"
+                  : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+              }`}
+            >
               <div className="bg-blue-100 p-2 rounded-lg flex-shrink-0">
                 <Linkedin className="w-4 h-4 text-blue-600" />
               </div>
@@ -54,13 +64,19 @@ export function SocialConnectionModal({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg hover:border-sky-400 hover:bg-sky-50 transition cursor-pointer">
+            {/* Twitter Option (Disabled + Tooltip) */}
+            <div className="relative flex items-center gap-2 p-3 border-2 border-gray-200 rounded-lg bg-gray-50 opacity-70 cursor-not-allowed group">
               <div className="bg-sky-100 p-2 rounded-lg flex-shrink-0">
                 <Twitter className="w-4 h-4 text-sky-600" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-gray-900 text-sm">Twitter/X</p>
-                <p className="text-xs text-gray-500">Reach audience</p>
+                <p className="text-xs text-gray-500">Coming soon</p>
+              </div>
+
+              {/* Tooltip */}
+              <div className="absolute -top-7 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs rounded py-1 px-2 opacity-0 group-hover:opacity-100 transition pointer-events-none">
+                Coming Soon
               </div>
             </div>
           </div>
@@ -69,13 +85,16 @@ export function SocialConnectionModal({
           <div className="bg-gray-50 rounded-lg p-3 mb-4">
             <ul className="space-y-1 text-xs text-gray-600">
               <li className="flex items-center gap-1.5">
-                <span className="text-green-500 font-bold">✓</span> Auto-schedule
+                <span className="text-green-500 font-bold">✓</span>{" "}
+                Auto-schedule
               </li>
               <li className="flex items-center gap-1.5">
-                <span className="text-green-500 font-bold">✓</span> Track engagement
+                <span className="text-green-500 font-bold">✓</span> Track
+                engagement
               </li>
               <li className="flex items-center gap-1.5">
-                <span className="text-green-500 font-bold">✓</span> Manage accounts
+                <span className="text-green-500 font-bold">✓</span> Manage
+                accounts
               </li>
             </ul>
           </div>
@@ -90,7 +109,12 @@ export function SocialConnectionModal({
             </button>
             <button
               onClick={handleConnect}
-              className="flex-1 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium text-sm flex items-center justify-center gap-1"
+              disabled={selectedPlatform !== "linkedin"}
+              className={`flex-1 px-3 py-2 rounded-lg transition font-medium text-sm flex items-center justify-center gap-1 ${
+                selectedPlatform === "linkedin"
+                  ? "bg-blue-600 text-white hover:bg-blue-700"
+                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
+              }`}
             >
               Connect
               <ArrowRight className="w-3 h-3" />

@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { contentApi, schedulerApi } from "../lib/apiClient";
+import { contentApi } from "../lib/apiClient";
 import {
   Calendar as CalendarIcon,
   CheckCircle,
   XCircle,
   Clock,
   Trash2,
-  Play,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,8 +24,11 @@ type ScheduledPost = {
   social_account?: string;
 };
 
+type TabType = "scheduled" | "published";
+
 export function Schedule() {
   const { currentWorkspace } = useAuth();
+  const [activeTab, setActiveTab] = useState<TabType>("scheduled");
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -96,32 +98,6 @@ export function Schedule() {
     }
   };
 
-  const handlePublishNow = async (postId: string) => {
-    if (!currentWorkspace) return;
-
-    try {
-      setDeleting(postId);
-      const response = await schedulerApi.publishNow({ postId });
-
-      if (response.success) {
-        toast.success("Post published! Refreshing...");
-        // Wait 2 seconds then refresh
-        await new Promise((r) => setTimeout(r, 2000));
-        await loadScheduledPosts();
-      } else {
-        toast.error("Failed to publish post", {
-          description: response.error,
-        });
-      }
-    } catch (error: any) {
-      toast.error("Error publishing post", {
-        description: error.message,
-      });
-    } finally {
-      setDeleting(null);
-    }
-  };
-
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "published":
@@ -175,6 +151,19 @@ export function Schedule() {
     }
   };
 
+  // Filter posts based on active tab
+  const filteredPosts = posts.filter((post) => {
+    if (activeTab === "scheduled") {
+      return post.status === "scheduled";
+    } else if (activeTab === "published") {
+      return post.status === "published";
+    }
+    return false;
+  });
+
+  const scheduledCount = posts.filter(post => post.status === "scheduled").length;
+  const publishedCount = posts.filter(post => post.status === "published").length;
+
   if (loading) {
     return (
       <div className="p-6 lg:p-8 max-w-7xl mx-auto">
@@ -191,17 +180,50 @@ export function Schedule() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Publishing Schedule
         </h1>
-        <p className="text-gray-600">Manage your LinkedIn content calendar</p>
+        <p className="text-gray-600">Manage your scheduled and published content</p>
       </div>
 
-      {posts.length === 0 ? (
+      {/* Tabs */}
+      <div className="mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab("scheduled")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "scheduled"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Scheduled ({scheduledCount})
+            </button>
+            <button
+              onClick={() => setActiveTab("published")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "published"
+                  ? "border-blue-500 text-blue-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Published ({publishedCount})
+            </button>
+          </nav>
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      {filteredPosts.length === 0 ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <CalendarIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            No scheduled posts yet
+            {activeTab === "scheduled" 
+              ? "No scheduled posts" 
+              : "No published posts"}
           </h3>
           <p className="text-gray-600 mb-4">
-            Schedule LinkedIn posts from the content generator to see them here
+            {activeTab === "scheduled"
+              ? "Schedule posts from the content generator to see them here"
+              : "Published posts will appear here once they're live"}
           </p>
           <button
             onClick={handleRefresh}
@@ -215,7 +237,7 @@ export function Schedule() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">
-              Scheduled Posts ({posts.length})
+              {activeTab === "scheduled" ? "Scheduled Posts" : "Published Posts"} ({filteredPosts.length})
             </h2>
             <div className="flex gap-2">
               <button
@@ -232,14 +254,14 @@ export function Schedule() {
           </div>
 
           <div className="space-y-4">
-            {posts.map((post) => (
+            {filteredPosts.map((post) => (
               <div
                 key={post.id}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <p className="text-gray-800 whitespace-pre-wrap mb-2">
+                    <p className="text-gray-800 whitespace-pre-wrap mb-2 line-clamp-3">
                       {post.content}
                     </p>
 
@@ -254,24 +276,17 @@ export function Schedule() {
                     </div>
                   </div>
 
-                  <div className="flex gap-2 ml-4">
+                  <div className="flex gap-2 ml-4 flex-wrap justify-end">
                     {post.status === "scheduled" && (
                       <button
-                        onClick={() => handlePublishNow(post.id)}
-                        className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition"
-                        title="Publish Now"
+                        onClick={() => handleDeletePost(post.id)}
+                        disabled={deleting === post.id}
+                        className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
+                        title="Delete"
                       >
-                        <Play className="w-4 h-4" />
+                        <Trash2 className="w-4 h-4" />
                       </button>
                     )}
-                    <button
-                      onClick={() => handleDeletePost(post.id)}
-                      disabled={deleting === post.id}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
                   </div>
                 </div>
 
