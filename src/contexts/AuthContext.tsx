@@ -52,6 +52,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   setCurrentWorkspace: (workspace: Workspace) => void;
   refreshProfile: () => Promise<void>;
+  updateUserProfile: (updatedProfile: Partial<Profile>) => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -64,34 +65,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     useState<Workspace | null>(null);
   const [loading, setLoading] = useState(true);
 
-const initializedRef = useRef(false);
+  const initializedRef = useRef(false);
 
-useEffect(() => {
-  const initAuth = async () => {
-    if (initializedRef.current) return;
-    initializedRef.current = true;
+  useEffect(() => {
+    const initAuth = async () => {
+      if (initializedRef.current) return;
+      initializedRef.current = true;
 
-    const token = localStorage.getItem("accessToken");
+      const token = localStorage.getItem("accessToken");
 
-    if (token) {
-      try {
-        await loadUserData();
-      } catch (error) {
-        console.error("Error loading user data:", error);
-        localStorage.removeItem("accessToken");
-        localStorage.removeItem("refreshToken");
-        setUser(null);
-        setProfile(null);
+      if (token) {
+        try {
+          await loadUserData();
+        } catch (error) {
+          console.error("Error loading user data:", error);
+          localStorage.removeItem("accessToken");
+          localStorage.removeItem("refreshToken");
+          setUser(null);
+          setProfile(null);
+        }
+      } else {
+        console.warn("No token found, user is not logged in");
       }
-    } else {
-      console.warn("No token found, user is not logged in");
-    }
 
-    setLoading(false);
-  };
+      setLoading(false);
+    };
 
-  initAuth();
-}, []);
+    initAuth();
+  }, []);
 
   const loadUserData = async () => {
     try {
@@ -225,6 +226,13 @@ useEffect(() => {
     }
   };
 
+  const updateUserProfile = (updatedProfile: Partial<Profile>) => {
+    setProfile((prev) => {
+      if (!prev) return null;
+      return { ...prev, ...updatedProfile };
+    });
+  };
+
   const setCurrentWorkspace = (workspace: Workspace) => {
     setCurrentWorkspaceState(workspace);
     localStorage.setItem("currentWorkspaceId", workspace.id);
@@ -252,6 +260,7 @@ useEffect(() => {
         signOut,
         setCurrentWorkspace,
         refreshProfile,
+        updateUserProfile,
       }}
     >
       {children}

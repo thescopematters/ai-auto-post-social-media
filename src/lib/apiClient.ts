@@ -141,12 +141,32 @@ export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post("/auth/login", { email, password }),
 
+  updateProfile: (data: { fullName: string; companyName?: string }) =>
+    apiClient.put("/auth/profile", data),
+
   logout: () => apiClient.post("/auth/logout"),
 
   refreshToken: (refreshToken: string) =>
     apiClient.post("/auth/refresh", { refreshToken }),
 
   getCurrentUser: () => apiClient.get("/auth/me"),
+
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
+    confirmPassword: string
+  ) =>
+    apiClient.post("/auth/change-password", {
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    }),
+
+  forgotPassword: (email: string) =>
+    apiClient.post("/auth/forgot-password", { email }),
+
+  resetPassword: (newPassword: string, confirmPassword: string) =>
+    apiClient.post("/auth/reset-password", { newPassword, confirmPassword }),
 };
 
 export const workspaceApi = {
@@ -280,7 +300,6 @@ export const contentApi = {
   deleteScheduledPost: (workspaceId: string, postId: string) =>
     apiClient.delete(`/workspaces/${workspaceId}/scheduled-posts/${postId}`),
 
-  // NEW: Image upload methods
   uploadPostImage: (workspaceId: string, postId: string, formData: FormData) =>
     apiClient.uploadFile(
       `/workspaces/${workspaceId}/posts/${postId}/upload-image`,
@@ -331,21 +350,18 @@ export const mediaApi = {
     );
   },
 
-  // Get media for post
   getPostMedia: async (workspaceId: string, postId: string) => {
     return await apiClient.get(
       `/workspaces/${workspaceId}/posts/${postId}/media`
     );
   },
 
-  // Delete media
   deleteMedia: async (workspaceId: string, postId: string, mediaId: string) => {
     return await apiClient.delete(
       `/workspaces/${workspaceId}/posts/${postId}/media/${mediaId}`
     );
   },
 
-  // Update media status
   updateMediaStatus: async (
     workspaceId: string,
     postId: string,
@@ -360,7 +376,7 @@ export const mediaApi = {
 };
 
 export const schedulerApi = {
-  publishNow: (data: { postId: string, socialAccountId: string }) =>
+  publishNow: (data: { postId: string; socialAccountId: string }) =>
     apiClient.post("/scheduler/publish-now", data),
 };
 
@@ -375,6 +391,5 @@ export const paymentApi = {
       amount: number;
     }>(`/payment/checkstatus/${merchantTransactionId}`),
 };
-
 
 export default apiClient;

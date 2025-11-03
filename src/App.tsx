@@ -13,6 +13,8 @@ import { Schedule } from "./pages/Schedule";
 import { Analytics } from "./pages/Analytics";
 import { Settings } from "./pages/Settings";
 import { Subscription } from "./pages/Subscription";
+import { ResetPassword } from "./pages/ResetPassword";
+import { ForgotPassword } from "./pages/ForgotPassword";
 import { Toaster } from "sonner";
 
 function App() {
@@ -23,6 +25,8 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/signin" element={<SignIn />} />
           <Route path="/signup" element={<SignUp />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route
             path="/onboarding"
             element={

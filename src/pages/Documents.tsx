@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import { documentApi } from '../lib/apiClient';
+import { useEffect, useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { documentApi } from "../lib/apiClient";
 import {
   Upload,
   FileText,
@@ -11,8 +11,8 @@ import {
   Filter,
   MoreVertical,
   Trash2,
-  Eye
-} from 'lucide-react';
+  Eye,
+} from "lucide-react";
 
 type Document = {
   id: string;
@@ -30,7 +30,7 @@ export function Documents() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -50,7 +50,7 @@ export function Documents() {
         setDocuments(response.data as Document[]);
       }
     } catch (error) {
-      console.error('Error loading documents:', error);
+      console.error("Error loading documents:", error);
     } finally {
       setLoading(false);
     }
@@ -63,8 +63,8 @@ export function Documents() {
 
     try {
       const response = await documentApi.create(currentWorkspace.id, {
-        title: title || 'Manual Text Input',
-        fileType: 'manual',
+        title: title || "Manual Text Input",
+        fileType: "manual",
         contentText: text,
       });
 
@@ -73,13 +73,13 @@ export function Documents() {
         setShowUploadModal(false);
       }
     } catch (error) {
-      console.error('Error uploading text:', error);
+      console.error("Error uploading text:", error);
     } finally {
       setUploading(false);
     }
   };
 
-  const filteredDocuments = documents.filter(doc =>
+  const filteredDocuments = documents.filter((doc) =>
     doc.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -96,7 +96,9 @@ export function Documents() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Documents</h1>
-          <p className="text-gray-600">Upload and manage your content sources</p>
+          <p className="text-gray-600">
+            Upload and manage your content sources
+          </p>
         </div>
         <button
           onClick={() => setShowUploadModal(true)}
@@ -130,8 +132,12 @@ export function Documents() {
         {filteredDocuments.length === 0 ? (
           <div className="text-center py-16 px-4">
             <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No documents yet</h3>
-            <p className="text-gray-600 mb-6">Upload your first document to get started</p>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              No documents yet
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Upload your first document to get started
+            </p>
             <button
               onClick={() => setShowUploadModal(true)}
               className="inline-flex items-center px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
@@ -143,7 +149,11 @@ export function Documents() {
         ) : (
           <div className="divide-y divide-gray-200">
             {filteredDocuments.map((doc) => (
-              <DocumentRow key={doc.id} document={doc} onDelete={loadDocuments} />
+              <DocumentRow
+                key={doc.id}
+                document={doc}
+                onDelete={loadDocuments}
+              />
             ))}
           </div>
         )}
@@ -160,16 +170,32 @@ export function Documents() {
   );
 }
 
-function DocumentRow({ document, onDelete }: { document: Document; onDelete: () => void }) {
+function DocumentRow({
+  document,
+  onDelete,
+}: {
+  document: Document;
+  onDelete: () => void;
+}) {
   const [showMenu, setShowMenu] = useState(false);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
 
   const getStatusIcon = () => {
     switch (document.processing_status) {
-      case 'completed':
+      case "completed":
         return <CheckCircle className="w-5 h-5 text-green-500" />;
-      case 'processing':
+      case "processing":
         return <Clock className="w-5 h-5 text-yellow-500 animate-spin" />;
-      case 'failed':
+      case "failed":
         return <AlertCircle className="w-5 h-5 text-red-500" />;
       default:
         return <Clock className="w-5 h-5 text-gray-400" />;
@@ -177,11 +203,11 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this document?')) {
+    if (confirm("Are you sure you want to delete this document?")) {
       try {
         onDelete();
       } catch (error) {
-        console.error('Error deleting document:', error);
+        console.error("Error deleting document:", error);
       }
     }
   };
@@ -194,9 +220,11 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
       <div className="flex-1 min-w-0">
         <h3 className="font-medium text-gray-900 truncate">{document.title}</h3>
         <div className="flex items-center gap-4 mt-1">
-          <span className="text-sm text-gray-500 capitalize">{document.file_type}</span>
+          <span className="text-sm text-gray-500 capitalize">
+            {document.file_type}
+          </span>
           <span className="text-sm text-gray-500">
-            {(document.file_size / 1024).toFixed(1)} KB
+            {formatFileSize(document.file_size)}
           </span>
           <span className="text-sm text-gray-500">
             {new Date(document.uploaded_at).toLocaleDateString()}
@@ -233,25 +261,24 @@ function DocumentRow({ document, onDelete }: { document: Document; onDelete: () 
   );
 }
 
-// ✅ SIMPLIFIED MODAL - TEXT ONLY
-function UploadModal({ 
-  onClose, 
-  onTextUpload, 
-  uploading 
-}: { 
+function UploadModal({
+  onClose,
+  onTextUpload,
+  uploading,
+}: {
   onClose: () => void;
   onTextUpload: (text: string, title: string) => Promise<void>;
   uploading: boolean;
 }) {
-  const [text, setText] = useState('');
-  const [title, setTitle] = useState('');
+  const [text, setText] = useState("");
+  const [title, setTitle] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (title && text) {
       await onTextUpload(text, title);
-      setText('');
-      setTitle('');
+      setText("");
+      setTitle("");
     }
   };
 
@@ -260,13 +287,17 @@ function UploadModal({
       <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Upload Document</h2>
-          <p className="text-gray-600 mt-1">Add content by pasting or typing text</p>
+          <p className="text-gray-600 mt-1">
+            Add content by pasting or typing text
+          </p>
         </div>
 
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Title</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Title
+              </label>
               <input
                 type="text"
                 value={title}
@@ -277,7 +308,9 @@ function UploadModal({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Content</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Content
+              </label>
               <textarea
                 required
                 value={text}
@@ -292,7 +325,7 @@ function UploadModal({
               disabled={uploading}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
-              {uploading ? 'Saving...' : 'Save Content'}
+              {uploading ? "Saving..." : "Save Content"}
             </button>
           </form>
         </div>
