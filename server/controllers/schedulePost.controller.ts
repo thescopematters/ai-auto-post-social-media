@@ -13,6 +13,7 @@ interface ScheduledPostResponse {
   platform?: string;
   variant_number?: number;
   social_account?: string;
+  timezone?: string;
 }
 
 interface ScheduledPost {
@@ -25,6 +26,7 @@ interface ScheduledPost {
   published_at?: string;
   error_message?: string;
   external_post_id?: string;
+  timezone?: string;
   generated_posts: Array<{
     id: string;
     content: string;
@@ -69,6 +71,7 @@ export class SchedulePostController {
         error_message,
         external_post_id,
         retry_count,
+        timezone,
         generated_posts!inner(
           id,
           content,
@@ -98,7 +101,6 @@ export class SchedulePostController {
 
       const formattedPosts: ScheduledPostResponse[] = (scheduledPosts || [])
         .map((post: any) => {
-          // Multiple ways to get content
           const content =
             post.generated_posts?.content ||
             post.generated_posts?.[0]?.content ||
@@ -128,6 +130,7 @@ export class SchedulePostController {
             platform: platform,
             variant_number: variantNumber,
             social_account: socialAccount,
+            timezone: post.timezone,
           };
         })
         .filter((post) => post.content !== "Content not available");
@@ -148,7 +151,7 @@ export class SchedulePostController {
   async schedulePost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;
-      const { postId, socialAccountId, scheduledTime } = req.body;
+      const { postId, socialAccountId, scheduledTime, timezone } = req.body;
 
       if (!postId || !socialAccountId || !scheduledTime) {
         res.status(400).json({
@@ -159,10 +162,16 @@ export class SchedulePostController {
         return;
       }
 
+      // User's timezone (from frontend)
+      const userTimezone = timezone || "UTC";
+      logger.info(`📅 Scheduling post with timezone: ${userTimezone}`);
+
+      // Parse the scheduled time - it's already in user's local time
+      // We need to convert it to UTC for storage
       const scheduledDate = new Date(scheduledTime);
       const now = new Date();
-      const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
 
+      // Validation: Check if time is in the future
       if (scheduledDate <= now) {
         res.status(400).json({
           success: false,
@@ -171,6 +180,8 @@ export class SchedulePostController {
         return;
       }
 
+      // Minimum 5 minutes in the future
+      const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
       if (scheduledDate < minScheduleTime) {
         res.status(400).json({
           success: false,
@@ -227,14 +238,24 @@ export class SchedulePostController {
         return;
       }
 
+      // Store in UTC, but keep timezone info for display
+      const scheduledTimeUTC = scheduledDate.toISOString();
+
+      logger.info(`⏰ Scheduling details:
+        - User timezone: ${userTimezone}
+        - User local time: ${scheduledTime}
+        - UTC time (stored): ${scheduledTimeUTC}
+      `);
+
       const { data: scheduledPost, error: scheduleError } = await supabaseAdmin
         .from("scheduled_posts")
         .insert({
           workspace_id: workspaceId,
           post_id: postId,
           social_account_id: socialAccountId,
-          scheduled_time: scheduledTime,
+          scheduled_time: scheduledTimeUTC,
           status: "scheduled",
+          timezone: userTimezone,
         })
         .select(
           `
@@ -271,6 +292,7 @@ export class SchedulePostController {
         platform: scheduledPost.generated_posts?.[0]?.platform,
         variant_number: scheduledPost.generated_posts?.[0]?.variant_number,
         social_account: scheduledPost.social_accounts?.[0]?.account_name,
+        timezone: scheduledPost.timezone,
       };
 
       res.status(201).json({
@@ -433,9 +455,3 @@ export class SchedulePostController {
 }
 
 export const schedulePostController = new SchedulePostController();
-
-
-
-
-
-

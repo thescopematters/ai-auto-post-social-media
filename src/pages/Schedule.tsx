@@ -8,6 +8,7 @@ import {
   Clock,
   Trash2,
   RefreshCw,
+  Globe,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -22,9 +23,10 @@ type ScheduledPost = {
   platform?: string;
   variant_number?: number;
   social_account?: string;
+  timezone?: string;
 };
 
-type TabType = "scheduled" | "published";
+type TabType = "scheduled" | "published" | "failed";
 
 export function Schedule() {
   const { currentWorkspace } = useAuth();
@@ -33,6 +35,14 @@ export function Schedule() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [userTimezone, setUserTimezone] = useState<string>("");
+
+  useEffect(() => {
+    // Detect user's timezone
+    const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    setUserTimezone(timezone);
+    console.log("🌍 User timezone detected:", timezone);
+  }, []);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -124,14 +134,28 @@ export function Schedule() {
     }
   };
 
-  const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString("en-US", {
+  // Format date in user's local timezone
+  const formatDateTime = (dateString: string, showTimezone: boolean = false) => {
+    const date = new Date(dateString);
+    
+    const formatted = date.toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: userTimezone,
     });
+
+    if (showTimezone) {
+      const tzAbbr = date.toLocaleTimeString("en-US", {
+        timeZone: userTimezone,
+        timeZoneName: "short",
+      }).split(" ").pop();
+      return `${formatted} ${tzAbbr}`;
+    }
+
+    return formatted;
   };
 
   const getTimeRemaining = (scheduledTime: string) => {
@@ -141,13 +165,30 @@ export function Schedule() {
 
     if (diff <= 0) return "Due now";
 
-    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
     const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
 
-    if (hours > 0) {
+    if (days > 0) {
+      return `in ${days}d ${hours}h`;
+    } else if (hours > 0) {
       return `in ${hours}h ${minutes}m`;
     } else {
       return `in ${minutes}m`;
+    }
+  };
+
+  const getTimezoneDisplay = () => {
+    try {
+      const now = new Date();
+      const tzName = now.toLocaleTimeString("en-US", {
+        timeZone: userTimezone,
+        timeZoneName: "long",
+      }).split(" ").slice(2).join(" ");
+      
+      return tzName;
+    } catch {
+      return userTimezone;
     }
   };
 
@@ -157,12 +198,15 @@ export function Schedule() {
       return post.status === "scheduled";
     } else if (activeTab === "published") {
       return post.status === "published";
+    } else if (activeTab === "failed") {
+      return post.status === "failed";
     }
     return false;
   });
 
   const scheduledCount = posts.filter(post => post.status === "scheduled").length;
   const publishedCount = posts.filter(post => post.status === "published").length;
+  const failedCount = posts.filter(post => post.status === "failed").length;
 
   if (loading) {
     return (
@@ -180,7 +224,15 @@ export function Schedule() {
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Publishing Schedule
         </h1>
-        <p className="text-gray-600">Manage your scheduled and published content</p>
+        <div className="flex items-center gap-2 text-gray-600">
+          <p>Manage your scheduled and published content</p>
+          {userTimezone && (
+            <div className="flex items-center gap-1 text-sm bg-blue-50 text-blue-700 px-3 py-1 rounded-full">
+              <Globe className="w-3 h-3" />
+              <span>{getTimezoneDisplay()}</span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Tabs */}
@@ -207,6 +259,16 @@ export function Schedule() {
             >
               Published ({publishedCount})
             </button>
+            <button
+              onClick={() => setActiveTab("failed")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === "failed"
+                  ? "border-red-500 text-red-600"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              }`}
+            >
+              Failed ({failedCount})
+            </button>
           </nav>
         </div>
       </div>
@@ -218,12 +280,16 @@ export function Schedule() {
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
             {activeTab === "scheduled" 
               ? "No scheduled posts" 
-              : "No published posts"}
+              : activeTab === "published"
+              ? "No published posts"
+              : "No failed posts"}
           </h3>
           <p className="text-gray-600 mb-4">
             {activeTab === "scheduled"
               ? "Schedule posts from the content generator to see them here"
-              : "Published posts will appear here once they're live"}
+              : activeTab === "published"
+              ? "Published posts will appear here once they're live"
+              : "Failed posts will appear here"}
           </p>
           <button
             onClick={handleRefresh}
@@ -237,7 +303,11 @@ export function Schedule() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">
-              {activeTab === "scheduled" ? "Scheduled Posts" : "Published Posts"} ({filteredPosts.length})
+              {activeTab === "scheduled" 
+                ? "Scheduled Posts" 
+                : activeTab === "published"
+                ? "Published Posts"
+                : "Failed Posts"} ({filteredPosts.length})
             </h2>
             <div className="flex gap-2">
               <button
@@ -265,7 +335,7 @@ export function Schedule() {
                       {post.content}
                     </p>
 
-                    <div className="flex items-center gap-4 text-sm text-gray-500">
+                    <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                       <span>Platform: {post.platform || "LinkedIn"}</span>
                       {post.variant_number && (
                         <span>Variant: {post.variant_number}</span>
@@ -305,14 +375,12 @@ export function Schedule() {
 
                     <p className="text-sm text-gray-500">
                       {post.status === "published"
-                        ? `Published: ${formatDateTime(post.published_at!)}`
+                        ? `Published: ${formatDateTime(post.published_at!, true)}`
                         : post.status === "failed"
-                        ? `Failed: ${formatDateTime(post.scheduled_time)}`
+                        ? `Failed: ${formatDateTime(post.scheduled_time, true)}`
                         : post.status === "cancelled"
-                        ? `Cancelled: ${formatDateTime(post.scheduled_time)}`
-                        : `Scheduled: ${formatDateTime(
-                            post.scheduled_time
-                          )} (${getTimeRemaining(post.scheduled_time)})`}
+                        ? `Cancelled: ${formatDateTime(post.scheduled_time, true)}`
+                        : `Scheduled: ${formatDateTime(post.scheduled_time, true)} (${getTimeRemaining(post.scheduled_time)})`}
                     </p>
                   </div>
 

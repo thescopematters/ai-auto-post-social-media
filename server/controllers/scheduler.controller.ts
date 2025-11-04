@@ -10,6 +10,8 @@ const supabase = createClient(
 );
 
 const MAX_RETRIES = 3;
+const POSTS_PER_ACCOUNT = 5;
+const MAX_ACCOUNTS_PER_RUN = 10;
 
 export class SchedulerController {
   private isRunning = false;
@@ -36,60 +38,181 @@ export class SchedulerController {
     const now = new Date();
     const nowISOString = now.toISOString();
 
+    let totalProcessed = 0;
+    let accountsProcessed = 0;
+
     try {
-      const { data: scheduledPosts, error: postsError } = await supabase
+      // Get distinct social accounts that have pending posts
+      const { data: accountsWithPosts, error: accountsError } = await supabase
         .from("scheduled_posts")
-        .select(
-          `
-        id,
-        post_id,
-        social_account_id,
-        scheduled_time,
-        status,
-        retry_count,
-        generated_posts(id, content, platform, media_urls),
-        social_accounts(account_name, platform, is_active, token_expires_at, access_token, account_id)
-      `
-        )
+        .select("social_account_id")
         .lte("scheduled_time", nowISOString)
         .eq("status", "scheduled")
-        .lt("retry_count", MAX_RETRIES);
+        .lt("retry_count", MAX_RETRIES)
+        .limit(100); // Get more to find distinct accounts
 
-      if (postsError) {
-        logger.error("Error fetching scheduled posts:", postsError);
+      if (accountsError) {
+        logger.error("Error fetching scheduled posts:", accountsError);
         return;
       }
 
-      if (!scheduledPosts || scheduledPosts.length === 0) {
+      if (!accountsWithPosts || accountsWithPosts.length === 0) {
         return;
       }
 
-      for (const scheduledPost of scheduledPosts) {
-        const flatPost = {
-          id: scheduledPost.id,
-          post_id: scheduledPost.post_id,
-          social_account_id: scheduledPost.social_account_id,
-          scheduled_time: scheduledPost.scheduled_time,
-          status: scheduledPost.status,
-          retry_count: scheduledPost.retry_count,
-          content: scheduledPost.generated_posts?.[0]?.content,
-          platform: scheduledPost.generated_posts?.[0]?.platform,
-          media_urls: scheduledPost.generated_posts?.[0]?.media_urls || [],
-          account_name: scheduledPost.social_accounts?.[0]?.account_name,
-          is_active: scheduledPost.social_accounts?.[0]?.is_active,
-          token_expires_at:
-            scheduledPost.social_accounts?.[0]?.token_expires_at,
-          access_token: scheduledPost.social_accounts?.[0]?.access_token,
-          account_id: scheduledPost.social_accounts?.[0]?.account_id,
-        };
+      // Get unique social account IDs
+      const uniqueAccountIds = [
+        ...new Set(accountsWithPosts.map((p) => p.social_account_id)),
+      ].slice(0, MAX_ACCOUNTS_PER_RUN);
 
-        await this.sleep(500);
+      // Process each social account separately
+      for (const socialAccountId of uniqueAccountIds) {
+        accountsProcessed++;
 
-        const result = await this.publishToLinkedIn(flatPost);
+        // Fetch posts for this specific social account
+        const { data: accountPosts, error: postsError } = await supabase
+          .from("scheduled_posts")
+          .select(
+            `
+            id,
+            post_id,
+            social_account_id,
+            scheduled_time,
+            status,
+            retry_count,
+            generated_posts(id, content, platform, media_urls),
+            social_accounts(account_name, platform, is_active, token_expires_at, access_token, account_id)
+          `
+          )
+          .eq("social_account_id", socialAccountId)
+          .lte("scheduled_time", nowISOString)
+          .eq("status", "scheduled")
+          .lt("retry_count", MAX_RETRIES)
+          .order("scheduled_time", { ascending: true })
+          .limit(POSTS_PER_ACCOUNT);
 
-        if (!result.success) {
-          logger.error(`Failed to publish post ${flatPost.id}:`, result.error);
+        if (postsError || !accountPosts || accountPosts.length === 0) {
+          logger.warn(`⚠️ No posts found for account ${socialAccountId}`);
+          continue;
         }
+
+        const accountName =
+          accountPosts[0]?.social_accounts?.[0]?.account_name || "Unknown";
+
+        // Check account status once for all posts
+        const socialAccount = accountPosts[0]?.social_accounts?.[0];
+
+        if (!socialAccount) {
+          logger.error(
+            `❌ Social account data not found for ID: ${socialAccountId}`
+          );
+          continue;
+        }
+
+        // If account is inactive, fail all posts for this account immediately
+        if (!socialAccount.is_active) {
+          logger.warn(
+            `🚫 Account ${accountName} is inactive. Failing all ${accountPosts.length} posts.`
+          );
+
+          for (const post of accountPosts) {
+            await this.markPostAsFailed(
+              post.id,
+              "LinkedIn account has been disconnected. Please reconnect your account."
+            );
+          }
+
+          totalProcessed += accountPosts.length;
+          continue; // Skip to next account
+        }
+
+        // Check token expiry once for all posts
+        const tokenExpiry = new Date(socialAccount.token_expires_at);
+        if (tokenExpiry <= now) {
+          logger.warn(
+            `⏰ Account ${accountName} token expired. Failing all ${accountPosts.length} posts.`
+          );
+
+          for (const post of accountPosts) {
+            await this.markPostAsFailed(
+              post.id,
+              "LinkedIn access token has expired. Please reconnect your account."
+            );
+          }
+
+          // Mark account as inactive
+          await supabase
+            .from("social_accounts")
+            .update({ is_active: false })
+            .eq("id", socialAccountId);
+
+          totalProcessed += accountPosts.length;
+          continue; // Skip to next account
+        }
+
+        // Process posts for this account
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const scheduledPost of accountPosts) {
+          const flatPost = {
+            id: scheduledPost.id,
+            post_id: scheduledPost.post_id,
+            social_account_id: scheduledPost.social_account_id,
+            scheduled_time: scheduledPost.scheduled_time,
+            status: scheduledPost.status,
+            retry_count: scheduledPost.retry_count,
+            content: scheduledPost.generated_posts?.[0]?.content,
+            platform: scheduledPost.generated_posts?.[0]?.platform,
+            media_urls: scheduledPost.generated_posts?.[0]?.media_urls || [],
+            account_name: socialAccount.account_name,
+            is_active: socialAccount.is_active,
+            token_expires_at: socialAccount.token_expires_at,
+            access_token: socialAccount.access_token,
+            account_id: socialAccount.account_id,
+          };
+
+          // Small delay between posts
+          await this.sleep(500);
+
+          const result = await this.publishToLinkedIn(flatPost);
+
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            logger.error(`  ❌ Post ${flatPost.id} failed: ${result.error}`);
+
+            // If auth error detected, stop processing remaining posts for this account
+            if (
+              result.error?.includes("Auth failed") ||
+              result.error?.includes("authentication failed") ||
+              result.error?.includes("disconnected")
+            ) {
+              logger.warn(
+                `🚫 Auth error detected. Stopping further posts for account ${accountName}`
+              );
+
+              // Fail remaining posts for this account
+              const remainingPosts = accountPosts.slice(
+                accountPosts.indexOf(scheduledPost) + 1
+              );
+              for (const remainingPost of remainingPosts) {
+                await this.markPostAsFailed(
+                  remainingPost.id,
+                  "LinkedIn account authentication failed. Please reconnect your account."
+                );
+                failCount++;
+              }
+              break; // Exit post processing loop for this account
+            }
+          }
+
+          totalProcessed++;
+        }
+
+        // Small delay between accounts
+        await this.sleep(1000);
       }
     } catch (error) {
       logger.error("Error in processScheduledPosts:", error);
@@ -106,9 +229,11 @@ export class SchedulerController {
       const generatedPostId = scheduledPost.post_id;
 
       if (!socialAccountId || !generatedPostId) {
+        const errorMsg = `Missing required fields: socialAccountId=${socialAccountId}, generatedPostId=${generatedPostId}`;
+        await this.markPostAsFailed(postId, errorMsg);
         return {
           success: false,
-          error: `Missing required fields: socialAccountId=${socialAccountId}, generatedPostId=${generatedPostId}`,
+          error: errorMsg,
         };
       }
 
@@ -136,6 +261,7 @@ export class SchedulerController {
 
         if (postError || !fetchedPost) {
           logger.error("Generated post not found:", postError);
+          await this.markPostAsFailed(postId, "Generated post not found");
           return {
             success: false,
             error: "Generated post not found",
@@ -153,6 +279,7 @@ export class SchedulerController {
 
         if (accountError || !fetchedAccount) {
           logger.error("Social account not found:", accountError);
+          await this.markPostAsFailed(postId, "Social account not found");
           return {
             success: false,
             error: "Social account not found",
@@ -161,23 +288,35 @@ export class SchedulerController {
         socialAccount = fetchedAccount;
       }
 
-      // Validate account
+      // Check if account is active (user hasn't disconnected)
       if (!socialAccount.is_active) {
-        logger.error("Social account is not active", {
-          accountId: socialAccountId,
-          isActive: socialAccount.is_active,
-        });
+        const errorMsg =
+          "LinkedIn account has been disconnected. Please reconnect your account.";
+        await this.markPostAsFailed(postId, errorMsg);
         return {
           success: false,
-          error: "Social account is not active",
+          error: errorMsg,
         };
       }
 
+      // Check platform support
       if (socialAccount.platform !== "linkedin") {
-        logger.error("Unsupported platform:", socialAccount.platform);
+        const errorMsg = `Unsupported platform: ${socialAccount.platform}`;
+        await this.markPostAsFailed(postId, errorMsg);
         return {
           success: false,
-          error: `Unsupported platform: ${socialAccount.platform}`,
+          error: errorMsg,
+        };
+      }
+
+      // Check if access token exists
+      if (!socialAccount.access_token) {
+        const errorMsg =
+          "LinkedIn access token is missing. Please reconnect your account.";
+        await this.markPostAsFailed(postId, errorMsg);
+        return {
+          success: false,
+          error: errorMsg,
         };
       }
 
@@ -185,13 +324,12 @@ export class SchedulerController {
       const tokenExpiry = new Date(socialAccount.token_expires_at);
       const now = new Date();
       if (tokenExpiry <= now) {
-        logger.error("LinkedIn access token has expired", {
-          expiresAt: socialAccount.token_expires_at,
-          now: now.toISOString(),
-        });
+        const errorMsg =
+          "LinkedIn access token has expired. Please reconnect your account.";
+        await this.markPostAsFailed(postId, errorMsg);
         return {
           success: false,
-          error: "LinkedIn access token has expired",
+          error: errorMsg,
         };
       }
 
@@ -221,8 +359,30 @@ export class SchedulerController {
           postId: result.postId,
         };
       } else {
-        // Update the database for failed publish
-        await this.markPostAsFailed(postId, result.error || "Unknown error");
+        // Check if it's an authentication error (user disconnected)
+        const isAuthError =
+          result.error?.includes("Auth failed") ||
+          result.error?.includes("401") ||
+          result.error?.includes("403");
+
+        if (isAuthError) {
+          // Mark account as inactive if authentication failed
+          await supabase
+            .from("social_accounts")
+            .update({ is_active: false })
+            .eq("id", socialAccountId);
+
+          const errorMsg =
+            "LinkedIn authentication failed. Your account may have been disconnected. Please reconnect.";
+          await this.markPostAsFailed(postId, errorMsg);
+          return {
+            success: false,
+            error: errorMsg,
+          };
+        }
+
+        // For other errors, increment retry count
+        await this.incrementRetryCount(postId, result.error || "Unknown error");
         return {
           success: false,
           error: result.error,
@@ -234,8 +394,8 @@ export class SchedulerController {
         stack: error.stack,
       });
 
-      // Update the database for failed publish
-      await this.markPostAsFailed(postId, error.message);
+      // Increment retry count for unexpected errors
+      await this.incrementRetryCount(postId, error.message);
 
       return {
         success: false,
@@ -314,7 +474,7 @@ export class SchedulerController {
           logger.error("LinkedIn image upload failed:", uploadResponse.status);
           continue;
         }
-        
+
         imageUrns.push(assetUrn);
       } catch (error: any) {
         logger.error(`Error uploading image ${s3Url}:`, error.message);
@@ -384,7 +544,7 @@ export class SchedulerController {
           );
           return {
             success: false,
-            error: `Auth failed (${response.status}): ${errorText}`,
+            error: `Auth failed (${response.status}): Token invalid or revoked`,
           };
         }
 
@@ -420,15 +580,15 @@ export class SchedulerController {
   }
 
   private getMimeTypeFromUrl(url: string): string {
-    const ext = url.split('.').pop()?.toLowerCase().split('?')[0];
+    const ext = url.split(".").pop()?.toLowerCase().split("?")[0];
     const mimeTypes: { [key: string]: string } = {
-      "jpg": "image/jpeg",
-      "jpeg": "image/jpeg",
-      "png": "image/png",
-      "gif": "image/gif",
-      "webp": "image/webp",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      png: "image/png",
+      gif: "image/gif",
+      webp: "image/webp",
     };
-    return mimeTypes[ext || ''] || "image/jpeg";
+    return mimeTypes[ext || ""] || "image/jpeg";
   }
 
   private async markPostAsPublished(
@@ -443,13 +603,12 @@ export class SchedulerController {
           published_at: new Date().toISOString(),
           external_post_id: linkedinPostId,
           retry_count: 0,
+          error_message: null,
         })
         .eq("id", postId);
 
       if (error) {
         logger.error("Error marking post as published:", error);
-      } else {
-        logger.info(`Post ${postId} marked as published`);
       }
     } catch (error) {
       logger.error("Error in markPostAsPublished:", error);
@@ -471,11 +630,54 @@ export class SchedulerController {
 
       if (error) {
         logger.error("Error marking post as failed:", error);
-      } else {
-        logger.info(`Post ${postId} marked as failed`);
       }
     } catch (error) {
       logger.error("Error in markPostAsFailed:", error);
+    }
+  }
+
+  private async incrementRetryCount(
+    postId: string,
+    errorMessage: string
+  ): Promise<void> {
+    try {
+      // Get current retry count
+      const { data: currentPost, error: fetchError } = await supabase
+        .from("scheduled_posts")
+        .select("retry_count")
+        .eq("id", postId)
+        .single();
+
+      if (fetchError || !currentPost) {
+        logger.error("Error fetching post for retry:", fetchError);
+        return;
+      }
+
+      const newRetryCount = (currentPost.retry_count || 0) + 1;
+
+      // If max retries reached, mark as failed
+      if (newRetryCount >= MAX_RETRIES) {
+        await this.markPostAsFailed(
+          postId,
+          `Max retries (${MAX_RETRIES}) reached. Last error: ${errorMessage}`
+        );
+        return;
+      }
+
+      // Otherwise, increment retry count
+      const { error } = await supabase
+        .from("scheduled_posts")
+        .update({
+          retry_count: newRetryCount,
+          error_message: `Retry ${newRetryCount}/${MAX_RETRIES}: ${errorMessage}`,
+        })
+        .eq("id", postId);
+
+      if (error) {
+        logger.error("Error incrementing retry count:", error);
+      }
+    } catch (error) {
+      logger.error("Error in incrementRetryCount:", error);
     }
   }
 
@@ -530,7 +732,8 @@ export class SchedulerController {
       if (!socialAccount.is_active) {
         res.status(400).json({
           success: false,
-          error: "Social account is not active",
+          error:
+            "LinkedIn account has been disconnected. Please reconnect your account.",
         });
         return;
       }
@@ -593,7 +796,7 @@ export class SchedulerController {
         });
         return;
       }
-      
+
       const flatPost = {
         id: scheduledPost.id,
         workspace_id: scheduledPost.workspace_id,
@@ -605,7 +808,8 @@ export class SchedulerController {
         content:
           scheduledPost.generated_posts?.[0]?.content || generatedPost.content,
         platform:
-          scheduledPost.generated_posts?.[0]?.platform || generatedPost.platform,
+          scheduledPost.generated_posts?.[0]?.platform ||
+          generatedPost.platform,
         media_urls:
           scheduledPost.generated_posts?.[0]?.media_urls ||
           generatedPost.media_urls ||
