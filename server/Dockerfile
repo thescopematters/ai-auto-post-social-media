@@ -14,7 +14,7 @@ RUN npm install
 COPY . .
 
 # Expose the port your backend uses
-EXPOSE 3002
+EXPOSE 443
 
 # Run your backend using tsx
 CMD ["npx", "tsx", "index.ts"]

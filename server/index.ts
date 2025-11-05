@@ -102,13 +102,15 @@ schedulerController.startScheduler();
 // 🚀 SERVER STARTUP
 const startServer = () => {
   try {
-    app.listen(config.port, () => {
+    const HOST = process.env.HOST || "0.0.0.0";
+    const BACKEND_URL =
+      process.env.BACKEND_URL || `http://localhost:${config.port}`;
+
+    app.listen(config.port, HOST, () => {
       logger.info(`🚀 Server running on port ${config.port}`);
       logger.info(`📝 Env: ${config.nodeEnv}`);
-      logger.info(
-        `🔗 API Base URL: http://localhost:${config.port}${config.api.prefix}`
-      );
-      logger.info(`💚 Health Check: http://localhost:${config.port}/health`);
+      logger.info(`🔗 API Base URL: ${BACKEND_URL}${config.api.prefix}`);
+      logger.info(`💚 Health Check: ${BACKEND_URL}/health`);
     });
   } catch (error) {
     logger.error("Failed to start server:", error);
