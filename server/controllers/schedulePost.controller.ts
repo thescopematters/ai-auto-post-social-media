@@ -53,7 +53,6 @@ interface ExistingPost {
 }
 
 export class SchedulePostController {
-  
   async getScheduledPosts(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;
@@ -147,7 +146,7 @@ export class SchedulePostController {
       });
     }
   }
-  
+
   async schedulePost(req: Request, res: Response): Promise<void> {
     try {
       const { workspaceId } = req.params;
@@ -249,14 +248,16 @@ export class SchedulePostController {
 
       const { data: scheduledPost, error: scheduleError } = await supabaseAdmin
         .from("scheduled_posts")
-        .insert({
-          workspace_id: workspaceId,
-          post_id: postId,
-          social_account_id: socialAccountId,
-          scheduled_time: scheduledTimeUTC,
-          status: "scheduled",
-          timezone: userTimezone,
-        })
+        .insert([
+          {
+            workspace_id: workspaceId,
+            post_id: postId,
+            social_account_id: socialAccountId,
+            scheduled_time: scheduledTime,
+            status: "scheduled",
+            timezone: timezone,
+          },
+        ] as any)
         .select(
           `
           *,

@@ -106,6 +106,7 @@ export interface Database {
           is_active: boolean;
           connected_at: string;
           last_sync: string | null;
+          updated_at?: string;
         };
         Insert: {
           id?: string;
@@ -119,6 +120,7 @@ export interface Database {
           is_active?: boolean;
           connected_at?: string;
           last_sync?: string | null;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -132,6 +134,7 @@ export interface Database {
           is_active?: boolean;
           connected_at?: string;
           last_sync?: string | null;
+          updated_at?: string;
         };
       };
       ai_agent_configs: {
@@ -260,6 +263,7 @@ export interface Database {
           moderated_by: string | null;
           moderated_at: string | null;
           generated_at: string;
+          updated_at?: string;
         };
         Insert: {
           id?: string;
@@ -277,6 +281,7 @@ export interface Database {
           moderated_by?: string | null;
           moderated_at?: string | null;
           generated_at?: string;
+          updated_at?: string;
         };
         Update: {
           id?: string;
@@ -294,6 +299,7 @@ export interface Database {
           moderated_by?: string | null;
           moderated_at?: string | null;
           generated_at?: string;
+          updated_at?: string;
         };
       };
       scheduled_posts: {
@@ -309,6 +315,8 @@ export interface Database {
           error_message: string | null;
           retry_count: number;
           created_at: string;
+          timezone?: string | null;
+          external_post_id?: string | null;
         };
         Insert: {
           id?: string;
@@ -322,6 +330,8 @@ export interface Database {
           error_message?: string | null;
           retry_count?: number;
           created_at?: string;
+          timezone?: string | null;
+          external_post_id?: string | null;
         };
         Update: {
           id?: string;
@@ -335,6 +345,8 @@ export interface Database {
           error_message?: string | null;
           retry_count?: number;
           created_at?: string;
+          timezone?: string | null;
+          external_post_id?: string | null;
         };
       };
       post_analytics: {
@@ -494,7 +506,10 @@ export interface Database {
           id: string;
           workspace_id: string;
           post_id: string;
-          media: string;
+          media_path: string;
+          file_name: string;
+          file_size: number;
+          mime_type: string;
           type: "img" | "pdf" | "doc";
           status: "active" | "inactive" | "deleted";
           created_at: string;
@@ -504,7 +519,10 @@ export interface Database {
           id?: string;
           workspace_id: string;
           post_id: string;
-          media: string;
+          media_path: string;
+          file_name: string;
+          file_size: number;
+          mime_type: string;
           type: "img" | "pdf" | "doc";
           status?: "active" | "inactive" | "deleted";
           created_at?: string;
@@ -514,7 +532,10 @@ export interface Database {
           id?: string;
           workspace_id?: string;
           post_id?: string;
-          media?: string;
+          media_path?: string;
+          file_name?: string;
+          file_size?: number;
+          mime_type?: string;
           type?: "img" | "pdf" | "doc";
           status?: "active" | "inactive" | "deleted";
           created_at?: string;

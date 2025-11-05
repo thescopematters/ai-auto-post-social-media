@@ -139,7 +139,7 @@ export const handleLinkedInCallback = async (
 
     const { error: dbError } = await supabaseAdmin
       .from("social_accounts")
-      .upsert(
+      .upsert([
         {
           workspace_id: workspaceId,
           platform: "linkedin",
@@ -151,7 +151,7 @@ export const handleLinkedInCallback = async (
           is_active: true,
           connected_at: new Date().toISOString(),
           last_sync: new Date().toISOString(),
-        },
+        }] as any,
         {
           onConflict: "workspace_id,platform",
         }
@@ -335,7 +335,7 @@ export const disconnectSocialAccount = async (
         is_active: false,
         access_token: null,
         refresh_token: null,
-      })
+      }) 
       .eq("platform", (platform || "").toLowerCase())
       .in("workspace_id", workspaceIds);
 
