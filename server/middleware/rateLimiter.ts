@@ -31,7 +31,9 @@ export const passwordResetLimiter = rateLimit({
   skipSuccessfulRequests: false,
   keyGenerator: (req) => {
     const email = req.body?.email || "unknown";
-    return `${req.ip}-${email}`;
+    // Properly handle IP - req.ip already handles IPv6
+    const ip = req.ip || req.socket?.remoteAddress || "unknown";
+    return `${ip}-${email}`;
   },
 });
 
@@ -39,4 +41,6 @@ export const uploadLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 20,
   message: "Too many upload requests, please try again after an hour.",
+  standardHeaders: true,
+  legacyHeaders: false,
 });
