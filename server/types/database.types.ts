@@ -440,57 +440,6 @@ export interface Database {
           updated_at?: string;
         };
         Update: {
-          id?: string
-          workspace_id?: string
-          tier?: 'free' | 'pro' | 'enterprise'
-          status?: 'active' | 'cancelled' | 'past_due' | 'trialing'
-          stripe_customer_id?: string | null
-          stripe_subscription_id?: string | null
-          current_period_start?: string | null
-          current_period_end?: string | null
-          cancel_at?: string | null
-          usage_limits?: Json
-          created_at?: string
-          updated_at?: string
-        }
-      }
-      /** NEW TABLE ADDED HERE */
-     payment_transactions: {
-        Row: {
-          id: string
-          user_id: string
-          merchant_transaction_id: string
-          amount: number
-          status: string
-          payment_method: string | null
-          phonepe_reference_id: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string // DEFAULT gen_random_uuid()
-          user_id: string
-          merchant_transaction_id: string
-          amount: number
-          status?: string // DEFAULT 'PENDING'
-          payment_method?: string | null
-          phonepe_reference_id?: string | null
-          created_at?: string // DEFAULT now()
-          updated_at?: string // DEFAULT now()
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          merchant_transaction_id?: string
-          amount?: number
-          status?: string
-          payment_method?: string | null
-          phonepe_reference_id?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-      }
-    }
           id?: string;
           workspace_id?: string;
           tier?: "free" | "pro" | "enterprise";
@@ -501,6 +450,41 @@ export interface Database {
           current_period_end?: string | null;
           cancel_at?: string | null;
           usage_limits?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      payment_transactions: {
+        Row: {
+          id: string;
+          user_id: string;
+          merchant_transaction_id: string;
+          amount: number;
+          status: string;
+          payment_method: string | null;
+          phonepe_reference_id: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          merchant_transaction_id: string;
+          amount: number;
+          status?: string;
+          payment_method?: string | null;
+          phonepe_reference_id?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          merchant_transaction_id?: string;
+          amount?: number;
+          status?: string;
+          payment_method?: string | null;
+          phonepe_reference_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
