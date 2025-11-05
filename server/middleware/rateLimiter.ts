@@ -16,6 +16,7 @@ export const authLimiter = rateLimit({
     "Too many authentication attempts, please try again after 15 minutes.",
   skipSuccessfulRequests: true,
   standardHeaders: true,
+  legacyHeaders: false,
 });
 
 export const passwordResetLimiter = rateLimit({
@@ -29,11 +30,11 @@ export const passwordResetLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: false,
+  // Use email only for the key, let rate-limit handle IP automatically
   keyGenerator: (req) => {
     const email = req.body?.email || "unknown";
-    // Properly handle IP - req.ip already handles IPv6
-    const ip = req.ip || req.socket?.remoteAddress || "unknown";
-    return `${ip}-${email}`;
+    // Don't manually combine with IP - use email as identifier
+    return email;
   },
 });
 
