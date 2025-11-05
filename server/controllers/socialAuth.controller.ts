@@ -100,7 +100,8 @@ export const handleLinkedInCallback = async (
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
-        },
+          // "ngrok-skip-browser-warning": "true",
+        }
       }
     );
 
@@ -112,6 +113,7 @@ export const handleLinkedInCallback = async (
       {
         headers: {
           Authorization: `Bearer ${access_token}`,
+          // "ngrok-skip-browser-warning": "true",
         },
       }
     );
@@ -192,6 +194,7 @@ export const refreshLinkedInToken = async (
       {
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
+          // "ngrok-skip-browser-warning": "true",
         },
       }
     );

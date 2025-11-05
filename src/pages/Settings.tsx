@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ChangePasswordModal } from "../pages/ChangePasswordModal";
-import { authApi } from "../lib/apiClient";
+import { authApi, socialAccountsApi } from "../lib/apiClient";
 
 interface SocialAccount {
   id: string;
@@ -55,6 +55,9 @@ export function Settings() {
       accountName: "",
     }
   );
+
+  const backendUrl =
+    import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
@@ -124,9 +127,6 @@ export function Settings() {
         return;
       }
 
-      const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
-
       window.location.href = `${backendUrl}/auth/linkedin?userId=${profile.id}`;
     } catch (error: any) {
       console.error("Error:", error);
@@ -149,25 +149,9 @@ export function Settings() {
     const { platform } = disconnectConfirm;
 
     try {
-      const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
+      const response = await socialAccountsApi.disconnectAccount(platform);
 
-      const token = localStorage.getItem("accessToken");
-
-      if (!token) {
-        toast.error("Please sign in to disconnect account");
-        return;
-      }
-
-      const response = await fetch(`${backendUrl}/auth/accounts/${platform}`, {
-        method: "DELETE",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (response.ok) {
+      if (response.success) {
         fetchSocialAccounts();
         toast.success(
           `${
@@ -175,11 +159,15 @@ export function Settings() {
           } account disconnected successfully`
         );
       } else {
-        throw new Error("Failed to disconnect account");
+        throw new Error(response.message || "Failed to disconnect account");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error disconnecting account:", error);
-      toast.error("Error disconnecting account. Please try again.");
+      toast.error(
+        error.response?.data?.message ||
+          error.message ||
+          "Error disconnecting account. Please try again."
+      );
     } finally {
       setDisconnectConfirm({ show: false, platform: "", accountName: "" });
     }
@@ -191,35 +179,19 @@ export function Settings() {
 
   const fetchSocialAccounts = async () => {
     try {
-      const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
-      const token = localStorage.getItem("accessToken");
-
-      if (!token) {
-        console.warn("No token for fetching social accounts");
+      if (!currentWorkspace?.id) {
+        console.warn("No workspace ID available");
         return;
       }
 
-      const response = await fetch(
-        `${backendUrl}/workspaces/${currentWorkspace?.id}/social-accounts`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+      const response = await socialAccountsApi.getAccounts(
+        currentWorkspace.id
       );
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success) {
-          setSocialAccounts(data.data);
-        }
-      } else {
-        console.error("Failed to fetch social accounts:", {
-          status: response.status,
-        });
+      if (response.success && response.data) {
+        setSocialAccounts(response.data);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error fetching social accounts:", error);
       setSocialAccounts([]);
     }
@@ -227,7 +199,6 @@ export function Settings() {
 
   const handlePasswordChangeSuccess = async () => {
     setShowChangePasswordModal(false);
-    // Sign out user and redirect to signin
     await signOut();
     navigate("/signin");
   };

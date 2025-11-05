@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
-import { dashboardApi } from "../lib/apiClient";
+import { dashboardApi, socialAccountsApi } from "../lib/apiClient";
 import {
   FileText,
   Sparkles,
@@ -21,6 +21,19 @@ interface DashboardStats {
   pendingModeration: number;
   publishedThisMonth: number;
   avgEngagementRate: number;
+}
+
+interface SocialAccount {
+  id: string;
+  workspace_id: string;
+  platform: string;
+  account_name: string;
+  account_id: string;
+  access_token: string;
+  token_expires_at: string;
+  is_active: boolean;
+  connected_at: string;
+  last_sync: string;
 }
 
 export function Dashboard() {
@@ -43,48 +56,27 @@ export function Dashboard() {
     if (!currentWorkspace) return;
 
     try {
-      const backendUrl =
-        import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
-      const token = localStorage.getItem("accessToken");
+      const response = await socialAccountsApi.getAccounts(currentWorkspace.id);
 
-      if (!token) {
-        setIsSocialConnected(false);
-        setShowSocialModal(true);
-        return;
-      }
+      if (response.success && response.data) {
+        const accounts = response.data as SocialAccount[];
 
-      const response = await fetch(
-        `${backendUrl}/workspaces/${currentWorkspace.id}/social-accounts`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
+        const linkedInConnected = accounts.some(
+          (account) => account.platform === "linkedin" && account.is_active
+        );
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.success && data.data) {
-          const linkedInConnected = data.data.some(
-            (account: any) =>
-              account.platform === "linkedin" && account.is_active
-          );
-          setIsSocialConnected(linkedInConnected);
-          
-          if (!linkedInConnected) {
-            setShowSocialModal(true);
-          } else {
-            setShowSocialModal(false);
-          }
-        } else {
-          setIsSocialConnected(false);
+        setIsSocialConnected(linkedInConnected);
+
+        if (!linkedInConnected) {
           setShowSocialModal(true);
+        } else {
+          setShowSocialModal(false);
         }
       } else {
         setIsSocialConnected(false);
         setShowSocialModal(true);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error checking social connection:", error);
       setIsSocialConnected(false);
       setShowSocialModal(true);

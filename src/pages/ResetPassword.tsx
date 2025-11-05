@@ -9,6 +9,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { toast } from "sonner";
+import { authApi } from "../lib/apiClient";
 
 export function ResetPassword() {
   const navigate = useNavigate();
@@ -21,19 +22,18 @@ export function ResetPassword() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isValidatingToken, setIsValidatingToken] = useState(true);
   const [userEmail, setUserEmail] = useState("");
+  const [resetToken, setResetToken] = useState(""); 
 
   useEffect(() => {
-    // Extract token from URL hash
     const hash = window.location.hash;
-    console.log("🔗 Current URL hash:", hash);
 
     if (hash) {
-      // Parse the hash parameters
       const hashParams = new URLSearchParams(hash.substring(1));
       const accessToken = hashParams.get("access_token");
       const tokenType = hashParams.get("type");
 
       if (accessToken && tokenType === "recovery") {
+        setResetToken(accessToken);
         validateTokenWithBackend(accessToken);
       } else {
         setError("Invalid reset link. Please request a new one.");
@@ -47,16 +47,11 @@ export function ResetPassword() {
 
   const validateTokenWithBackend = async (token: string) => {
     try {
-      const response = await fetch(
-        `http://localhost:3002/api/v1/auth/validate-reset-token?token=${encodeURIComponent(
-          token
-        )}`
-      );
+      const response = await authApi.validateResetToken(token);
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
-        const userEmail = data.data?.user?.email || data.user?.email;
+      if (response.success && response.data) {
+        const data = response.data as { user?: { email?: string } };
+        const userEmail = data.user?.email;
 
         if (userEmail) {
           setUserEmail(userEmail);
@@ -68,16 +63,20 @@ export function ResetPassword() {
           toast.error("Failed to validate reset link");
         }
       } else {
-        const errorMessage = data.message || "Invalid reset token";
+        const errorMessage = response.message || "Invalid reset token";
         setError(errorMessage);
         setIsValidatingToken(false);
         toast.error(errorMessage);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("❌ Token validation error:", err);
-      setError("Failed to validate reset link. Please try again.");
+      const errorMessage =
+        err.response?.data?.message ||
+        err.message ||
+        "Failed to validate reset link. Please try again.";
+      setError(errorMessage);
       setIsValidatingToken(false);
-      toast.error("Failed to validate reset link");
+      toast.error(errorMessage);
     }
   };
 
@@ -98,38 +97,20 @@ export function ResetPassword() {
     setLoading(true);
 
     try {
-      const hash = window.location.hash;
-      const hashParams = new URLSearchParams(hash.substring(1));
-      const accessToken = hashParams.get("access_token");
-
-      const resetData = {
+      const response = await authApi.resetPassword(
         newPassword,
         confirmPassword,
-        resetToken: accessToken, // Include the token for backend auth
-      };
-
-      const response = await fetch(
-        "http://localhost:3002/api/v1/auth/reset-password",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(resetData),
-          credentials: "include",
-        }
+        resetToken 
       );
 
-      const data = await response.json();
-
-      if (response.ok && data.success) {
+      if (response.success) {
         setSuccess(true);
         toast.success("Password reset successfully!");
         setTimeout(() => {
           navigate("/signin");
         }, 3000);
       } else {
-        throw new Error(data.message || "Failed to reset password");
+        throw new Error(response.message || "Failed to reset password");
       }
     } catch (err: any) {
       console.error("❌ Reset password error:", err);

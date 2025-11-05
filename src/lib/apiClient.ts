@@ -25,6 +25,7 @@ class ApiClient {
       baseURL: API_BASE_URL,
       headers: {
         "Content-Type": "application/json",
+        // "ngrok-skip-browser-warning": "true",
       },
       timeout: 30000,
     });
@@ -53,6 +54,11 @@ class ApiClient {
                 `${API_BASE_URL}/auth/refresh`,
                 {
                   refreshToken,
+                },
+                {
+                  // headers: {
+                  // "ngrok-skip-browser-warning": "true",
+                  // },
                 }
               );
               localStorage.setItem("accessToken", data.data.accessToken);
@@ -126,6 +132,7 @@ class ApiClient {
     const response = await this.client.post<ApiResponse<T>>(url, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
+        // "ngrok-skip-browser-warning": "true",
       },
     });
     return response.data;
@@ -165,8 +172,21 @@ export const authApi = {
   forgotPassword: (email: string) =>
     apiClient.post("/auth/forgot-password", { email }),
 
-  resetPassword: (newPassword: string, confirmPassword: string) =>
-    apiClient.post("/auth/reset-password", { newPassword, confirmPassword }),
+  validateResetToken: (token: string) =>
+    apiClient.get(
+      `/auth/validate-reset-token?token=${encodeURIComponent(token)}`
+    ),
+
+  resetPassword: (
+    newPassword: string,
+    confirmPassword: string,
+    resetToken: string
+  ) =>
+    apiClient.post("/auth/reset-password", {
+      newPassword,
+      confirmPassword,
+      resetToken,
+    }),
 };
 
 export const workspaceApi = {
@@ -317,8 +337,8 @@ export const socialAccountsApi = {
   connectAccount: (workspaceId: string, data: any) =>
     apiClient.post(`/workspaces/${workspaceId}/social-accounts`, data),
 
-  disconnectAccount: (workspaceId: string, platform: string) =>
-    apiClient.delete(`/workspaces/${workspaceId}/social-accounts/${platform}`),
+  disconnectAccount: (platform: string) =>
+    apiClient.delete(`/auth/accounts/${platform}`),
 
   updateAccount: (workspaceId: string, accountId: string, data: any) =>
     apiClient.put(

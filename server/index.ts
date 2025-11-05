@@ -44,6 +44,7 @@ app.use(
       "Cache-Control",
       "Pragma",
       "X-Requested-With",
+      "ngrok-skip-browser-warning",
     ],
   })
 );
