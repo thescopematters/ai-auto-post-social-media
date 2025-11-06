@@ -41,7 +41,7 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
       .amount(amount * 100) // Amount in paise
       .redirectUrl(
         process.env.PHONEPE_REDIRECT_URL ||
-        `http://localhost:5173/subscription?merchantTransactionId=${merchantTransactionId}`
+        `${process.env.FRONTEND_URL}/subscription?merchantTransactionId=${merchantTransactionId}`
       )
       .build();
 
