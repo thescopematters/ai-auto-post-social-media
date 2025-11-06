@@ -19,23 +19,32 @@ import schedulePostRoutes from "./routes/schedulePost.routes";
 import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.routes";
 import mediaRoutes from "./routes/media.routes";
 import paymentRoutes from "./routes/payment.routes";
-import bodyParser from "body-parser";
 
 const app: Application = express();
 app.set("trust proxy", 1);
 
-// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
-// (add your webhook logic here if needed)
+const allowedOrigins = [
+  "http://localhost:5173", // dev
+  "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
+];
 
-// Parse URL-encoded & JSON
-app.use(express.urlencoded({ extended: true, limit: "10mb" }));
-app.use(bodyParser.json());
-
-// 🧱 SECURITY & UTILITY MIDDLEWARE
-app.use(helmet());
 app.use(
   cors({
-    origin: config.cors.origin,
+    // origin: (origin, callback) => {
+    //   // Allow requests with no origin (like Postman, curl, or same-origin)
+    //   if (!origin) return callback(null, true);
+
+    //   if (allowedOrigins.includes(origin)) {
+    //     callback(null, true);
+    //   } else {
+    //     logger.warn(`CORS blocked origin: ${origin}`);
+    //     callback(
+    //       new Error(`CORS policy: The origin ${origin} is not allowed.`),
+    //       false
+    //     );
+    //   }
+    // },
+    origin: '*',  
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -49,7 +58,18 @@ app.use(
   })
 );
 
-// ✅ Regular parsers for all other routes
+// Apply helmet AFTER CORS
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
+
+// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
+// (add your webhook logic here if needed)
+
+// Parse URL-encoded & JSON (remove duplicate parsers)
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(express.json({ limit: "10mb" }));
 
 // 🧾 LOGGING
@@ -75,7 +95,7 @@ app.get("/health", (req, res) => {
   });
 });
 
-// 📁 STATIC FILES (from feature branch)
+// 📁 STATIC FILES
 app.use("/uploads", express.static("uploads"));
 
 // 🧩 API ROUTES
@@ -111,6 +131,7 @@ const startServer = () => {
       logger.info(`📝 Env: ${config.nodeEnv}`);
       logger.info(`🔗 API Base URL: ${BACKEND_URL}${config.api.prefix}`);
       logger.info(`💚 Health Check: ${BACKEND_URL}/health`);
+      logger.info(`🌐 Allowed origins: ${allowedOrigins.join(", ")}`);
     });
   } catch (error) {
     logger.error("Failed to start server:", error);
