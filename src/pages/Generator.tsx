@@ -11,7 +11,6 @@ import {
   Sparkles,
   Settings,
   Linkedin,
-  Twitter,
   RefreshCw,
   Calendar,
   Eye,
@@ -22,7 +21,7 @@ import {
   Clock,
   Zap,
   Image,
-  X,
+  X as XIcon,
   Plus,
   Send,
 } from "lucide-react";
@@ -501,10 +500,14 @@ export function Generator() {
                       disabled
                       className="w-full p-4 rounded-lg border-2 border-gray-200 opacity-50 cursor-not-allowed"
                     >
-                      <Twitter className="w-6 h-6 mx-auto mb-2 text-gray-400" />
-                      <span className="block text-sm font-medium text-gray-400">
-                        Twitter
-                      </span>
+                      <svg
+                        className="w-6 h-6 mx-auto mb-2 text-gray-400"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                      >
+                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                      </svg>
+                      <span className="block text-sm font-medium">Twitter</span>
                     </button>
 
                     {showTooltip && (
@@ -689,7 +692,7 @@ export function Generator() {
                   onClick={closeScheduleModal}
                   className="text-gray-400 hover:text-gray-600"
                 >
-                  <X className="w-5 h-5" />
+                  <XIcon className="w-5 h-5" />
                 </button>
               </div>
 
@@ -741,22 +744,49 @@ export function Generator() {
                   </label>
 
                   {modalImagePreviews.length === 0 ? (
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-gray-400 transition cursor-pointer">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleModalImageUpload}
-                        className="hidden"
-                        id="modal-image-upload"
-                      />
-                      <label
-                        htmlFor="modal-image-upload"
-                        className="cursor-pointer flex flex-col items-center"
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-gray-400 transition cursor-pointer">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleModalImageUpload}
+                          className="hidden"
+                          id="modal-image-upload"
+                        />
+                        <label
+                          htmlFor="modal-image-upload"
+                          className="cursor-pointer flex flex-col items-center"
+                        >
+                          <Image className="w-5 h-5 text-gray-400 mb-1" />
+                          <p className="text-xs text-gray-600">
+                            Click to upload
+                          </p>
+                        </label>
+                      </div>
+
+                      <div
+                        className="relative"
+                        onMouseEnter={() => setShowTooltip(true)}
+                        onMouseLeave={() => setShowTooltip(false)}
                       >
-                        <Image className="w-5 h-5 text-gray-400 mb-1" />
-                        <p className="text-xs text-gray-600">Click to upload</p>
-                      </label>
+                        <button
+                          disabled
+                          className="w-full h-full border-2 border-gray-300 rounded-lg p-3 opacity-50 cursor-not-allowed flex flex-col items-center justify-center"
+                        >
+                          <Sparkles className="w-5 h-5 text-gray-400 mb-1" />
+                          <p className="text-xs text-gray-600 whitespace-nowrap">
+                            Generate using AI
+                          </p>
+                        </button>
+
+                        {showTooltip && (
+                          <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 pointer-events-none">
+                            Coming Soon
+                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -772,7 +802,7 @@ export function Generator() {
                               onClick={() => handleRemoveModalImage(index)}
                               className="absolute top-0.5 right-0.5 bg-red-500 text-white p-0.5 rounded hover:bg-red-600 transition opacity-0 group-hover:opacity-100"
                             >
-                              <X className="w-3 h-3" />
+                              <XIcon className="w-3 h-3" />
                             </button>
                           </div>
                         ))}
