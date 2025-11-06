@@ -11,8 +11,7 @@ const router = Router();
 router.post(
   "/createorder",
   authenticate,               
-  paymentController.createOrder
-);
+  paymentController.createOrder);
 
 router.get(
   "/history",
