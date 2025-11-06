@@ -19,6 +19,8 @@ import schedulePostRoutes from "./routes/schedulePost.routes";
 import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.routes";
 import mediaRoutes from "./routes/media.routes";
 import paymentRoutes from "./routes/payment.routes";
+import bodyParser from "body-parser";
+import { webhook } from "./controllers/phone-pay";
 
 const app: Application = express();
 app.set("trust proxy", 1);
@@ -58,15 +60,16 @@ app.use(
   })
 );
 
+app.use("/api/v1/payment/webhook", 
+  bodyParser.raw({ type: "*/*" }), 
+  webhook
+);
 // Apply helmet AFTER CORS
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
-
-// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
-// (add your webhook logic here if needed)
 
 // Parse URL-encoded & JSON (remove duplicate parsers)
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));

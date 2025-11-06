@@ -14,12 +14,10 @@ import {
 } from "../utils/errors";
 import { successResponse } from "../utils/response";
 import logger from "../config/logger";
-import {
-  AuthRequest,
-  isTokenPayloadUser,
-  getUserId,
-  getUserEmail,
-} from "../middleware/auth";
+import dotenv from "dotenv";
+import { error } from "console";
+import { threadId } from "worker_threads";
+dotenv.config()
 
 export const register = async (
   req: AuthRequest,
@@ -65,6 +63,46 @@ export const register = async (
       throw new AuthenticationError("Failed to create user profile");
     }
 
+   // ⚙️ Environment variable setup
+const free_plan_id = process.env.FREE_PLAN_ID; // ✅ keep as UUID string (no Number())
+const userId = authData.user.id;               // ✅ UUID string
+
+// 🟢 1️⃣ Insert into users_plan
+const { data: userPlanData, error: userPlanError } = await supabaseAdmin
+  .from("users_plans")
+  .insert({
+    user_id: userId,               // UUID
+    subs_plan_id: free_plan_id,    // UUID
+    status: "active",
+    start_date: new Date().toISOString(),
+    end_date: null
+  })
+  .select()
+  .single();
+
+if (userPlanError) {
+  console.error("User Plan Insert Error:", userPlanError);
+  throw new Error("Failed to insert into users_plans: " + userPlanError.message);
+}
+
+// 🟢 2️⃣ Insert into user_plan_history
+const { data: planHistoryData, error: planHistoryError } = await supabaseAdmin
+  .from("users_plans_history")
+  .insert({
+    user_plan_id: userPlanData.id,  // UUID
+    plan_id: free_plan_id,          // UUID
+    status: "active"
+  })
+  .select()
+  .single();
+
+if (planHistoryError) {
+  console.error("User Plan History Error:", planHistoryError);
+  throw new Error("Failed to insert into user_plan_history: " + planHistoryError.message);
+}
+
+
+    
     const accessToken = generateAccessToken({
       userId: authData.user.id,
       email,
