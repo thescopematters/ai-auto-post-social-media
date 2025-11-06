@@ -1,11 +1,12 @@
 import { AuthRequest } from "../middleware/auth";
 import { supabaseAdmin } from "../config/database";
 import { randomUUID } from "crypto";
-import { StandardCheckoutPayRequest } from "pg-sdk-node";
+import { PhonePeException, StandardCheckoutPayRequest } from "pg-sdk-node";
 import { Request, Response } from "express";
 import { Database } from "../types/database.types";
 import { phonePayClient } from "../config/phonepe.client";
 import dotenv from "dotenv";
+import { PassThrough } from "stream";
 
 dotenv.config();
 
@@ -134,5 +135,64 @@ export const checkStatus = async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Check status failed:", err.message);
     return res.status(500).json({ success: false, message: err.message });
+  }
+};
+
+export const webhook = async (req: Request, res: Response) => {
+  try {
+    // --- 1️⃣ Extract raw body properly ---
+    const rawBody = req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body));
+    const rawBodyString = rawBody.toString("utf8");
+
+    const authHeader = req.headers["authorization"] as string;
+    console.log("Auth header:", authHeader);
+    console.log("Is Buffer:", req.body instanceof Buffer);
+    console.log("Raw body string:", rawBodyString);
+
+    // --- 2️⃣ Skip validation in development ---
+    if (process.env.NODE_ENV === "development") {
+      console.log("⚠️ Skipping PhonePe callback validation in development mode");
+      return res.status(200).json({
+        success: true,
+        message: "Webhook received (validation skipped in dev)",
+        data: req.body,
+      });
+    }
+
+    // --- 3️⃣ Validate callback in production ---
+    const USERNAME = process.env.PHONEPE_WEBHOOK_USERNAME!;
+    const PASSWORD = process.env.PHONEPE_WEBHOOK_PASSWORD!;
+
+    if (!USERNAME || !PASSWORD) {
+      console.error("❌ Missing PhonePe webhook credentials");
+      return res.status(500).json({ success: false, message: "Server misconfigured (missing credentials)" });
+    }
+
+    const callbackResponse = phonePayClient.validateCallback(
+      USERNAME,
+      PASSWORD,
+      authHeader,
+      rawBody
+    );
+
+    if (callbackResponse) {
+      console.log("✅ Webhook validated successfully:", callbackResponse);
+      return res.status(200).json({
+        success: true,
+        message: "Webhook received and validated",
+        data: callbackResponse,
+      });
+    } else {
+      console.error("❌ PhonePe callback validation failed: empty response");
+      return res.status(400).json({ success: false, message: "Invalid Callback (empty response)" });
+    }
+
+  } catch (error: any) {
+    console.error("❌ PhonePe webhook validation failed:", error);
+    return res.status(400).json({
+      success: false,
+      message: "Invalid Callback",
+      error: error?.message || error,
+    });
   }
 };
