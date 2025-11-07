@@ -88,4 +88,11 @@ router.delete(
   workspaceController.removeWorkspaceMember
 );
 
+router.get(
+  '/:workspaceId/limits',
+  validate([param('workspaceId').isUUID().withMessage('Invalid workspace ID')]),
+  requireWorkspace,
+  workspaceController.getWorkspaceLimits
+);
+
 export default router;

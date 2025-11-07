@@ -65,6 +65,22 @@ export const register = async (
       throw new AuthenticationError("Failed to create user profile");
     }
 
+    const { data: planData, error: planError } = await supabaseAdmin
+      .from("users_plans")
+      .insert({
+        user_id: authData.user.id,
+        subs_plan_id: "576c63d2-e9b3-4a78-8260-caf510b40c94", // Free plan ID
+        status: "active",
+        start_date: new Date().toISOString(),
+      })
+      .select();
+
+    if (planError) {
+      console.error("❌ Failed to assign free plan:", planError);
+    } else {
+      console.log("users_plans entry created successfully");
+    }
+
     const accessToken = generateAccessToken({
       userId: authData.user.id,
       email,
@@ -90,6 +106,7 @@ export const register = async (
       201
     );
   } catch (error) {
+    console.log("❌ Registration error:", error);
     next(error);
   }
 };

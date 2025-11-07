@@ -1,11 +1,11 @@
 // @ts-nocheck
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
-import "dotenv/config";
 
 const seedDatabase = async () => {
   try {
     logger.info("Starting database seeding...");
+
     logger.info("Seeding subscription plans...");
 
     const plans = [
@@ -47,11 +47,11 @@ const seedDatabase = async () => {
       if (planError) {
         logger.error("Error seeding plans:", planError);
       } else {
-        logger.info(`Created ${seededPlans?.length} plans`);
+        logger.info(`✅ Created ${seededPlans?.length} plans`);
       }
     } else {
       logger.info(
-        `Plans already exist: ${existingPlans
+        `✅ Plans already exist: ${existingPlans
           .map((p) => p.plans_name)
           .join(", ")}`
       );

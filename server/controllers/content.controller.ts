@@ -7,6 +7,7 @@ import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
 import geminiService from "../services/gemini.service";
 import { uploadToSupabaseStorage } from "../utils/fileUpload";
+import { checkPostGenerationLimit } from '../utils/limitCheck';
 
 export const generateContent = async (
   req: AuthRequest,
@@ -21,7 +22,7 @@ export const generateContent = async (
       tone,
       framework,
       agentConfigId,
-      variantCount,
+      variantCount = 3,
     } = req.body;
 
     if (!req.user) {
@@ -29,6 +30,24 @@ export const generateContent = async (
     }
 
     const userId = req.user.id;
+
+    // Check generation limits with user ID
+    const limitCheck = await checkPostGenerationLimit(workspaceId, userId);
+    if (!limitCheck.canGenerate) {
+      throw new Error(limitCheck.message || "Post generation limit exceeded");
+    }
+
+    const requestedVariants = variantCount || 3;
+    if (limitCheck.limit !== -1 && limitCheck.currentUsage !== undefined) {
+      const remainingQuota = limitCheck.limit - limitCheck.currentUsage;
+      if (remainingQuota < requestedVariants) {
+        throw new Error(
+          `Only ${remainingQuota} posts remaining this ${
+            limitCheck.planType === "free" ? "week" : "day"
+          }. You requested ${requestedVariants} variants. Please reduce variant count or upgrade to pro plan.`
+        );
+      }
+    }
 
     // Fetch document
     const { data: document, error: docError } = await supabaseAdmin
@@ -52,7 +71,7 @@ export const generateContent = async (
       document.content_text,
       platform as "linkedin" | "twitter",
       tone,
-      variantCount || 3,
+      requestedVariants, // Use the checked variant count
       2,
       framework
     );
