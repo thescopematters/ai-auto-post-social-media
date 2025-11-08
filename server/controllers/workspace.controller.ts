@@ -9,7 +9,7 @@ import {
   checkPostGenerationLimit,
   checkDocumentUploadLimit,
   checkAIGenerationLimit,
-  checkDailyPostLimit,
+  checkWeeklyPostLimit,
 } from "../utils/limitCheck";
 
 export const getAllWorkspaces = async (

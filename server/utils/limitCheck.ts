@@ -225,7 +225,7 @@ export const checkWeeklyPostLimit = async (
 
     const { data: postsThisWeek, error } = await supabaseAdmin
       .from("scheduled_posts")
-      .select("id, created_at, created_by")
+      .select("id, created_at")
       .eq("workspace_id", workspaceId)
       .gte("created_at", startOfWeek.toISOString())
       .lte("created_at", endOfWeek.toISOString())
@@ -243,9 +243,7 @@ export const checkWeeklyPostLimit = async (
       };
     }
 
-    const userPosts =
-      postsThisWeek?.filter((post) => post.created_by === userId) || [];
-    const postsCount = userPosts.length;
+    const postsCount = postsThisWeek?.length || 0;
 
     if (postsCount >= limit) {
       return {

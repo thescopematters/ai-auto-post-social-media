@@ -55,6 +55,8 @@ type GeneratedPost = {
   document_id?: string;
   agent_config_id?: string | null;
   media_urls?: string[];
+  created_at?: string;
+  updated_at?: string;
 };
 
 const FRAMEWORKS = {
@@ -213,24 +215,33 @@ export function Generator() {
         variantCount: 1,
       });
 
-      if (
-        response.success &&
-        Array.isArray(response.data) &&
-        response.data.length > 0
-      ) {
-        const postsWithFramework = (response.data as GeneratedPost[]).map(
-          (post) => ({
+      if (response.success && response.data) {
+        let postsArray: GeneratedPost[] = [];
+
+        if (Array.isArray((response.data as any).posts)) {
+          postsArray = (response.data as any).posts;
+        }
+
+        if (postsArray.length > 0) {
+          const postsWithFramework = postsArray.map((post) => ({
             ...post,
             framework: post.framework || framework,
             platform: post.platform || platform,
-          })
-        );
-        setGeneratedPosts(postsWithFramework);
-        await loadWorkspaceLimits();
+          }));
 
-        toast.success("Posts generated!", {
-          description: `Created ${postsWithFramework.length} posts using ${FRAMEWORKS[framework].name} framework`,
-        });
+          setGeneratedPosts(postsWithFramework);
+          await loadWorkspaceLimits();
+
+          toast.success("Posts generated!", {
+            description: `Created ${postsWithFramework.length} posts using ${FRAMEWORKS[framework].name} framework`,
+          });
+        } else {
+          console.log("❌ No posts in response:", postsArray);
+          toast.error("No posts were generated");
+        }
+      } else {
+        console.log("❌ API response not successful:", response);
+        toast.error("Failed to generate posts");
       }
     } catch (error: any) {
       console.error("Error generating content:", error);

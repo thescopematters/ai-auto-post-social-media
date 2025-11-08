@@ -10,6 +10,7 @@ import { uploadToSupabaseStorage } from "../utils/fileUpload";
 import {
   checkPostGenerationLimit,
   checkDailyPostLimit,
+  checkAIGenerationLimit
 } from "../utils/limitCheck";
 
 export const generateContent = async (
