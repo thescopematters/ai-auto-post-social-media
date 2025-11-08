@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
 import logger from "../config/logger";
 import fetch from "node-fetch";
+import { checkWeeklyPostLimit } from "../utils/limitCheck";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -697,10 +698,19 @@ export class SchedulerController {
         return;
       }
 
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: "User not authenticated",
+        });
+        return;
+      }
+
       // Fetch the generated post to get workspace_id
       const { data: generatedPost, error: postError } = await supabase
         .from("generated_posts")
-        .select("id, content, media_urls, platform, workspace_id")
+        .select("id, content, media_urls, platform, workspace_id, user_id")
         .eq("id", postId)
         .single();
 
@@ -708,6 +718,20 @@ export class SchedulerController {
         res.status(404).json({
           success: false,
           error: "Generated post not found",
+        });
+        return;
+      }
+
+      // ✅ FIX: Use generatedPost.workspace_id instead of undefined workspaceId
+      const weeklyLimitCheck = await checkWeeklyPostLimit(
+        generatedPost.workspace_id, // ✅ CORRECTED
+        userId
+      );
+
+      if (!weeklyLimitCheck.canPost) {
+        res.status(400).json({
+          success: false,
+          error: weeklyLimitCheck.message || "Weekly posting limit exceeded",
         });
         return;
       }

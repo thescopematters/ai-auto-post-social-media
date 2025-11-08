@@ -219,6 +219,9 @@ export const workspaceApi = {
 
   removeMember: (workspaceId: string, memberId: string) =>
     apiClient.delete(`/workspaces/${workspaceId}/members/${memberId}`),
+
+  getLimits: (workspaceId: string) =>
+    apiClient.get(`/workspaces/${workspaceId}/limits`),
 };
 
 export const documentApi = {
@@ -249,6 +252,9 @@ export const documentApi = {
 
   getStats: (workspaceId: string) =>
     apiClient.get(`/workspaces/${workspaceId}/documents/stats`),
+
+  getUploadLimits: (workspaceId: string) =>
+    apiClient.get(`/workspaces/${workspaceId}/documents/upload-limits`),
 };
 
 export const contentApi = {

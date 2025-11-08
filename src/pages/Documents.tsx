@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
-import { documentApi } from "../lib/apiClient";
+import { documentApi, workspaceApi } from "../lib/apiClient";
 import {
   Upload,
   FileText,
@@ -12,7 +12,10 @@ import {
   MoreVertical,
   Trash2,
   Eye,
+  Sparkles,
+  X,
 } from "lucide-react";
+import { toast } from "sonner";
 
 type Document = {
   id: string;
@@ -31,10 +34,13 @@ export function Documents() {
   const [uploading, setUploading] = useState(false);
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [workspaceLimits, setWorkspaceLimits] = useState<any>(null);
 
   useEffect(() => {
     if (currentWorkspace) {
       loadDocuments();
+      loadWorkspaceLimits();
     } else {
       setLoading(false);
     }
@@ -56,8 +62,34 @@ export function Documents() {
     }
   };
 
+  const loadWorkspaceLimits = async () => {
+    if (!currentWorkspace) return;
+    try {
+      const response = await workspaceApi.getLimits(currentWorkspace.id);
+      if (response.success && response.data) {
+        setWorkspaceLimits(response.data);
+      }
+    } catch (error) {
+      console.error("Error loading workspace limits:", error);
+    }
+  };
+
   const handleTextUpload = async (text: string, title: string) => {
     if (!currentWorkspace) return;
+
+    if (
+      workspaceLimits?.documentUpload &&
+      !workspaceLimits.documentUpload.canUpload
+    ) {
+      setShowUploadModal(false);
+      setShowUpgradeModal(true);
+
+      toast.error("Document Limit Reached", {
+        description: `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
+        duration: 5000,
+      });
+      return;
+    }
 
     setUploading(true);
 
@@ -70,10 +102,33 @@ export function Documents() {
 
       if (response.success) {
         await loadDocuments();
+        await loadWorkspaceLimits();
         setShowUploadModal(false);
+        toast.success("Document uploaded successfully!");
+      } else {
+        throw new Error(response.error);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading text:", error);
+
+      const errorMsg = error?.response?.data?.error || error?.message || "";
+
+      if (
+        errorMsg.includes("limit reached") ||
+        errorMsg.includes("Document limit")
+      ) {
+        setShowUploadModal(false);
+        setShowUpgradeModal(true);
+
+        toast.error("Document Limit Reached", {
+          description: errorMsg,
+          duration: 5000,
+        });
+      } else {
+        toast.error("Upload failed", {
+          description: errorMsg || "Failed to upload document",
+        });
+      }
     } finally {
       setUploading(false);
     }
@@ -108,6 +163,119 @@ export function Documents() {
           Upload Document
         </button>
       </div>
+
+      {workspaceLimits?.documentUpload &&
+        workspaceLimits.documentUpload.remaining <= 2 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div
+                  className={`p-3 rounded-lg ${
+                    workspaceLimits.documentUpload.canUpload
+                      ? "bg-yellow-50"
+                      : "bg-red-50"
+                  }`}
+                >
+                  {workspaceLimits.documentUpload.canUpload ? (
+                    <AlertCircle className="w-6 h-6 text-yellow-600" />
+                  ) : (
+                    <AlertCircle className="w-6 h-6 text-red-600" />
+                  )}
+                </div>
+                <div>
+                  <h3
+                    className={`text-lg font-semibold ${
+                      workspaceLimits.documentUpload.canUpload
+                        ? "text-yellow-900"
+                        : "text-red-900"
+                    }`}
+                  >
+                    {workspaceLimits.documentUpload.canUpload
+                      ? "Document Limit Warning"
+                      : "Document Limit Reached"}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p
+                      className={`text-sm ${
+                        workspaceLimits.documentUpload.canUpload
+                          ? "text-yellow-700"
+                          : "text-red-700"
+                      }`}
+                    >
+                      {workspaceLimits.documentUpload.canUpload
+                        ? `Only ${
+                            workspaceLimits.documentUpload.remaining
+                          } document${
+                            workspaceLimits.documentUpload.remaining === 1
+                              ? ""
+                              : "s"
+                          } left`
+                        : `You've used all ${workspaceLimits.documentUpload.limit} document slots`}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-4">
+                {/* Status Icon */}
+                <div
+                  className={`p-2 rounded-lg ${
+                    workspaceLimits.documentUpload.canUpload
+                      ? "bg-yellow-50"
+                      : "bg-red-50"
+                  }`}
+                ></div>
+              </div>
+            </div>
+
+            {/* Upgrade Message */}
+            <div
+              className={`mt-4 p-3 rounded-lg border ${
+                workspaceLimits.documentUpload.canUpload
+                  ? "bg-yellow-50 border-yellow-200"
+                  : "bg-red-50 border-red-200"
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <AlertCircle
+                  className={`w-4 h-4 ${
+                    workspaceLimits.documentUpload.canUpload
+                      ? "text-yellow-600"
+                      : "text-red-600"
+                  } flex-shrink-0`}
+                />
+                <p
+                  className={`text-sm ${
+                    workspaceLimits.documentUpload.canUpload
+                      ? "text-yellow-800"
+                      : "text-red-800"
+                  }`}
+                >
+                  {workspaceLimits.documentUpload.canUpload
+                    ? `Only ${
+                        workspaceLimits.documentUpload.remaining
+                      } document${
+                        workspaceLimits.documentUpload.remaining === 1
+                          ? ""
+                          : "s"
+                      } left. `
+                    : "You've reached your document limit. "}
+                  <button
+                    onClick={() => (window.location.href = "/subscription")}
+                    className={`font-semibold underline hover:${
+                      workspaceLimits.documentUpload.canUpload
+                        ? "text-yellow-900"
+                        : "text-red-900"
+                    } transition`}
+                  >
+                    Upgrade to Pro
+                  </button>{" "}
+                  for unlimited documents.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="p-4 border-b border-gray-200">
@@ -164,6 +332,14 @@ export function Documents() {
           onClose={() => setShowUploadModal(false)}
           onTextUpload={handleTextUpload}
           uploading={uploading}
+        />
+      )}
+
+      {showUpgradeModal && (
+        <UpgradeModal
+          onClose={() => setShowUpgradeModal(false)}
+          currentLimit={workspaceLimits?.documentUpload?.limit || 2}
+          currentCount={workspaceLimits?.documentUpload?.currentCount || 0}
         />
       )}
     </div>
@@ -337,6 +513,126 @@ function UploadModal({
             className="px-6 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition"
           >
             Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UpgradeModal({
+  onClose,
+  currentLimit,
+  currentCount,
+}: {
+  onClose: () => void;
+  currentLimit: number;
+  currentCount: number;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                <AlertCircle className="w-6 h-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">
+                  Document Limit Reached
+                </h3>
+                <p className="text-sm text-gray-600 mt-1">
+                  Free plan: {currentLimit} documents
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-gray-600 transition"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        {/* Body */}
+        <div className="p-6 space-y-4">
+          <p className="text-gray-700">
+            You've reached the maximum number of documents for the free plan.
+            Upgrade to Pro to unlock more features!
+          </p>
+
+          {/* Pro Features */}
+          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              <h4 className="font-semibold text-gray-900">Pro Plan Benefits</h4>
+            </div>
+            <ul className="space-y-2 text-sm text-gray-700">
+              <li className="flex items-start gap-2">
+                <span className="text-purple-600 mt-0.5">✓</span>
+                <span>
+                  <strong>20 Documents</strong> - 10x more storage
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-600 mt-0.5">✓</span>
+                <span>
+                  <strong>100 AI Generations</strong> - Create more content
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-600 mt-0.5">✓</span>
+                <span>
+                  <strong>Unlimited Posts</strong> - Post as much as you want
+                </span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-purple-600 mt-0.5">✓</span>
+                <span>
+                  <strong>Priority Support</strong> - Get help faster
+                </span>
+              </li>
+            </ul>
+          </div>
+
+          {/* Current Usage */}
+          <div className="bg-gray-50 rounded-lg p-3 text-sm">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-gray-600">Current Plan</span>
+              <span className="font-semibold text-gray-900">Free</span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-red-600 h-2 rounded-full"
+                style={{ width: "100%" }}
+              ></div>
+            </div>
+            <p className="text-gray-600 mt-2">
+              {currentCount} / {currentLimit} documents used
+            </p>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 bg-gray-50 border-t border-gray-200 flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition"
+          >
+            Maybe Later
+          </button>
+          <button
+            onClick={() => {
+              onClose();
+              // Navigate to pricing page
+              window.location.href = "/subscription";
+            }}
+            className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition font-semibold"
+          >
+            Upgrade to Pro
           </button>
         </div>
       </div>

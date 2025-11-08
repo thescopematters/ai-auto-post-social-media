@@ -2,9 +2,10 @@
 import { Response, NextFunction } from "express";
 import { AuthRequest } from "../middleware/auth";
 import supabaseAdmin from "../config/database";
-import { NotFoundError } from "../utils/errors";
+import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
+import { checkDocumentUploadLimit } from '../utils/limitCheck';
 
 export const getAllDocuments = async (
   req: AuthRequest,
@@ -83,7 +84,13 @@ export const createDocument = async (
     const { title, fileType, fileUrl, contentText, metadata } = req.body;
 
     if (!req.user) {
-      throw new Error("User not authenticated");
+      throw new AuthorizationError("User not authenticated");
+    }
+
+    const limitCheck = await checkDocumentUploadLimit(workspaceId, req.user.id);
+    
+    if (!limitCheck.canUpload) {
+      throw new Error(limitCheck.message || "Document upload limit exceeded");
     }
 
     const { data, error } = await supabaseAdmin
@@ -199,6 +206,33 @@ export const getDocumentStats = async (
     };
 
     successResponse(res, stats, "Document statistics retrieved successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const checkDocumentUploadLimits = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { workspaceId } = req.params;
+    
+    if (!req.user) {
+      throw new AuthorizationError('User not authenticated');
+    }
+
+    const limitCheck = await checkDocumentUploadLimit(workspaceId, req.user.id);
+
+    successResponse(res, {
+      canUpload: limitCheck.canUpload,
+      message: limitCheck.message,
+      currentCount: limitCheck.currentCount,
+      limit: limitCheck.limit,
+      remaining: limitCheck.limit - limitCheck.currentCount,
+      planType: limitCheck.planType
+    }, 'Document upload limits retrieved successfully');
   } catch (error) {
     next(error);
   }

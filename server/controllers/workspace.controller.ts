@@ -5,7 +5,12 @@ import supabaseAdmin from "../config/database";
 import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse } from "../utils/response";
 import logger from "../config/logger";
-import { checkPostGenerationLimit } from '../utils/limitCheck';
+import {
+  checkPostGenerationLimit,
+  checkDocumentUploadLimit,
+  checkAIGenerationLimit,
+  checkDailyPostLimit,
+} from "../utils/limitCheck";
 
 export const getAllWorkspaces = async (
   req: AuthRequest,
@@ -305,21 +310,63 @@ export const getWorkspaceLimits = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    
+
     if (!req.user) {
-      throw new AuthorizationError('User not authenticated');
+      throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await checkPostGenerationLimit(workspaceId, req.user.id);
+    // Get all limits
+    const documentLimitCheck = await checkDocumentUploadLimit(
+      workspaceId,
+      req.user.id
+    );
+    const aiGenerationCheck = await checkAIGenerationLimit(
+      workspaceId,
+      req.user.id
+    );
+    const weeklyPostCheck = await checkWeeklyPostLimit(
+      workspaceId,
+      req.user.id
+    );
 
-    successResponse(res, {
-      canGenerate: limitCheck.canGenerate,
-      message: limitCheck.message,
-      currentUsage: limitCheck.currentUsage,
-      limit: limitCheck.limit,
-      remaining: limitCheck.limit === -1 ? -1 : (limitCheck.limit - (limitCheck.currentUsage || 0)),
-      planType: limitCheck.planType
-    }, 'Usage limits retrieved successfully');
+    successResponse(
+      res,
+      {
+        // Document upload limits
+        documentUpload: {
+          canUpload: documentLimitCheck.canUpload,
+          message: documentLimitCheck.message,
+          currentCount: documentLimitCheck.currentCount,
+          limit: documentLimitCheck.limit,
+          remaining: documentLimitCheck.limit - documentLimitCheck.currentCount,
+          planType: documentLimitCheck.planType,
+        },
+        // AI generation limits (10 for free, 100 for pro)
+        aiGeneration: {
+          canGenerate: aiGenerationCheck.canGenerate,
+          message: aiGenerationCheck.message,
+          currentUsage: aiGenerationCheck.currentUsage,
+          limit: aiGenerationCheck.limit,
+          remaining: aiGenerationCheck.limit - aiGenerationCheck.currentUsage,
+          planType: aiGenerationCheck.planType,
+        },
+        weeklyPosting: {
+          canPost: weeklyPostCheck.canPost,
+          message: weeklyPostCheck.message,
+          postsThisWeek: weeklyPostCheck.postsThisWeek,
+          limit: weeklyPostCheck.limit,
+          remaining: weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
+          nextResetDate: weeklyPostCheck.nextResetDate,
+          planType: weeklyPostCheck.planType,
+        },
+        // LinkedIn best practices note
+        linkedinRecommendation: {
+          note: "LinkedIn recommends posting 1-2 times per day for optimal engagement. Consistency is more important than frequency.",
+          idealFrequency: "1-2 posts/day",
+        },
+      },
+      "Usage limits retrieved successfully"
+    );
   } catch (error) {
     next(error);
   }

@@ -7,7 +7,10 @@ import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
 import geminiService from "../services/gemini.service";
 import { uploadToSupabaseStorage } from "../utils/fileUpload";
-import { checkPostGenerationLimit } from '../utils/limitCheck';
+import {
+  checkPostGenerationLimit,
+  checkDailyPostLimit,
+} from "../utils/limitCheck";
 
 export const generateContent = async (
   req: AuthRequest,
@@ -22,7 +25,7 @@ export const generateContent = async (
       tone,
       framework,
       agentConfigId,
-      variantCount = 3,
+      variantCount = 1,
     } = req.body;
 
     if (!req.user) {
@@ -31,22 +34,17 @@ export const generateContent = async (
 
     const userId = req.user.id;
 
-    // Check generation limits with user ID
-    const limitCheck = await checkPostGenerationLimit(workspaceId, userId);
-    if (!limitCheck.canGenerate) {
-      throw new Error(limitCheck.message || "Post generation limit exceeded");
+    const requestedVariants = 1;
+
+    if (variantCount > 1) {
+      throw new Error(
+        "Only 1 variant can be generated at a time. Please generate one post at a time."
+      );
     }
 
-    const requestedVariants = variantCount || 3;
-    if (limitCheck.limit !== -1 && limitCheck.currentUsage !== undefined) {
-      const remainingQuota = limitCheck.limit - limitCheck.currentUsage;
-      if (remainingQuota < requestedVariants) {
-        throw new Error(
-          `Only ${remainingQuota} posts remaining this ${
-            limitCheck.planType === "free" ? "week" : "day"
-          }. You requested ${requestedVariants} variants. Please reduce variant count or upgrade to pro plan.`
-        );
-      }
+    const aiLimitCheck = await checkAIGenerationLimit(workspaceId, userId);
+    if (!aiLimitCheck.canGenerate) {
+      throw new Error(aiLimitCheck.message || "AI generation limit exceeded");
     }
 
     // Fetch document
@@ -111,7 +109,25 @@ export const generateContent = async (
       throw new Error("No posts were saved to database");
     }
 
-    successResponse(res, savedPosts, "Content generated successfully", 201);
+    const updatedAILimitCheck = await checkAIGenerationLimit(
+      workspaceId,
+      userId
+    );
+
+    successResponse(
+      res,
+      {
+        posts: savedPosts,
+        limits: {
+          remainingAIGenerations: updatedAILimitCheck.remaining,
+          totalAIGenerations: updatedAILimitCheck.limit,
+          currentUsage: updatedAILimitCheck.currentUsage,
+          planType: updatedAILimitCheck.planType,
+        },
+      },
+      "Content generated successfully",
+      201
+    );
   } catch (error: any) {
     console.error("❌ Error in generateContent:", error.message);
     logger.error("Generation error:", error.message);
@@ -458,6 +474,16 @@ export const schedulePost = async (
 
     if (postError || !post) {
       throw new NotFoundError("Post not found");
+    }
+
+    const weeklyLimitCheck = await checkWeeklyPostLimit(
+      workspaceId,
+      req.user.id
+    );
+    if (!weeklyLimitCheck.canPost) {
+      throw new Error(
+        weeklyLimitCheck.message || "Weekly posting limit exceeded"
+      );
     }
 
     // Create scheduled post record

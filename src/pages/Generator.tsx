@@ -6,6 +6,7 @@ import {
   socialAccountsApi,
   schedulerApi,
   mediaApi,
+  workspaceApi,
 } from "../lib/apiClient";
 import {
   Sparkles,
@@ -24,6 +25,9 @@ import {
   X as XIcon,
   Plus,
   Send,
+  TrendingUp,
+  Info,
+  AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -109,11 +113,14 @@ export function Generator() {
   const [modalImagePreviews, setModalImagePreviews] = useState<string[]>([]);
   const [isScheduleMode, setIsScheduleMode] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [workspaceLimits, setWorkspaceLimits] = useState<any>(null);
+  const [loadingLimits, setLoadingLimits] = useState(false);
 
   useEffect(() => {
     if (currentWorkspace) {
       loadDocuments();
       loadSocialAccounts();
+      loadWorkspaceLimits();
     }
   }, [currentWorkspace]);
 
@@ -168,8 +175,32 @@ export function Generator() {
     }
   };
 
+  const loadWorkspaceLimits = async () => {
+    if (!currentWorkspace) return;
+    setLoadingLimits(true);
+    try {
+      const response = await workspaceApi.getLimits(currentWorkspace.id);
+      if (response.success && response.data) {
+        setWorkspaceLimits(response.data);
+      }
+    } catch (error) {
+      console.error("Error loading workspace limits:", error);
+      toast.error("Failed to load workspace limits");
+    } finally {
+      setLoadingLimits(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!selectedDocument || !currentWorkspace) return;
+
+    if (workspaceLimits && !workspaceLimits.aiGeneration?.canGenerate) {
+      toast.error("AI Generation Limit Reached", {
+        description: workspaceLimits.aiGeneration.message,
+      });
+      return;
+    }
+
     setGenerating(true);
     setGeneratedPosts([]);
 
@@ -179,7 +210,7 @@ export function Generator() {
         platform,
         tone,
         framework,
-        variantCount: 3,
+        variantCount: 1,
       });
 
       if (
@@ -195,13 +226,28 @@ export function Generator() {
           })
         );
         setGeneratedPosts(postsWithFramework);
+        await loadWorkspaceLimits();
+
         toast.success("Posts generated!", {
           description: `Created ${postsWithFramework.length} posts using ${FRAMEWORKS[framework].name} framework`,
         });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error generating content:", error);
-      toast.error("Failed to generate posts");
+
+      const errorMsg = error?.response?.data?.error || error?.message || "";
+
+      if (errorMsg.includes("limit") || errorMsg.includes("exceeded")) {
+        toast.error("AI Generation Limit Reached", {
+          description: errorMsg,
+          duration: 5000,
+        });
+        await loadWorkspaceLimits(); // Refresh limits
+      } else {
+        toast.error("Failed to generate posts", {
+          description: errorMsg,
+        });
+      }
     } finally {
       setGenerating(false);
     }
@@ -289,6 +335,18 @@ export function Generator() {
       return;
     }
 
+    if (
+      workspaceLimits?.weeklyPosting &&
+      !workspaceLimits.weeklyPosting.canPost
+    ) {
+      toast.error("Weekly Post Limit Reached", {
+        description:
+          workspaceLimits.weeklyPosting.message ||
+          "You've reached your weekly posting limit",
+      });
+      return;
+    }
+
     setScheduling(selectedPost.id);
 
     try {
@@ -318,6 +376,7 @@ export function Generator() {
 
       if (publishResponse.success) {
         toast.success("Post published successfully!");
+        await loadWorkspaceLimits();
         closeScheduleModal();
       } else {
         toast.error("Failed to publish post", {
@@ -342,6 +401,18 @@ export function Generator() {
       !scheduledTime
     ) {
       toast.error("Please fill all required fields");
+      return;
+    }
+
+    if (
+      workspaceLimits?.weeklyPosting &&
+      !workspaceLimits.weeklyPosting.canPost
+    ) {
+      toast.error("Weekly Post Limit Reached", {
+        description:
+          workspaceLimits.weeklyPosting.message ||
+          "You've reached your weekly posting limit",
+      });
       return;
     }
 
@@ -389,6 +460,7 @@ export function Generator() {
 
       if (response.success) {
         toast.success("Post scheduled successfully!");
+        await loadWorkspaceLimits();
         closeScheduleModal();
       } else {
         toast.error("Failed to schedule post", {
@@ -428,6 +500,8 @@ export function Generator() {
     return <FrameworkIcon className="w-4 h-4" />;
   };
 
+  const isPro = workspaceLimits?.postGeneration?.planType === "pro";
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
       <div className="mb-8">
@@ -439,6 +513,138 @@ export function Generator() {
           frameworks
         </p>
       </div>
+
+      {loadingLimits ? (
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse"
+            >
+              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
+              <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
+              <div className="h-3 bg-gray-200 rounded w-20"></div>
+            </div>
+          ))}
+        </div>
+      ) : workspaceLimits ? (
+        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* AI Generations */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                AI Generations
+              </span>
+              {workspaceLimits.aiGeneration?.canGenerate ? (
+                <Sparkles className="w-4 h-4 text-purple-600" />
+              ) : (
+                <AlertCircle className="w-4 h-4 text-red-600" />
+              )}
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {workspaceLimits.aiGeneration?.currentUsage || 0} /{" "}
+              {workspaceLimits.aiGeneration?.limit || 0}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              {workspaceLimits.aiGeneration?.remaining || 0} remaining
+            </div>
+
+            {!workspaceLimits.aiGeneration?.canGenerate && (
+              <div className="mt-2 text-xs text-red-600 font-medium">
+                Limit reached! Upgrade to Pro for more.
+              </div>
+            )}
+          </div>
+
+          {/* Documents */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                Documents
+              </span>
+              <BookOpen className="w-4 h-4 text-blue-600" />
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {workspaceLimits.documentUpload?.currentCount || 0} /{" "}
+              {workspaceLimits.documentUpload?.limit || 0}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              {workspaceLimits.documentUpload?.remaining || 0} slots left
+            </div>
+          </div>
+
+          {/* ✅ Weekly Posts */}
+          <div className="bg-white rounded-lg border border-gray-200 p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                {isPro ? "Posts" : "Weekly Posts"}
+              </span>
+              <Calendar className="w-4 h-4 text-green-600" />
+            </div>
+            <div className="text-2xl font-bold text-gray-900">
+              {isPro
+                ? "∞"
+                : `${workspaceLimits.weeklyPosting?.postsThisWeek || 0} / ${
+                    workspaceLimits.weeklyPosting?.limit || 2
+                  }`}
+            </div>
+            <div className="text-xs text-gray-600 mt-1">
+              {isPro
+                ? "Unlimited"
+                : `${workspaceLimits.weeklyPosting?.remaining || 0} this week`}
+            </div>
+            {!isPro && workspaceLimits.weeklyPosting?.nextResetDate && (
+              <div className="text-xs text-gray-500 mt-1">
+                Resets:{" "}
+                {new Date(
+                  workspaceLimits.weeklyPosting.nextResetDate
+                ).toLocaleDateString()}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
+
+      {workspaceLimits?.linkedinRecommendation && (
+        <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
+          <div className="flex items-start gap-3">
+            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
+                LinkedIn Best Practices
+                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                  {workspaceLimits.linkedinRecommendation.idealFrequency}
+                </span>
+              </h4>
+              <p className="text-sm text-gray-700 mb-2">
+                {workspaceLimits.linkedinRecommendation.note}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isPro && workspaceLimits && (
+        <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+          <div className="flex items-start gap-3">
+            <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h4 className="font-semibold text-gray-900 mb-1">
+                Upgrade to Pro Plan
+              </h4>
+              <p className="text-sm text-gray-600 mb-3">
+                Get 20 documents, 100 AI generations, and unlimited daily posts
+              </p>
+              <button
+                onClick={() => (window.location.href = "/subscription")}
+                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
+              >
+                Upgrade Now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Configuration Panel */}
@@ -1003,17 +1209,6 @@ export function Generator() {
                   <div className="flex justify-between text-xs text-gray-600 mb-2">
                     <span>Characters</span>
                     <span className="font-medium">{editedContent.length}</span>
-                  </div>
-                  <div className="w-full bg-gray-200 rounded-full h-1.5">
-                    <div
-                      className="bg-blue-600 h-1.5 rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(
-                          (editedContent.length / 3000) * 100,
-                          100
-                        )}%`,
-                      }}
-                    ></div>
                   </div>
                 </div>
               </div>

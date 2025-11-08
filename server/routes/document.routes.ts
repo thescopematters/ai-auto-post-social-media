@@ -10,6 +10,13 @@ const router = Router();
 router.use(authenticate);
 
 router.get(
+  '/:workspaceId/documents/upload-limits',
+  validate([param('workspaceId').isUUID().withMessage('Invalid workspace ID')]),
+  requireWorkspace,
+  documentController.checkDocumentUploadLimits
+);
+
+router.get(
   '/:workspaceId/documents',
   validate([
     param('workspaceId').isUUID().withMessage('Invalid workspace ID'),
