@@ -71,108 +71,90 @@ export function Subscription() {
   };
 
   useEffect(() => {
-  fetchHistory();
+    fetchHistory();
 
-  const params = new URLSearchParams(window.location.search);
-  const merchantTransactionId = params.get('merchantTransactionId');
+    const params = new URLSearchParams(window.location.search);
+    const merchantTransactionId = params.get('merchantTransactionId');
 
-  if (!merchantTransactionId) return;
+    if (!merchantTransactionId) return;
 
-  // show a small info while we check
-  toast('Verifying payment...', { icon: '🔎' });
+    toast('Verifying payment...', { icon: '🔎' });
 
-  paymentApi
-  .checkStatus(merchantTransactionId)
-  .then((res: CheckStatusResponse) => {
+    paymentApi
+      .checkStatus(merchantTransactionId)
+      .then((res: CheckStatusResponse) => {
+        console.log('[checkStatus] raw response:', res);
 
-      // log full response so we can inspect shape
-      console.log('[checkStatus] raw response:', res);
+        const anyRes = res as any;
 
-      // Try to coerce into known shapes:
-      // Backend might return { success, data: {...} } or { success, ... } or { data: {...} }
-      const anyRes = res as any;
+        const payload = anyRes?.data?.data ?? anyRes?.data ?? anyRes;
 
-      // find payload container (most likely places)
-      const payload =
-        anyRes?.data?.data ?? // sometimes axios wraps again (unlikely but safe)
-        anyRes?.data ?? // common: { success, data: {...} } -> anyRes.data
-        anyRes; // or the response is already the data object
+        console.log('[checkStatus] payload:', payload);
 
-      console.log('[checkStatus] payload:', payload);
+        const successFlag = typeof anyRes?.success === 'boolean' ? anyRes.success : payload?.success ?? true;
 
-      // If the top-level has success flag and payload is nested differently:
-      const successFlag =
-        typeof anyRes?.success === 'boolean' ? anyRes.success : payload?.success ?? true;
+        if (!successFlag) {
+          console.warn('[checkStatus] success flag false:', anyRes);
+          toast.error(anyRes?.message || 'Failed to verify payment (server returned failure).');
+          return;
+        }
 
-      if (!successFlag) {
-        console.warn('[checkStatus] success flag false:', anyRes);
-        toast.error(anyRes?.message || 'Failed to verify payment (server returned failure).');
-        return;
-      }
+        const data = payload?.data ?? payload;
 
-      // check common fields
-      // Payment details could be in payload.paymentDetails OR payload.data.paymentDetails etc.
-      const data =
-        payload?.data ?? // e.g. payload = { success, data: { status, paymentDetails } }
-        payload; // payload might already be the actual data
+        console.log('[checkStatus] normalized data:', data);
 
-      console.log('[checkStatus] normalized data:', data);
+        const paymentDetail = data?.paymentDetails?.[0] ?? data?.paymentDetails;
+        const pd = Array.isArray(paymentDetail) ? paymentDetail[0] : paymentDetail;
 
-      // defensive parse of status
-      const paymentDetail = data?.paymentDetails?.[0] ?? data?.paymentDetails ?? undefined;
-      // if paymentDetail is an array of array or object, handle gracefully
-      const pd = Array.isArray(paymentDetail) ? paymentDetail[0] : paymentDetail;
+        const statusValue =
+          (typeof data?.status === 'string' && data.status.toUpperCase?.()) ||
+          (typeof pd?.state === 'string' && pd.state.toUpperCase?.()) ||
+          'FAILED';
 
-      const statusValue =
-        (typeof data?.status === 'string' && data.status.toUpperCase?.()) ||
-        (typeof pd?.state === 'string' && pd.state.toUpperCase?.()) ||
-        'FAILED';
+        console.log('[checkStatus] statusValue:', statusValue, 'paymentDetail:', pd);
 
-      console.log('[checkStatus] statusValue:', statusValue, 'paymentDetail:', pd);
+        const isSuccess = statusValue === 'COMPLETED' || statusValue === 'SUCCESS';
 
-      const isSuccess = statusValue === 'COMPLETED' || statusValue === 'SUCCESS';
+        setResultStatus(isSuccess ? 'success' : 'failed');
+        setResultMessage(isSuccess ? 'Payment completed successfully.' : 'Payment failed. Please try again.');
 
-      setResultStatus(isSuccess ? 'success' : 'failed');
-      setResultMessage(
-        isSuccess ? 'Payment completed successfully.' : 'Payment failed. Please try again.'
-      );
+        setResultInfo({
+          transactionId: pd?.transactionId || data?.transactionId,
+          orderId: data?.merchantOrderId || data?.merchant_transaction_id || data?.orderId,
+          amount: pd?.amount || data?.amount,
+          paymentMode: pd?.paymentMode || data?.paymentMode || data?.payment_method,
+          timestamp: pd?.timestamp ? new Date(pd.timestamp).toLocaleString() : undefined,
+        });
 
-      setResultInfo({
-        transactionId: pd?.transactionId || data?.transactionId,
-        orderId: data?.merchantOrderId || data?.merchant_transaction_id || data?.orderId,
-        amount: pd?.amount || data?.amount,
-        paymentMode: pd?.paymentMode || data?.paymentMode || data?.payment_method,
-        timestamp: pd?.timestamp ? new Date(pd.timestamp).toLocaleString() : undefined,
+        setResultOpen(true);
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('merchantTransactionId');
+        window.history.replaceState({}, '', url.toString());
+
+        if (isSuccess) {
+          fetchHistory();
+          toast.success('Payment verified.');
+        } else {
+          toast.error('Payment verification failed.');
+        }
+      })
+      .catch((err: unknown) => {
+        console.error('[checkStatus] error:', err);
+        toast.error('Error verifying payment. Check console for details.');
       });
-
-      setResultOpen(true);
-
-      // remove the query param
-      const url = new URL(window.location.href);
-      url.searchParams.delete('merchantTransactionId');
-      window.history.replaceState({}, '', url.toString());
-
-      if (isSuccess) {
-        fetchHistory();
-        toast.success('Payment verified.');
-      } else {
-        toast.error('Payment verification failed.');
-      }
-    })
-    .catch((err: unknown) => {
-      console.error('[checkStatus] error:', err);
-      toast.error('Error verifying payment. Check console for details.');
-    });
-}, []);
-
+  }, []);
 
   // 💳 Handle Upgrade Click
-  const handleUpgradeClick = async () => {
+  const handleUpgradeClick = async (selectedPlan: string) => {
     if (loading) return;
     setLoading(true);
 
     try {
-      const res = await apiClient.post<CreateOrderResponse>('/payment/createorder', { amount: 399 });
+      const res = await apiClient.post<CreateOrderResponse>('/payment/createorder', {
+        plan: selectedPlan, // ✅ send selected plan
+      });
+
       console.log('createOrder response:', res);
 
       const redirectUrl = res.redirectUrl ?? res.data?.redirectUrl;
@@ -207,10 +189,7 @@ export function Subscription() {
             <span className="text-sm text-gray-500">INR / month</span>
           </div>
           <p className="mt-3 text-sm text-gray-600">Intelligence for everyday tasks</p>
-          <button
-            disabled
-            className="mt-5 w-full py-2.5 rounded-lg bg-gray-100 text-gray-500 font-medium cursor-default"
-          >
+          <button disabled className="mt-5 w-full py-2.5 rounded-lg bg-gray-100 text-gray-500 font-medium cursor-default">
             Your current plan
           </button>
           <ul className="mt-6 space-y-3 text-sm">
@@ -224,10 +203,8 @@ export function Subscription() {
 
         {/* Go Plan */}
         <div className="bg-white border border-blue-200 rounded-2xl p-6 shadow-sm relative">
-          <div className="absolute -top-3 right-4 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">
-            NEW
-          </div>
-          <h2 className="text-lg font-semibold text-gray-900">Go</h2>
+          <div className="absolute -top-3 right-4 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">NEW</div>
+          <h2 className="text-lg font-semibold text-gray-900">Pro</h2>
           <div className="mt-4 flex items-baseline gap-2">
             <span className="text-4xl font-bold text-gray-900">₹399</span>
             <span className="text-sm text-gray-500">INR / month (inclusive of GST)</span>
@@ -235,7 +212,7 @@ export function Subscription() {
           <p className="mt-3 text-sm text-gray-600">More access to popular features</p>
 
           <button
-            onClick={handleUpgradeClick}
+            onClick={() => handleUpgradeClick('Pro plan')}
             disabled={loading}
             className="mt-5 w-full py-2.5 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
           >
@@ -250,9 +227,8 @@ export function Subscription() {
             <Feature text="Limited deep research" icon={<Star className="w-4 h-4" />} />
             <Feature text="Projects, tasks, custom GPTs" />
           </ul>
-          <p className="mt-4 text-xs text-gray-500">
-            Only available in certain regions. Limits apply.
-          </p>
+
+          <p className="mt-4 text-xs text-gray-500">Only available in certain regions. Limits apply.</p>
         </div>
       </div>
 
@@ -300,10 +276,7 @@ export function Subscription() {
                           </span>
                         </td>
                         <td className="py-2 pr-4">{t.payment_method || '-'}</td>
-                        <td
-                          className="py-2 pr-4 truncate max-w-[220px]"
-                          title={t.phonepe_reference_id || t.merchant_transaction_id}
-                        >
+                        <td className="py-2 pr-4 truncate max-w-[220px]" title={t.phonepe_reference_id || t.merchant_transaction_id}>
                           {t.phonepe_reference_id || t.merchant_transaction_id}
                         </td>
                       </tr>
@@ -313,21 +286,13 @@ export function Subscription() {
             </div>
 
             <div className="mt-4 flex justify-end gap-2">
-              <button
-                disabled={page <= 1}
-                onClick={() => setPage(page - 1)}
-                className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
-              >
+              <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50">
                 Previous
               </button>
               <span className="px-2 py-1 text-gray-700">
                 {page} / {totalPages}
               </span>
-              <button
-                disabled={page >= totalPages}
-                onClick={() => setPage(page + 1)}
-                className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50"
-              >
+              <button disabled={page >= totalPages} onClick={() => setPage(page + 1)} className="px-3 py-1 rounded-lg border border-gray-300 text-gray-700 disabled:opacity-50">
                 Next
               </button>
             </div>
@@ -340,9 +305,7 @@ export function Subscription() {
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setResultOpen(false)} />
           <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
-            <div className="mb-2 text-lg font-semibold text-gray-900">
-              {resultStatus === 'success' ? '✅ Payment Successful' : '❌ Payment Failed'}
-            </div>
+            <div className="mb-2 text-lg font-semibold text-gray-900">{resultStatus === 'success' ? '✅ Payment Successful' : '❌ Payment Failed'}</div>
             <div className="text-sm text-gray-600 mb-3">{resultMessage}</div>
 
             {(resultInfo.transactionId || resultInfo.amount || resultInfo.orderId) && (
@@ -362,9 +325,7 @@ export function Subscription() {
                 {resultInfo.amount !== undefined && (
                   <div className="flex justify-between mt-1">
                     <span>Amount:</span>
-                    <span className="font-medium text-gray-900">
-                      ₹{resultInfo.amount.toFixed(2)}
-                    </span>
+                    <span className="font-medium text-gray-900">₹{resultInfo.amount.toFixed(2)}</span>
                   </div>
                 )}
                 {resultInfo.paymentMode && (
@@ -384,24 +345,15 @@ export function Subscription() {
 
             <div className="flex items-center justify-end gap-3 mt-4">
               {resultStatus === 'success' ? (
-                <button
-                  onClick={() => setResultOpen(false)}
-                  className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700"
-                >
+                <button onClick={() => setResultOpen(false)} className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700">
                   Continue
                 </button>
               ) : (
                 <>
-                  <button
-                    onClick={() => setResultOpen(false)}
-                    className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200"
-                  >
+                  <button onClick={() => setResultOpen(false)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200">
                     Close
                   </button>
-                  <button
-                    onClick={handleUpgradeClick}
-                    className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700"
-                  >
+                  <button onClick={() => handleUpgradeClick('go')} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
                     Try again
                   </button>
                 </>

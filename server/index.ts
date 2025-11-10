@@ -21,6 +21,7 @@ import mediaRoutes from "./routes/media.routes";
 import paymentRoutes from "./routes/payment.routes";
 import bodyParser from "body-parser";
 import { webhook } from "./controllers/phone-pay";
+import * as paymentController from "./controllers/phone-pay";
 
 const app: Application = express();
 app.set("trust proxy", 1);
@@ -121,6 +122,7 @@ app.use(errorHandler);
 
 // 🕒 SCHEDULER
 schedulerController.startScheduler();
+// paymentController.startScheduler();
 
 // 🚀 SERVER STARTUP
 const startServer = () => {

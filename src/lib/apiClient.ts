@@ -1,7 +1,7 @@
 import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://8234e725cffe.ngrok-free.app/api/v1";
+  import.meta.env.VITE_API_BASE_URL || "https://localhost:3002/api/v1";
 
 interface ApiResponse<T = any> {
   redirectUrl: any;

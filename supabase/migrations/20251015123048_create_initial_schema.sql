@@ -525,7 +525,42 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   amount numeric(10,2) NOT NULL,
   status text DEFAULT 'PENDING',
   payment_method text,          
-  phonepe_reference_id text,    
+  phonepe_reference_id text,
+  recheck_count integer DEFAULT 0,        
+  last_checked_at timestamptz DEFAULT now();
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS plans{
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now(),
+  plans_name VARCHAR(255) NOT NULL,
+  status VARCHAR(50) DEFAULT 'active',
+  "limit" JSONB DEFAULT '{}' 
+
+}
+
+CREATE TABLE IF NOT EXISTS users_plans (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    user_id INT NOT NULL,
+    subs_plan_id INT NOT NULL,
+    status VARCHAR(50) DEFAULT 'active',
+    start_date DATE NOT NULL,
+    end_date DATE NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (subs_plan_id) REFERENCES plans(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS users_plans_history (
+    id SERIAL PRIMARY KEY,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    users_plan_id INT NOT NULL,
+    plan_id INT NOT NULL,
+    status VARCHAR(50) DEFAULT 'active',
+    FOREIGN KEY (users_plan_id) REFERENCES users_plans(id) ON DELETE CASCADE,
+    FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE
 );

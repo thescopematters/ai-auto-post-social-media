@@ -475,8 +475,10 @@ export interface Database {
           status: string;
           payment_method: string | null;
           phonepe_reference_id: string | null;
+          phonepe_order_id:string,
           created_at: string;
           updated_at: string;
+          plan_id:string
         };
         Insert: {
           id?: string;
@@ -486,8 +488,10 @@ export interface Database {
           status?: string;
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
+          phonepe_order_id:string,
           created_at?: string;
           updated_at?: string;
+          plan_id:string
         };
         Update: {
           id?: string;
@@ -497,8 +501,10 @@ export interface Database {
           status?: string;
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
+          phonepe_order_id:string,
           created_at?: string;
           updated_at?: string;
+          plan_id:string
         };
       };
       post_media: {
