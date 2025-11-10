@@ -302,7 +302,6 @@ export const processPendingTransactions = async () => {
     const twoHoursAgo = new Date(Date.now() - TWO_HOURS_MS).toISOString();
 
     while (true) {
-      // ✅ FIXED: Correct Supabase OR format
       const { data: pendingTxns, error } = await supabaseAdmin
         .from("payment_transactions")
         .select("*")
@@ -323,7 +322,7 @@ export const processPendingTransactions = async () => {
 
       for (const txn of pendingTxns) {
         try {
-          // ✅ Update recheck_count + last_checked_at
+          // Update recheck_count + last_checked_at
           await supabaseAdmin
             .from("payment_transactions")
             .update({
@@ -333,24 +332,17 @@ export const processPendingTransactions = async () => {
             })
             .eq("id", txn.id);
 
-          // ✅ Fetch PhonePe status
+          // Fetch PhonePe status
           const response = await phonePayClient.getOrderStatus(txn.merchant_transaction_id);
           const remoteState = response?.state?.toUpperCase?.() || "PENDING";
 
           let finalStatus = txn.status;
 
+          // Only change status if PhonePe reports COMPLETED or FAILED
           if (remoteState === "COMPLETED") finalStatus = "SUCCESS";
           else if (remoteState === "FAILED") finalStatus = "FAILED";
-          else if (
-            remoteState === "PENDING" &&
-            (txn.recheck_count + 1 >= max_recheck ||
-              new Date(txn.last_checked_at).getTime() < Date.now() - TWO_HOURS_MS)
-          ) {
-            // ✅ After max retry OR stuck beyond 2 hours → mark FAILED
-            finalStatus = "FAILED";
-          }
 
-          if (finalStatus !== "PENDING") {
+          if (finalStatus !== txn.status && finalStatus !== "PENDING") {
             await supabaseAdmin
               .from("payment_transactions")
               .update({

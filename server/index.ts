@@ -122,7 +122,7 @@ app.use(errorHandler);
 
 // 🕒 SCHEDULER
 schedulerController.startScheduler();
-// paymentController.startScheduler();
+paymentController.startScheduler();
 
 // 🚀 SERVER STARTUP
 const startServer = () => {
