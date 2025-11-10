@@ -542,6 +542,88 @@ export interface Database {
           updated_at?: string;
         };
       };
+      user_usage_limits: {
+        Row: {
+          id: string;
+          user_id: string;
+          usage_data: {
+            total_ai_generations: number;
+            total_documents: number;
+            weekly_posts_count: number;
+            week_start_date: string | null;
+            next_reset_date: string | null;
+          };
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          usage_data?: {
+            total_ai_generations?: number;
+            total_documents?: number;
+            weekly_posts_count?: number;
+            week_start_date?: string | null;
+            next_reset_date?: string | null;
+          };
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          usage_data?: {
+            total_ai_generations?: number;
+            total_documents?: number;
+            weekly_posts_count?: number;
+            week_start_date?: string | null;
+            next_reset_date?: string | null;
+          };
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      platform_usage: {
+        Row: {
+          id: string;
+          user_id: string;
+          platform: "linkedin" | "twitter" | "facebook" | "instagram";
+          platform_data: {
+            ai_generations_count: number;
+            published_posts_count: number;
+            scheduled_posts_count: number;
+            last_activity: string | null;
+          };
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          platform: "linkedin" | "twitter" | "facebook" | "instagram";
+          platform_data?: {
+            ai_generations_count?: number;
+            published_posts_count?: number;
+            scheduled_posts_count?: number;
+            last_activity?: string | null;
+          };
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          platform?: "linkedin" | "twitter" | "facebook" | "instagram";
+          platform_data?: {
+            ai_generations_count?: number;
+            published_posts_count?: number;
+            scheduled_posts_count?: number;
+            last_activity?: string | null;
+          };
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: {
       [_ in never]: never;

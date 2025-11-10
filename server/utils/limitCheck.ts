@@ -1,162 +1,168 @@
 import supabaseAdmin from "../config/database";
 
-interface LimitCheckResponse {
-  canGenerate: boolean;
-  message?: string;
-  currentUsage?: number;
-  limit?: number;
-  planType?: string;
-  remainingAIGenerations?: number;
-  totalAIGenerations?: number;
-}
-
-export const checkDocumentUploadLimit = async (
-  workspaceId: string,
-  userId: string
-): Promise<{
-  canUpload: boolean;
-  message?: string;
-  currentCount: number;
-  limit: number;
-  planType: string;
-}> => {
-  try {
-    // Get user plan
-    const { data: userPlan } = await supabaseAdmin
-      .from("users_plans")
-      .select("*, plans(*)")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .single();
-
-    const planType = userPlan?.plans?.limit?.plan_type || "free";
-    const limit =
-      planType === "pro"
-        ? parseInt(process.env.PAID_USER_DOCUMENT_LIMIT || "20")
-        : parseInt(process.env.FREE_USER_DOCUMENT_LIMIT || "2");
-
-    // Count existing documents for this workspace
-    const { data: documents, error } = await supabaseAdmin
-      .from("documents")
-      .select("id")
-      .eq("workspace_id", workspaceId);
-
-    if (error) {
-      console.error("❌ Error fetching documents:", error);
-      return {
-        canUpload: false,
-        message: "Error checking document limit",
-        currentCount: 0,
-        limit,
-        planType,
-      };
-    }
-
-    const currentCount = documents?.length || 0;
-
-    if (currentCount >= limit) {
-      return {
-        canUpload: false,
-        message: `Document limit reached (${limit}). ${
-          planType === "free" ? "Upgrade to Pro for 20 documents." : ""
-        }`,
-        currentCount,
-        limit,
-        planType,
-      };
-    }
-
-    return {
-      canUpload: true,
-      currentCount,
-      limit,
-      planType,
-    };
-  } catch (error) {
-    console.error("❌ Error in document limit check:", error);
-    return {
-      canUpload: false,
-      message: "Error checking limits",
-      currentCount: 0,
-      limit: 2,
-      planType: "free",
-    };
-  }
-};
-
-export const checkAIGenerationLimit = async (
-  workspaceId: string,
-  userId: string
-): Promise<{
+interface UsageLimits {
   canGenerate: boolean;
   message?: string;
   currentUsage: number;
   limit: number;
   planType: string;
   remaining: number;
-}> => {
+}
+
+interface WeeklyPostLimits {
+  canPost: boolean;
+  message?: string;
+  postsThisWeek: number;
+  limit: number;
+  planType: string;
+  nextResetDate: string;
+}
+
+interface DocumentLimits {
+  canUpload: boolean;
+  message?: string;
+  currentCount: number;
+  limit: number;
+  planType: string;
+}
+
+const getUserPlanLimits = async (userId: string) => {
   try {
-    // Get user plan
-    const { data: userPlan } = await supabaseAdmin
+    const { data: userPlan, error } = await supabaseAdmin
       .from("users_plans")
-      .select("*, plans(*)")
+      .select("*, plans:subs_plan_id(limit)")
       .eq("user_id", userId)
       .eq("status", "active")
       .single();
 
-    const planType = userPlan?.plans?.limit?.plan_type || "free";
-    const limit =
-      planType === "pro"
-        ? parseInt(process.env.PAID_USER_AI_GENERATION_LIMIT || "100")
-        : parseInt(process.env.FREE_USER_AI_GENERATION_LIMIT || "10");
-
-    const { data: posts, error } = await supabaseAdmin
-      .from("generated_posts")
-      .select("document_id, generated_at")
-      .eq("workspace_id", workspaceId)
-      .eq("user_id", userId);
-
-    if (error) {
-      console.error("❌ Error fetching AI generations:", error);
+    if (error || !userPlan) {
+      // Default free plan limits
       return {
-        canGenerate: false,
-        message: "Error checking AI generation limit",
-        currentUsage: 0,
-        limit,
-        planType,
-        remaining: limit,
+        plan_type: "free",
+        ai_limit: 10,
+        document_limit: 2,
+        weekly_post_limit: 2
       };
     }
 
-    const uniqueGenerations = new Set();
-    posts?.forEach((post) => {
-      const timestamp = new Date(post.generated_at).toISOString().slice(0, 16);
-      uniqueGenerations.add(`${post.document_id}-${timestamp}`);
-    });
+    const planData = userPlan.plans?.limit || {};
+    const planType = planData.plan_type || "free";
+    
+    return {
+      plan_type: planType,
+      ai_limit: planType === "pro" ? 100 : 10,
+      document_limit: planType === "pro" ? 20 : 2,
+      weekly_post_limit: planType === "pro" ? 0 : 2 // 0 = unlimited
+    };
+  } catch (error) {
+    console.error("❌ Error getting user plan:", error);
+    return {
+      plan_type: "free",
+      ai_limit: 10,
+      document_limit: 2,
+      weekly_post_limit: 2
+    };
+  }
+};
 
-    const currentUsage = uniqueGenerations.size;
+const getOrCreateUsageRecord = async (userId: string) => {
+  try {
+    // Try to get existing record
+    const { data: existingRecord, error } = await supabaseAdmin
+      .from("user_usage_limits")
+      .select("*")
+      .eq("user_id", userId)
+      .single();
+
+    if (!error && existingRecord) {
+      return await checkAndResetWeeklyCounts(existingRecord);
+    }
+
+    // Create new record
+    const weekStart = getWeekStartDate();
+    const nextResetDate = getNextMonday();
+
+    const { data: newRecord, error: createError } = await supabaseAdmin
+      .from("user_usage_limits")
+      .insert({
+        user_id: userId,
+        usage_data: {
+          total_ai_generations: 0,
+          total_documents: 0,
+          weekly_posts_count: 0,
+          week_start_date: weekStart,
+          next_reset_date: nextResetDate.toISOString()
+        }
+      })
+      .select()
+      .single();
+
+    if (createError) {
+      throw new Error(`Failed to create usage record: ${createError.message}`);
+    }
+
+    return newRecord;
+  } catch (error) {
+    console.error("❌ Error in getOrCreateUsageRecord:", error);
+    throw error;
+  }
+};
+
+const checkAndResetWeeklyCounts = async (record: any) => {
+  try {
+    const currentWeekStart = getWeekStartDate();
+    const usageData = record.usage_data;
+    
+    // If week has changed, reset weekly posts count
+    if (usageData.week_start_date !== currentWeekStart) {
+      const nextResetDate = getNextMonday();
+      
+      const updatedUsageData = {
+        ...usageData,
+        weekly_posts_count: 0,
+        week_start_date: currentWeekStart,
+        next_reset_date: nextResetDate.toISOString()
+      };
+
+      const { data: updatedRecord, error } = await supabaseAdmin
+        .from("user_usage_limits")
+        .update({
+          usage_data: updatedUsageData,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", record.id)
+        .select()
+        .single();
+
+      if (!error && updatedRecord) {
+        return updatedRecord;
+      }
+    }
+
+    return record;
+  } catch (error) {
+    console.error("❌ Error in checkAndResetWeeklyCounts:", error);
+    return record;
+  }
+};
+
+export const checkAIGenerationLimit = async (userId: string): Promise<UsageLimits> => {
+  try {
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const planLimits = await getUserPlanLimits(userId);
+    
+    const currentUsage = usageRecord.usage_data.total_ai_generations || 0;
+    const limit = planLimits.ai_limit;
     const remaining = Math.max(0, limit - currentUsage);
 
-    if (currentUsage >= limit) {
-      return {
-        canGenerate: false,
-        message: `AI generation limit reached (${limit} times). ${
-          planType === "free"
-            ? "Upgrade to Pro for 100 generations."
-            : "You've used all your Pro generations."
-        }`,
-        currentUsage,
-        limit,
-        planType,
-        remaining: 0,
-      };
-    }
-
     return {
-      canGenerate: true,
+      canGenerate: currentUsage < limit,
+      message: currentUsage >= limit ? 
+        `AI generation limit reached (${limit}). ${planLimits.plan_type === "free" ? "Upgrade to Pro for 100 generations." : ""}` 
+        : undefined,
       currentUsage,
       limit,
-      planType,
+      planType: planLimits.plan_type,
       remaining,
     };
   } catch (error) {
@@ -172,96 +178,34 @@ export const checkAIGenerationLimit = async (
   }
 };
 
-export const checkWeeklyPostLimit = async (
-  workspaceId: string,
-  userId: string
-): Promise<{
-  canPost: boolean;
-  message?: string;
-  postsThisWeek: number;
-  limit: number;
-  planType: string;
-  nextResetDate: string;
-}> => {
+export const checkWeeklyPostLimit = async (userId: string): Promise<WeeklyPostLimits> => {
   try {
-    // Get user plan
-    const { data: userPlan } = await supabaseAdmin
-      .from("users_plans")
-      .select("*, plans(*)")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .single();
-
-    const planType = userPlan?.plans?.limit?.plan_type || "free";
-
-    if (planType === "pro") {
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const planLimits = await getUserPlanLimits(userId);
+    
+    // Pro users have unlimited posts
+    if (planLimits.weekly_post_limit === 0) {
       return {
         canPost: true,
-        postsThisWeek: 0,
-        limit: 0, // 0 means unlimited
-        planType,
-        nextResetDate: new Date().toISOString(),
+        postsThisWeek: usageRecord.usage_data.weekly_posts_count || 0,
+        limit: 0,
+        planType: planLimits.plan_type,
+        nextResetDate: usageRecord.usage_data.next_reset_date,
       };
     }
 
-    const limit = 2;
-
-    const now = new Date();
-    const dayOfWeek = now.getDay(); // 0=Sunday, 1=Monday, etc.
-
-    const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - daysSinceMonday);
-    startOfWeek.setHours(0, 0, 0, 0);
-
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6); // Sunday
-    endOfWeek.setHours(23, 59, 59, 999);
-
-    // Next reset date (next Monday)
-    const nextResetDate = new Date(startOfWeek);
-    nextResetDate.setDate(startOfWeek.getDate() + 7);
-
-    const { data: postsThisWeek, error } = await supabaseAdmin
-      .from("scheduled_posts")
-      .select("id, created_at")
-      .eq("workspace_id", workspaceId)
-      .gte("created_at", startOfWeek.toISOString())
-      .lte("created_at", endOfWeek.toISOString())
-      .in("status", ["scheduled", "published"]);
-
-    if (error) {
-      console.error("❌ Error fetching weekly posts:", error);
-      return {
-        canPost: false,
-        message: "Error checking weekly limit",
-        postsThisWeek: 0,
-        limit,
-        planType,
-        nextResetDate: nextResetDate.toISOString(),
-      };
-    }
-
-    const postsCount = postsThisWeek?.length || 0;
-
-    if (postsCount >= limit) {
-      return {
-        canPost: false,
-        message: `Weekly limit reached! You've posted ${postsCount} times this week. You can post again from ${nextResetDate.toLocaleDateString()}.`,
-        postsThisWeek: postsCount,
-        limit,
-        planType,
-        nextResetDate: nextResetDate.toISOString(),
-      };
-    }
+    const currentUsage = usageRecord.usage_data.weekly_posts_count || 0;
+    const limit = planLimits.weekly_post_limit;
 
     return {
-      canPost: true,
-      postsThisWeek: postsCount,
+      canPost: currentUsage < limit,
+      message: currentUsage >= limit ? 
+        `Weekly post limit reached (${limit}). Next reset: ${new Date(usageRecord.usage_data.next_reset_date).toLocaleDateString()}` 
+        : undefined,
+      postsThisWeek: currentUsage,
       limit,
-      planType,
-      nextResetDate: nextResetDate.toISOString(),
+      planType: planLimits.plan_type,
+      nextResetDate: usageRecord.usage_data.next_reset_date,
     };
   } catch (error) {
     console.error("❌ Error in weekly post limit check:", error);
@@ -276,204 +220,248 @@ export const checkWeeklyPostLimit = async (
   }
 };
 
-export const checkPostGenerationLimit = async (
-  workspaceId: string,
-  userId: string
-): Promise<LimitCheckResponse> => {
+export const checkDocumentUploadLimit = async (userId: string): Promise<DocumentLimits> => {
   try {
-    // Check AI generation limit first
-    const aiLimitCheck = await checkAIGenerationLimit(workspaceId, userId);
-    if (!aiLimitCheck.canGenerate) {
-      return {
-        canGenerate: false,
-        message: aiLimitCheck.message,
-        currentUsage: aiLimitCheck.currentUsage,
-        limit: aiLimitCheck.limit,
-        planType: aiLimitCheck.planType,
-        remainingAIGenerations: 0,
-        totalAIGenerations: aiLimitCheck.limit,
-      };
-    }
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const planLimits = await getUserPlanLimits(userId);
+    
+    const currentCount = usageRecord.usage_data.total_documents || 0;
+    const limit = planLimits.document_limit;
 
-    const { data: userPlan, error: planError } = await supabaseAdmin
-      .from("users_plans")
-      .select("*")
-      .eq("user_id", userId)
-      .eq("status", "active")
-      .single();
-
-    let planData;
-
-    if (userPlan && !planError) {
-      const { data: planDetails, error: planDetailsError } = await supabaseAdmin
-        .from("plans")
-        .select("*")
-        .eq("id", userPlan.subs_plan_id)
-        .single();
-
-      if (planDetails && !planDetailsError) {
-        planData = planDetails.limit;
-      }
-    }
-
-    if (planError || !userPlan || !planData) {
-      const { data: workspaceMember } = await supabaseAdmin
-        .from("workspace_members")
-        .select("id")
-        .eq("workspace_id", workspaceId)
-        .eq("user_id", userId)
-        .single();
-
-      if (!workspaceMember) {
-        return {
-          canGenerate: false,
-          message: "No workspace access found",
-          currentUsage: 0,
-          limit: 0,
-          planType: "none",
-          remainingAIGenerations:
-            aiLimitCheck.limit - aiLimitCheck.currentUsage,
-          totalAIGenerations: aiLimitCheck.limit,
-        };
-      }
-
-      const freePlan = {
-        plan_type: "free",
-        post_limit: "2",
-        post_frequency: "weekly",
-      };
-
-      return await checkUsageWithPlan(
-        workspaceId,
-        userId,
-        freePlan,
-        aiLimitCheck
-      );
-    }
-
-    return await checkUsageWithPlan(
-      workspaceId,
-      userId,
-      planData,
-      aiLimitCheck
-    );
-  } catch (error) {
-    console.error("❌ Error in limit check:", error);
     return {
-      canGenerate: false,
+      canUpload: currentCount < limit,
+      message: currentCount >= limit ? 
+        `Document limit reached (${limit}). ${planLimits.plan_type === "free" ? "Upgrade to Pro for 20 documents." : ""}` 
+        : undefined,
+      currentCount,
+      limit,
+      planType: planLimits.plan_type,
+    };
+  } catch (error) {
+    console.error("❌ Error in document limit check:", error);
+    return {
+      canUpload: false,
       message: "Error checking limits",
-      currentUsage: 0,
-      limit: 0,
-      planType: "none",
-      remainingAIGenerations: 0,
-      totalAIGenerations: 10,
+      currentCount: 0,
+      limit: 2,
+      planType: "free",
     };
   }
 };
 
-const checkUsageWithPlan = async (
-  workspaceId: string,
-  userId: string,
-  planData: any,
-  aiLimitCheck: any
-): Promise<LimitCheckResponse> => {
-  const planType = planData.plan_type || "free";
-  const postLimit = parseInt(planData.post_limit || "2");
-  const postFrequency = planData.post_frequency || "weekly";
+export const incrementAIGenerationCount = async (userId: string, platform: string) => {
+  try {
+    // Update global count
+    const { data: globalRecord } = await supabaseAdmin
+      .from("user_usage_limits")
+      .select("usage_data")
+      .eq("user_id", userId)
+      .single();
 
-  const now = new Date();
-  let startDate: Date, endDate: Date;
+    const newGlobalCount = (globalRecord?.usage_data?.total_ai_generations || 0) + 1;
 
-  if (postFrequency === "weekly") {
-    const startOfWeek = new Date(now);
-    startOfWeek.setDate(now.getDate() - now.getDay());
-    startOfWeek.setHours(0, 0, 0, 0);
+    await supabaseAdmin
+      .from("user_usage_limits")
+      .update({
+        usage_data: {
+          ...globalRecord?.usage_data,
+          total_ai_generations: newGlobalCount
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", userId);
 
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
-    endOfWeek.setHours(23, 59, 59, 999);
+    // Update platform count
+    const { data: platformRecord } = await supabaseAdmin
+      .from("platform_usage")
+      .select("platform_data")
+      .eq("user_id", userId)
+      .eq("platform", platform)
+      .single();
 
-    startDate = startOfWeek;
-    endDate = endOfWeek;
-  } else {
-    startDate = new Date(now);
-    startDate.setHours(0, 0, 0, 0);
-
-    endDate = new Date(now);
-    endDate.setHours(23, 59, 59, 999);
-  }
-
-  const { data: posts, error: postsError } = await supabaseAdmin
-    .from("generated_posts")
-    .select("id, updated_at")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId)
-    .gte("updated_at", startDate.toISOString())
-    .lte("updated_at", endDate.toISOString());
-
-  if (postsError) {
-    console.error("❌ Error fetching posts:", postsError);
-    return {
-      canGenerate: false,
-      message: "Error checking usage",
-      currentUsage: 0,
-      limit: postLimit,
-      planType,
-      remainingAIGenerations: aiLimitCheck.limit - aiLimitCheck.currentUsage,
-      totalAIGenerations: aiLimitCheck.limit,
-    };
-  }
-
-  const currentUsage = posts?.length || 0;
-
-  if (planType === "free") {
-    if (currentUsage >= postLimit) {
-      const message =
-        postFrequency === "weekly"
-          ? `Weekly post limit (${postLimit}) exceeded. Upgrade to pro plan to generate unlimited posts daily.`
-          : `Daily post limit (${postLimit}) exceeded. Upgrade to pro plan to generate more posts.`;
-
-      return {
-        canGenerate: false,
-        message,
-        currentUsage,
-        limit: postLimit,
-        planType,
-        remainingAIGenerations: aiLimitCheck.limit - aiLimitCheck.currentUsage,
-        totalAIGenerations: aiLimitCheck.limit,
-      };
+    if (platformRecord) {
+      const newPlatformCount = (platformRecord.platform_data?.ai_generations_count || 0) + 1;
+      
+      await supabaseAdmin
+        .from("platform_usage")
+        .update({
+          platform_data: {
+            ...platformRecord.platform_data,
+            ai_generations_count: newPlatformCount,
+            last_activity: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", userId)
+        .eq("platform", platform);
+    } else {
+      await supabaseAdmin
+        .from("platform_usage")
+        .insert({
+          user_id: userId,
+          platform: platform,
+          platform_data: {
+            ai_generations_count: 1,
+            published_posts_count: 0,
+            scheduled_posts_count: 0,
+            last_activity: new Date().toISOString()
+          }
+        });
     }
+  } catch (error) {
+    console.error("❌ Error incrementing AI generation count:", error);
   }
+};
 
-  if (planType === "pro" && postLimit === 0) {
-    return {
-      canGenerate: true,
-      currentUsage,
-      limit: -1,
-      planType,
-      remainingAIGenerations: aiLimitCheck.limit - aiLimitCheck.currentUsage,
-      totalAIGenerations: aiLimitCheck.limit,
-    };
+export const incrementWeeklyPostCount = async (userId: string, platform: string) => {
+  try {
+    // Update global count
+    const { data: globalRecord } = await supabaseAdmin
+      .from("user_usage_limits")
+      .select("usage_data")
+      .eq("user_id", userId)
+      .single();
+
+    const newWeeklyCount = (globalRecord?.usage_data?.weekly_posts_count || 0) + 1;
+
+    await supabaseAdmin
+      .from("user_usage_limits")
+      .update({
+        usage_data: {
+          ...globalRecord?.usage_data,
+          weekly_posts_count: newWeeklyCount
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", userId);
+
+    // Update platform count
+    const { data: platformRecord } = await supabaseAdmin
+      .from("platform_usage")
+      .select("platform_data")
+      .eq("user_id", userId)
+      .eq("platform", platform)
+      .single();
+
+    if (platformRecord) {
+      const newScheduledCount = (platformRecord.platform_data?.scheduled_posts_count || 0) + 1;
+      
+      await supabaseAdmin
+        .from("platform_usage")
+        .update({
+          platform_data: {
+            ...platformRecord.platform_data,
+            scheduled_posts_count: newScheduledCount,
+            last_activity: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", userId)
+        .eq("platform", platform);
+    } else {
+      await supabaseAdmin
+        .from("platform_usage")
+        .insert({
+          user_id: userId,
+          platform: platform,
+          platform_data: {
+            ai_generations_count: 0,
+            published_posts_count: 0,
+            scheduled_posts_count: 1,
+            last_activity: new Date().toISOString()
+          }
+        });
+    }
+  } catch (error) {
+    console.error("❌ Error incrementing weekly post count:", error);
   }
+};
 
-  if (planType === "pro" && currentUsage >= postLimit) {
-    return {
-      canGenerate: false,
-      message: `Daily post limit (${postLimit}) exceeded.`,
-      currentUsage,
-      limit: postLimit,
-      planType,
-      remainingAIGenerations: aiLimitCheck.limit - aiLimitCheck.currentUsage,
-      totalAIGenerations: aiLimitCheck.limit,
-    };
+export const incrementDocumentUploadCount = async (userId: string) => {
+  try {
+    const { data: globalRecord } = await supabaseAdmin
+      .from("user_usage_limits")
+      .select("usage_data")
+      .eq("user_id", userId)
+      .single();
+
+    const newDocumentCount = (globalRecord?.usage_data?.total_documents || 0) + 1;
+
+    await supabaseAdmin
+      .from("user_usage_limits")
+      .update({
+        usage_data: {
+          ...globalRecord?.usage_data,
+          total_documents: newDocumentCount
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq("user_id", userId);
+  } catch (error) {
+    console.error("❌ Error incrementing document upload count:", error);
   }
+};
 
-  return {
-    canGenerate: true,
-    currentUsage,
-    limit: postLimit,
-    planType,
-    remainingAIGenerations: aiLimitCheck.limit - aiLimitCheck.currentUsage,
-    totalAIGenerations: aiLimitCheck.limit,
-  };
+export const incrementPublishedPostCount = async (userId: string, platform: string) => {
+  try {
+    // Update platform count for published posts
+    const { data: platformRecord } = await supabaseAdmin
+      .from("platform_usage")
+      .select("platform_data")
+      .eq("user_id", userId)
+      .eq("platform", platform)
+      .single();
+
+    if (platformRecord) {
+      const newPublishedCount = (platformRecord.platform_data?.published_posts_count || 0) + 1;
+      
+      await supabaseAdmin
+        .from("platform_usage")
+        .update({
+          platform_data: {
+            ...platformRecord.platform_data,
+            published_posts_count: newPublishedCount,
+            last_activity: new Date().toISOString()
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq("user_id", userId)
+        .eq("platform", platform);
+    } else {
+      await supabaseAdmin
+        .from("platform_usage")
+        .insert({
+          user_id: userId,
+          platform: platform,
+          platform_data: {
+            ai_generations_count: 0,
+            published_posts_count: 1,
+            scheduled_posts_count: 0,
+            last_activity: new Date().toISOString()
+          }
+        });
+    }
+  } catch (error) {
+    console.error("❌ Error incrementing published post count:", error);
+  }
+};
+
+const getWeekStartDate = (): string => {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - daysSinceMonday);
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().split('T')[0];
+};
+
+const getNextMonday = (): Date => {
+  const now = new Date();
+  const dayOfWeek = now.getDay();
+  const daysUntilMonday = dayOfWeek === 0 ? 1 : 8 - dayOfWeek;
+  const nextMonday = new Date(now);
+  nextMonday.setDate(now.getDate() + daysUntilMonday);
+  nextMonday.setHours(0, 0, 0, 0);
+  return nextMonday;
 };

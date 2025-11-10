@@ -514,7 +514,7 @@ export function Generator() {
     return <FrameworkIcon className="w-4 h-4" />;
   };
 
-  const isPro = workspaceLimits?.postGeneration?.planType === "pro";
+  const isPro = workspaceLimits?.aiGeneration?.planType === "pro";
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
@@ -587,7 +587,7 @@ export function Generator() {
             </div>
           </div>
 
-          {/* ✅ Weekly Posts */}
+          {/* Weekly Posts */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">

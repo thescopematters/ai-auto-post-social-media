@@ -8,9 +8,10 @@ import logger from "../config/logger";
 import geminiService from "../services/gemini.service";
 import { uploadToSupabaseStorage } from "../utils/fileUpload";
 import {
-  checkPostGenerationLimit,
-  checkDailyPostLimit,
-  checkAIGenerationLimit
+  checkAIGenerationLimit,
+  checkWeeklyPostLimit,
+  incrementAIGenerationCount,
+  incrementWeeklyPostCount,
 } from "../utils/limitCheck";
 
 export const generateContent = async (
@@ -35,15 +36,13 @@ export const generateContent = async (
 
     const userId = req.user.id;
 
-    const requestedVariants = 1;
-
     if (variantCount > 1) {
       throw new Error(
         "Only 1 variant can be generated at a time. Please generate one post at a time."
       );
     }
 
-    const aiLimitCheck = await checkAIGenerationLimit(workspaceId, userId);
+    const aiLimitCheck = await checkAIGenerationLimit(userId);
     if (!aiLimitCheck.canGenerate) {
       throw new Error(aiLimitCheck.message || "AI generation limit exceeded");
     }
@@ -70,7 +69,7 @@ export const generateContent = async (
       document.content_text,
       platform as "linkedin" | "twitter",
       tone,
-      requestedVariants, // Use the checked variant count
+      1, // Always generate 1 variant
       2,
       framework
     );
@@ -106,14 +105,12 @@ export const generateContent = async (
       throw new Error(`Failed to save posts: ${insertError.message}`);
     }
 
-    if (!savedPosts || savedPosts.length === 0) {
-      throw new Error("No posts were saved to database");
+    if (savedPosts && savedPosts.length > 0) {
+      await incrementAIGenerationCount(userId, platform);
     }
 
-    const updatedAILimitCheck = await checkAIGenerationLimit(
-      workspaceId,
-      userId
-    );
+    // Get updated limits
+    const updatedAILimitCheck = await checkAIGenerationLimit(userId);
 
     successResponse(
       res,
@@ -468,7 +465,7 @@ export const schedulePost = async (
     // Verify post exists and belongs to workspace
     const { data: post, error: postError } = await supabaseAdmin
       .from("generated_posts")
-      .select("id")
+      .select("id, platform")
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .single();
@@ -477,10 +474,7 @@ export const schedulePost = async (
       throw new NotFoundError("Post not found");
     }
 
-    const weeklyLimitCheck = await checkWeeklyPostLimit(
-      workspaceId,
-      req.user.id
-    );
+    const weeklyLimitCheck = await checkWeeklyPostLimit(req.user.id);
     if (!weeklyLimitCheck.canPost) {
       throw new Error(
         weeklyLimitCheck.message || "Weekly posting limit exceeded"
@@ -510,6 +504,10 @@ export const schedulePost = async (
       .from("generated_posts")
       .update({ moderation_status: "scheduled" })
       .eq("id", postId);
+
+    if (data) {
+      await incrementWeeklyPostCount(req.user.id, post.platform);
+    }
 
     successResponse(res, data, "Post scheduled successfully", 201);
   } catch (error) {

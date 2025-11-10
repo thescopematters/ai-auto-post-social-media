@@ -3,13 +3,6 @@ import { useAuth } from "../contexts/AuthContext";
 import { Info, CheckCircle, AlertCircle, TrendingUp } from "lucide-react";
 
 interface WorkspaceLimits {
-  postGeneration: {
-    canGenerate: boolean;
-    currentUsage: number;
-    limit: number;
-    remaining: number;
-    planType: string;
-  };
   documentUpload: {
     canUpload: boolean;
     currentCount: number;
@@ -86,7 +79,7 @@ export function LimitsDisplay() {
 
   if (!limits) return null;
 
-  const isPro = limits.postGeneration.planType === "pro";
+  const isPro = limits.aiGeneration.planType === "pro";
 
   return (
     <div className="space-y-4">

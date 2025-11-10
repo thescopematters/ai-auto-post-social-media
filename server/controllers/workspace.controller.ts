@@ -6,7 +6,6 @@ import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse } from "../utils/response";
 import logger from "../config/logger";
 import {
-  checkPostGenerationLimit,
   checkDocumentUploadLimit,
   checkAIGenerationLimit,
   checkWeeklyPostLimit,
@@ -315,47 +314,37 @@ export const getWorkspaceLimits = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    // Get all limits
-    const documentLimitCheck = await checkDocumentUploadLimit(
-      workspaceId,
-      req.user.id
-    );
-    const aiGenerationCheck = await checkAIGenerationLimit(
-      workspaceId,
-      req.user.id
-    );
-    const weeklyPostCheck = await checkWeeklyPostLimit(
-      workspaceId,
-      req.user.id
-    );
+    const aiLimitCheck = await checkAIGenerationLimit(req.user.id);
+    const docLimitCheck = await checkDocumentUploadLimit(req.user.id);
+    const weeklyPostCheck = await checkWeeklyPostLimit(req.user.id);
 
     successResponse(
       res,
       {
         // Document upload limits
         documentUpload: {
-          canUpload: documentLimitCheck.canUpload,
-          message: documentLimitCheck.message,
-          currentCount: documentLimitCheck.currentCount,
-          limit: documentLimitCheck.limit,
-          remaining: documentLimitCheck.limit - documentLimitCheck.currentCount,
-          planType: documentLimitCheck.planType,
+          canUpload: docLimitCheck.canUpload,
+          message: docLimitCheck.message,
+          currentCount: docLimitCheck.currentCount,
+          limit: docLimitCheck.limit,
+          remaining: docLimitCheck.limit - docLimitCheck.currentCount,
+          planType: docLimitCheck.planType,
         },
         // AI generation limits (10 for free, 100 for pro)
         aiGeneration: {
-          canGenerate: aiGenerationCheck.canGenerate,
-          message: aiGenerationCheck.message,
-          currentUsage: aiGenerationCheck.currentUsage,
-          limit: aiGenerationCheck.limit,
-          remaining: aiGenerationCheck.limit - aiGenerationCheck.currentUsage,
-          planType: aiGenerationCheck.planType,
+          canGenerate: aiLimitCheck.canGenerate,
+          message: aiLimitCheck.message,
+          currentUsage: aiLimitCheck.currentUsage,
+          limit: aiLimitCheck.limit,
+          remaining: aiLimitCheck.remaining, 
+          planType: aiLimitCheck.planType,
         },
         weeklyPosting: {
           canPost: weeklyPostCheck.canPost,
           message: weeklyPostCheck.message,
           postsThisWeek: weeklyPostCheck.postsThisWeek,
           limit: weeklyPostCheck.limit,
-          remaining: weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
+          remaining: weeklyPostCheck.limit === 0 ? 0 : weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
           nextResetDate: weeklyPostCheck.nextResetDate,
           planType: weeklyPostCheck.planType,
         },

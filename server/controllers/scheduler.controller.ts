@@ -3,7 +3,11 @@ import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
 import logger from "../config/logger";
 import fetch from "node-fetch";
-import { checkWeeklyPostLimit } from "../utils/limitCheck";
+import {
+  checkWeeklyPostLimit,
+  incrementPublishedPostCount,
+  incrementWeeklyPostCount,
+} from "../utils/limitCheck";
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -50,7 +54,7 @@ export class SchedulerController {
         .lte("scheduled_time", nowISOString)
         .eq("status", "scheduled")
         .lt("retry_count", MAX_RETRIES)
-        .limit(100); // Get more to find distinct accounts
+        .limit(100);
 
       if (accountsError) {
         logger.error("Error fetching scheduled posts:", accountsError);
@@ -61,16 +65,13 @@ export class SchedulerController {
         return;
       }
 
-      // Get unique social account IDs
       const uniqueAccountIds = [
         ...new Set(accountsWithPosts.map((p) => p.social_account_id)),
       ].slice(0, MAX_ACCOUNTS_PER_RUN);
 
-      // Process each social account separately
       for (const socialAccountId of uniqueAccountIds) {
         accountsProcessed++;
 
-        // Fetch posts for this specific social account
         const { data: accountPosts, error: postsError } = await supabase
           .from("scheduled_posts")
           .select(
@@ -100,7 +101,6 @@ export class SchedulerController {
         const accountName =
           accountPosts[0]?.social_accounts?.[0]?.account_name || "Unknown";
 
-        // Check account status once for all posts
         const socialAccount = accountPosts[0]?.social_accounts?.[0];
 
         if (!socialAccount) {
@@ -110,7 +110,6 @@ export class SchedulerController {
           continue;
         }
 
-        // If account is inactive, fail all posts for this account immediately
         if (!socialAccount.is_active) {
           logger.warn(
             `🚫 Account ${accountName} is inactive. Failing all ${accountPosts.length} posts.`
@@ -124,10 +123,9 @@ export class SchedulerController {
           }
 
           totalProcessed += accountPosts.length;
-          continue; // Skip to next account
+          continue;
         }
 
-        // Check token expiry once for all posts
         const tokenExpiry = new Date(socialAccount.token_expires_at);
         if (tokenExpiry <= now) {
           logger.warn(
@@ -141,17 +139,15 @@ export class SchedulerController {
             );
           }
 
-          // Mark account as inactive
           await supabase
             .from("social_accounts")
             .update({ is_active: false })
             .eq("id", socialAccountId);
 
           totalProcessed += accountPosts.length;
-          continue; // Skip to next account
+          continue;
         }
 
-        // Process posts for this account
         let successCount = 0;
         let failCount = 0;
 
@@ -173,7 +169,6 @@ export class SchedulerController {
             account_id: socialAccount.account_id,
           };
 
-          // Small delay between posts
           await this.sleep(500);
 
           const result = await this.publishToLinkedIn(flatPost);
@@ -184,7 +179,6 @@ export class SchedulerController {
             failCount++;
             logger.error(`  ❌ Post ${flatPost.id} failed: ${result.error}`);
 
-            // If auth error detected, stop processing remaining posts for this account
             if (
               result.error?.includes("Auth failed") ||
               result.error?.includes("authentication failed") ||
@@ -194,7 +188,6 @@ export class SchedulerController {
                 `🚫 Auth error detected. Stopping further posts for account ${accountName}`
               );
 
-              // Fail remaining posts for this account
               const remainingPosts = accountPosts.slice(
                 accountPosts.indexOf(scheduledPost) + 1
               );
@@ -205,14 +198,13 @@ export class SchedulerController {
                 );
                 failCount++;
               }
-              break; // Exit post processing loop for this account
+              break;
             }
           }
 
           totalProcessed++;
         }
 
-        // Small delay between accounts
         await this.sleep(1000);
       }
     } catch (error) {
@@ -289,7 +281,6 @@ export class SchedulerController {
         socialAccount = fetchedAccount;
       }
 
-      // Check if account is active (user hasn't disconnected)
       if (!socialAccount.is_active) {
         const errorMsg =
           "LinkedIn account has been disconnected. Please reconnect your account.";
@@ -300,7 +291,6 @@ export class SchedulerController {
         };
       }
 
-      // Check platform support
       if (socialAccount.platform !== "linkedin") {
         const errorMsg = `Unsupported platform: ${socialAccount.platform}`;
         await this.markPostAsFailed(postId, errorMsg);
@@ -310,7 +300,6 @@ export class SchedulerController {
         };
       }
 
-      // Check if access token exists
       if (!socialAccount.access_token) {
         const errorMsg =
           "LinkedIn access token is missing. Please reconnect your account.";
@@ -321,7 +310,6 @@ export class SchedulerController {
         };
       }
 
-      // Check token expiry
       const tokenExpiry = new Date(socialAccount.token_expires_at);
       const now = new Date();
       if (tokenExpiry <= now) {
@@ -334,7 +322,6 @@ export class SchedulerController {
         };
       }
 
-      // Upload images to LinkedIn from S3 URLs
       let imageUrns: string[] = [];
       if (generatedPost.media_urls && generatedPost.media_urls.length > 0) {
         imageUrns = await this.uploadImagesToLinkedIn(
@@ -344,7 +331,6 @@ export class SchedulerController {
         );
       }
 
-      // Try to publish to LinkedIn
       const result = await this.makeLinkedInPost(
         generatedPost.content,
         socialAccount.access_token,
@@ -353,21 +339,18 @@ export class SchedulerController {
       );
 
       if (result.success && result.postId) {
-        // Update the database for successful publish
         await this.markPostAsPublished(postId, result.postId);
         return {
           success: true,
           postId: result.postId,
         };
       } else {
-        // Check if it's an authentication error (user disconnected)
         const isAuthError =
           result.error?.includes("Auth failed") ||
           result.error?.includes("401") ||
           result.error?.includes("403");
 
         if (isAuthError) {
-          // Mark account as inactive if authentication failed
           await supabase
             .from("social_accounts")
             .update({ is_active: false })
@@ -382,7 +365,6 @@ export class SchedulerController {
           };
         }
 
-        // For other errors, increment retry count
         await this.incrementRetryCount(postId, result.error || "Unknown error");
         return {
           success: false,
@@ -395,7 +377,6 @@ export class SchedulerController {
         stack: error.stack,
       });
 
-      // Increment retry count for unexpected errors
       await this.incrementRetryCount(postId, error.message);
 
       return {
@@ -414,7 +395,6 @@ export class SchedulerController {
 
     for (const s3Url of s3Urls) {
       try {
-        // Download image from S3
         const imageResponse = await fetch(s3Url);
         if (!imageResponse.ok) {
           logger.warn(`Failed to download image from S3: ${s3Url}`);
@@ -424,7 +404,6 @@ export class SchedulerController {
         const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
         const mimeType = this.getMimeTypeFromUrl(s3Url) || "image/jpeg";
 
-        // Step 1: Initialize image upload
         const registerResponse = await fetch(
           "https://api.linkedin.com/v2/assets?action=registerUpload",
           {
@@ -462,7 +441,6 @@ export class SchedulerController {
           ].uploadUrl;
         const assetUrn = registerData.value.asset;
 
-        // Step 2: Upload image to presigned URL
         const uploadResponse = await fetch(uploadUrl, {
           method: "PUT",
           headers: {
@@ -597,6 +575,24 @@ export class SchedulerController {
     linkedinPostId: string
   ): Promise<void> {
     try {
+      const { data: scheduledPost } = await supabase
+        .from("scheduled_posts")
+        .select(
+          `
+        post_id,
+        generated_posts(user_id, platform)
+      `
+        )
+        .eq("id", postId)
+        .single();
+
+      if (scheduledPost?.generated_posts?.[0]) {
+        const { user_id, platform } = scheduledPost.generated_posts[0];
+
+        await incrementWeeklyPostCount(user_id, platform);
+        await incrementPublishedPostCount(user_id, platform);
+      }
+
       const { error } = await supabase
         .from("scheduled_posts")
         .update({
@@ -642,7 +638,6 @@ export class SchedulerController {
     errorMessage: string
   ): Promise<void> {
     try {
-      // Get current retry count
       const { data: currentPost, error: fetchError } = await supabase
         .from("scheduled_posts")
         .select("retry_count")
@@ -656,7 +651,6 @@ export class SchedulerController {
 
       const newRetryCount = (currentPost.retry_count || 0) + 1;
 
-      // If max retries reached, mark as failed
       if (newRetryCount >= MAX_RETRIES) {
         await this.markPostAsFailed(
           postId,
@@ -665,7 +659,6 @@ export class SchedulerController {
         return;
       }
 
-      // Otherwise, increment retry count
       const { error } = await supabase
         .from("scheduled_posts")
         .update({
@@ -707,7 +700,6 @@ export class SchedulerController {
         return;
       }
 
-      // Fetch the generated post to get workspace_id
       const { data: generatedPost, error: postError } = await supabase
         .from("generated_posts")
         .select("id, content, media_urls, platform, workspace_id, user_id")
@@ -722,10 +714,8 @@ export class SchedulerController {
         return;
       }
 
-      // ✅ FIX: Use generatedPost.workspace_id instead of undefined workspaceId
       const weeklyLimitCheck = await checkWeeklyPostLimit(
-        generatedPost.workspace_id, // ✅ CORRECTED
-        userId
+        generatedPost.user_id
       );
 
       if (!weeklyLimitCheck.canPost) {
@@ -762,7 +752,6 @@ export class SchedulerController {
         return;
       }
 
-      // Check token expiry
       const tokenExpiry = new Date(socialAccount.token_expires_at);
       const now = new Date();
       if (tokenExpiry <= now) {
@@ -848,6 +837,14 @@ export class SchedulerController {
       const result = await this.publishToLinkedIn(flatPost);
 
       if (result.success) {
+        await incrementWeeklyPostCount(
+          generatedPost.user_id,
+          generatedPost.platform
+        );
+        await incrementPublishedPostCount(
+          generatedPost.user_id,
+          generatedPost.platform
+        );
         res.json({
           success: true,
           message: "Post published successfully",

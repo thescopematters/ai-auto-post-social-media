@@ -5,7 +5,7 @@ import supabaseAdmin from "../config/database";
 import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
-import { checkDocumentUploadLimit } from '../utils/limitCheck';
+import { checkDocumentUploadLimit, incrementDocumentUploadCount } from '../utils/limitCheck';
 
 export const getAllDocuments = async (
   req: AuthRequest,
@@ -87,7 +87,7 @@ export const createDocument = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await checkDocumentUploadLimit(workspaceId, req.user.id);
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
     
     if (!limitCheck.canUpload) {
       throw new Error(limitCheck.message || "Document upload limit exceeded");
@@ -113,6 +113,8 @@ export const createDocument = async (
       logger.error("Document creation error:", error);
       throw new Error("Failed to create document");
     }
+
+    await incrementDocumentUploadCount(req.user.id);
 
     successResponse(res, data, "Document created successfully", 201);
   } catch (error) {
@@ -223,7 +225,7 @@ export const checkDocumentUploadLimits = async (
       throw new AuthorizationError('User not authenticated');
     }
 
-    const limitCheck = await checkDocumentUploadLimit(workspaceId, req.user.id);
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
 
     successResponse(res, {
       canUpload: limitCheck.canUpload,
