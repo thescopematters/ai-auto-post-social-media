@@ -230,6 +230,7 @@ export function Generator() {
           }));
 
           setGeneratedPosts(postsWithFramework);
+          setGenerating(false);
           await loadWorkspaceLimits();
 
           toast.success("Posts generated!", {
@@ -237,10 +238,12 @@ export function Generator() {
           });
         } else {
           console.log("❌ No posts in response:", postsArray);
+          setGenerating(false);
           toast.error("No posts were generated");
         }
       } else {
         console.log("❌ API response not successful:", response);
+        setGenerating(false);
         toast.error("Failed to generate posts");
       }
     } catch (error: any) {
@@ -827,7 +830,7 @@ export function Generator() {
                   <span>{generatedPosts.length} variants</span>
                 </div>
               </div>
-              {generatedPosts.map((post, index) => (
+              {generatedPosts.map((post) => (
                 <div
                   key={post.id}
                   className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
@@ -835,7 +838,7 @@ export function Generator() {
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-3">
                       <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                        Variant {post.variant_number || index + 1}
+                        Variant
                       </span>
                       {post.framework &&
                         FRAMEWORKS[
