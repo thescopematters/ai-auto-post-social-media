@@ -19,6 +19,7 @@ import schedulePostRoutes from "./routes/schedulePost.routes";
 import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.routes";
 import mediaRoutes from "./routes/media.routes";
 import paymentRoutes from "./routes/payment.routes";
+import imageGenerationRoutes from "./routes/imageGeneration.routes";
 
 const app: Application = express();
 app.set("trust proxy", 1);
@@ -106,6 +107,7 @@ app.use(`${config.api.prefix}/workspaces`, documentRoutes);
 app.use(`${config.api.prefix}/workspaces`, contentRoutes);
 app.use(`${config.api.prefix}/workspaces`, dashboardRoutes);
 app.use(`${config.api.prefix}/workspaces`, mediaRoutes);
+app.use(`${config.api.prefix}/workspaces`, imageGenerationRoutes);
 app.use(`${config.api.prefix}/auth`, socialAuthRoutes);
 app.use(`${config.api.prefix}/scheduler`, schedulerRoutes);
 app.use(`${config.api.prefix}/payment`, paymentRoutes);
