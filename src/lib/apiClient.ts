@@ -334,6 +334,14 @@ export const contentApi = {
 
   removePostImage: (workspaceId: string, postId: string) =>
     apiClient.delete(`/workspaces/${workspaceId}/posts/${postId}/remove-image`),
+
+  // NEW: AI Image Generation
+  generateImage: (workspaceId: string, prompt: string) =>
+    apiClient.post<{
+      imageUrl: string;
+      fileName: string;
+      mimeType: string;
+    }>(`/workspaces/${workspaceId}/generate-image`, { prompt }),
 };
 
 export const socialAccountsApi = {

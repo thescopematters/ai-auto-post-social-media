@@ -8,7 +8,7 @@ import { SignUp } from "./pages/SignUp";
 import { Onboarding } from "./pages/Onboarding";
 import { Dashboard } from "./pages/Dashboard";
 import { Documents } from "./pages/Documents";
-import { Generator } from "./pages/Generator";
+import {Generator}  from "./pages/Generator";
 import { Schedule } from "./pages/Schedule";
 import { Analytics } from "./pages/Analytics";
 import { Settings } from "./pages/Settings";

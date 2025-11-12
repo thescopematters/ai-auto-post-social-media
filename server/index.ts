@@ -29,6 +29,7 @@ const allowedOrigins = [
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 
+
 app.use(
   cors({
     // origin: (origin, callback) => {

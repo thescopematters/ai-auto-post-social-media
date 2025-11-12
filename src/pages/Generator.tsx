@@ -117,6 +117,9 @@ export function Generator() {
   const [uploading, setUploading] = useState(false);
   const [workspaceLimits, setWorkspaceLimits] = useState<any>(null);
   const [loadingLimits, setLoadingLimits] = useState(false);
+  const [generatingAIImage, setGeneratingAIImage] = useState(false);
+  const [showImagePreview, setShowImagePreview] = useState(false);
+  const [previewImageUrl, setPreviewImageUrl] = useState("");
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -256,7 +259,7 @@ export function Generator() {
           description: errorMsg,
           duration: 5000,
         });
-        await loadWorkspaceLimits(); // Refresh limits
+        await loadWorkspaceLimits();
       } else {
         toast.error("Failed to generate posts", {
           description: errorMsg,
@@ -293,6 +296,53 @@ export function Generator() {
   const handleRemoveModalImage = (index: number) => {
     setModalImages((prev) => prev.filter((_, i) => i !== index));
     setModalImagePreviews((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleGenerateAIImage = async () => {
+    if (!currentWorkspace || !editedContent.trim()) {
+      toast.error("Post content is required to generate image");
+      return;
+    }
+
+    setGeneratingAIImage(true);
+
+    try {
+      const response = await contentApi.generateImage(
+        currentWorkspace.id,
+        editedContent.substring(0, 500)
+      );
+
+      if (response.success && response.data?.imageUrl) {
+        // Store response.data in a const to maintain type narrowing
+        const imageData = response.data;
+        
+        const imageResponse = await fetch(imageData.imageUrl);
+        const imageBlob = await imageResponse.blob();
+        
+        const imageFile = new File(
+          [imageBlob],
+          imageData.fileName || `ai-generated-${Date.now()}.jpg`,
+          { type: imageData.mimeType || 'image/jpeg' }
+        );
+
+        setModalImages((prev) => [...prev, imageFile]);
+        setModalImagePreviews((prev) => [...prev, imageData.imageUrl]);
+
+        toast.success("AI image generated successfully!");
+      } else {
+        toast.error(response.error || "Failed to generate image");
+      }
+    } catch (error: any) {
+      console.error("Error generating AI image:", error);
+      const errorMsg = error?.response?.data?.error || error?.message || "Failed to generate AI image";
+      toast.error(errorMsg);
+    } finally {
+      setGeneratingAIImage(false);
+    }
+  };
+  const handleImagePreviewClick = (imageUrl: string) => {
+    setPreviewImageUrl(imageUrl);
+    setShowImagePreview(true);
   };
 
   const handleScheduleClick = (post: GeneratedPost) => {
@@ -518,6 +568,7 @@ export function Generator() {
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
+      {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Content Generator
@@ -528,6 +579,7 @@ export function Generator() {
         </p>
       </div>
 
+      {/* Workspace Limits Section */}
       {loadingLimits ? (
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
@@ -543,7 +595,6 @@ export function Generator() {
         </div>
       ) : workspaceLimits ? (
         <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* AI Generations */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">
@@ -570,7 +621,6 @@ export function Generator() {
             )}
           </div>
 
-          {/* Documents */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">
@@ -587,7 +637,6 @@ export function Generator() {
             </div>
           </div>
 
-          {/* Weekly Posts */}
           <div className="bg-white rounded-lg border border-gray-200 p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium text-gray-700">
@@ -619,6 +668,7 @@ export function Generator() {
         </div>
       ) : null}
 
+      {/* LinkedIn Recommendations */}
       {workspaceLimits?.linkedinRecommendation && (
         <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
           <div className="flex items-start gap-3">
@@ -638,6 +688,7 @@ export function Generator() {
         </div>
       )}
 
+      {/* Upgrade Banner */}
       {!isPro && workspaceLimits && (
         <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -660,6 +711,7 @@ export function Generator() {
         </div>
       )}
 
+      {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
         {/* Configuration Panel */}
         <div className="lg:col-span-1">
@@ -797,7 +849,7 @@ export function Generator() {
           </div>
         </div>
 
-        {/* Generated Posts Panel */}
+        {/* Generated Posts Section */}
         <div className="lg:col-span-2">
           {generatedPosts.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -892,13 +944,11 @@ export function Generator() {
         </div>
       </div>
 
-      {/* Schedule Modal - Side by Side Layout */}
+      {/* Schedule Modal */}
       {showScheduleModal && selectedPost && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
-          <div className="w-full max-w-3xl max-h-screen flex bg-white rounded-xl shadow-2xl overflow-hidden">
-            {/* Left Side - Form */}
-            <div className="flex-1 flex flex-col overflow-hidden border-r border-gray-200">
-              {/* Header */}
+          <div className="w-full max-w-6xl max-h-screen flex bg-white rounded-xl shadow-2xl overflow-hidden">
+            <div className="w-1/2 flex flex-col overflow-hidden border-r border-gray-200">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
@@ -916,17 +966,15 @@ export function Generator() {
                 </button>
               </div>
 
-              {/* Scrollable Form Content */}
               <div className="p-4 space-y-3 overflow-y-auto flex-1 text-sm">
-                {/* Account Selection */}
                 <div>
-                  <label className="block text-xm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Account
                   </label>
                   <select
                     value={selectedAccount}
                     onChange={(e) => setSelectedAccount(e.target.value)}
-                    className="w-full px-3 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xm"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
                   >
                     {filteredAccounts.length === 0 ? (
                       <option value="">No active accounts</option>
@@ -940,16 +988,15 @@ export function Generator() {
                   </select>
                 </div>
 
-                {/* Post Content */}
                 <div>
-                  <label className="block text-xm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Content
                   </label>
                   <textarea
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
-                    rows={5}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-xm"
+                    rows={8}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
                     placeholder="Edit your post..."
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -957,15 +1004,14 @@ export function Generator() {
                   </p>
                 </div>
 
-                {/* Image Upload */}
                 <div>
-                  <label className="block text-xm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
                     Images
                   </label>
 
                   {modalImagePreviews.length === 0 ? (
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-gray-400 transition cursor-pointer">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition cursor-pointer">
                         <input
                           type="file"
                           accept="image/*"
@@ -978,49 +1024,42 @@ export function Generator() {
                           htmlFor="modal-image-upload"
                           className="cursor-pointer flex flex-col items-center"
                         >
-                          <Image className="w-5 h-5 text-gray-400 mb-1" />
+                          <Image className="w-6 h-6 text-gray-400 mb-2" />
                           <p className="text-xs text-gray-600">
                             Click to upload
                           </p>
                         </label>
                       </div>
 
-                      <div
-                        className="relative"
-                        onMouseEnter={() => setShowTooltip(true)}
-                        onMouseLeave={() => setShowTooltip(false)}
+                      <button
+                        onClick={handleGenerateAIImage}
+                        disabled={generatingAIImage || !editedContent.trim()}
+                        className="w-full h-full border-2 border-purple-300 rounded-lg p-4 hover:border-purple-400 transition flex flex-col items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        <button
-                          disabled
-                          className="w-full h-full border-2 border-gray-300 rounded-lg p-3 opacity-50 cursor-not-allowed flex flex-col items-center justify-center"
-                        >
-                          <Sparkles className="w-5 h-5 text-gray-400 mb-1" />
-                          <p className="text-xs text-gray-600 whitespace-nowrap">
-                            Generate using AI
-                          </p>
-                        </button>
-
-                        {showTooltip && (
-                          <div className="absolute -top-10 left-1/2 transform -translate-x-1/2 px-3 py-1.5 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 pointer-events-none">
-                            Coming Soon
-                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                          </div>
+                        {generatingAIImage ? (
+                          <RefreshCw className="w-6 h-6 text-purple-600 mb-2 animate-spin" />
+                        ) : (
+                          <Sparkles className="w-6 h-6 text-purple-600 mb-2" />
                         )}
-                      </div>
+                        <p className="text-xs text-gray-600 text-center">
+                          {generatingAIImage ? "Generating..." : "Generate using AI"}
+                        </p>
+                      </button>
                     </div>
                   ) : (
                     <div>
-                      <div className="grid grid-cols-3 gap-2 mb-2">
+                      <div className="grid grid-cols-4 gap-2 mb-2">
                         {modalImagePreviews.map((preview, index) => (
                           <div key={index} className="relative group">
                             <img
                               src={preview}
                               alt={`Preview ${index + 1}`}
-                              className="w-full h-20 object-cover rounded-lg border border-gray-200"
+                              onClick={() => handleImagePreviewClick(preview)}
+                              className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition"
                             />
                             <button
                               onClick={() => handleRemoveModalImage(index)}
-                              className="absolute top-0.5 right-0.5 bg-red-500 text-white p-0.5 rounded hover:bg-red-600 transition opacity-0 group-hover:opacity-100"
+                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 transition opacity-0 group-hover:opacity-100"
                             >
                               <XIcon className="w-3 h-3" />
                             </button>
@@ -1037,7 +1076,7 @@ export function Generator() {
                       />
                       <label
                         htmlFor="add-more-modal-images"
-                        className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition cursor-pointer text-xs"
+                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition cursor-pointer text-xs"
                       >
                         <Plus className="w-3 h-3" />
                         Add More
@@ -1046,15 +1085,14 @@ export function Generator() {
                   )}
                 </div>
 
-                {/* Publishing Options */}
                 <div className="border-t border-gray-200 pt-3">
-                  <h3 className="text-xm font-semibold text-gray-900 mb-2">
+                  <h3 className="text-sm font-semibold text-gray-900 mb-2">
                     Publish
                   </h3>
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => setIsScheduleMode(false)}
-                      className={`flex-1 py-1.5 rounded text-xm font-medium transition ${
+                      className={`flex-1 py-2 rounded text-sm font-medium transition ${
                         !isScheduleMode
                           ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                           : "bg-gray-100 text-gray-600"
@@ -1064,7 +1102,7 @@ export function Generator() {
                     </button>
                     <button
                       onClick={() => setIsScheduleMode(true)}
-                      className={`flex-1 py-1.5 rounded text-xm font-medium transition ${
+                      className={`flex-1 py-2 rounded text-sm font-medium transition ${
                         isScheduleMode
                           ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                           : "bg-gray-100 text-gray-600"
@@ -1075,8 +1113,8 @@ export function Generator() {
                   </div>
 
                   {isScheduleMode && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                      <label className="block text-xm font-medium text-gray-700 mb-1">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
                         Date & Time
                       </label>
                       <input
@@ -1084,7 +1122,7 @@ export function Generator() {
                         value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}
                         min={minDateTimeString}
-                        className="w-full px-2 py-1 border border-gray-300 rounded text-xm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Min 5 minutes ahead
@@ -1094,11 +1132,10 @@ export function Generator() {
                 </div>
               </div>
 
-              {/* Footer - Action Buttons */}
               <div className="p-4 border-t border-gray-200 flex gap-2 bg-gray-50 flex-shrink-0">
                 <button
                   onClick={closeScheduleModal}
-                  className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-xm"
+                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-sm"
                 >
                   Cancel
                 </button>
@@ -1109,16 +1146,16 @@ export function Generator() {
                     disabled={
                       !selectedAccount || scheduling !== null || uploading
                     }
-                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xm font-medium"
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <RefreshCw className="w-4 h-4 animate-spin" />
                         Publishing...
                       </>
                     ) : (
                       <>
-                        <Send className="w-3 h-3" />
+                        <Send className="w-4 h-4" />
                         Publish Now
                       </>
                     )}
@@ -1132,16 +1169,16 @@ export function Generator() {
                       scheduling !== null ||
                       uploading
                     }
-                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xm font-medium"
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
-                        <RefreshCw className="w-3 h-3 animate-spin" />
+                        <RefreshCw className="w-4 h-4 animate-spin" />
                         Scheduling...
                       </>
                     ) : (
                       <>
-                        <Calendar className="w-3 h-3" />
+                        <Calendar className="w-4 h-4" />
                         Schedule
                       </>
                     )}
@@ -1150,19 +1187,16 @@ export function Generator() {
               </div>
             </div>
 
-            {/* Right Side - Preview */}
-            <div className="w-96 flex flex-col bg-gray-50 overflow-hidden">
-              {/* Preview Header */}
+            {/* LinkedIn Preview Panel */}
+            <div className="w-1/2 flex flex-col bg-gray-50 overflow-hidden">
               <div className="p-4 border-b border-gray-200 bg-white">
                 <h3 className="text-sm font-semibold text-gray-900">
                   LinkedIn Preview
                 </h3>
               </div>
 
-              {/* Preview Content */}
               <div className="p-4 overflow-y-auto flex-1">
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
-                  {/* Profile Section */}
                   <div className="p-3 flex items-center gap-2">
                     <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
                       {filteredAccounts
@@ -1179,17 +1213,15 @@ export function Generator() {
                     </div>
                   </div>
 
-                  {/* Post Content */}
                   <div className="px-3 pb-3">
                     <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap break-words">
                       {editedContent || "Your post content will appear here..."}
                     </p>
                   </div>
 
-                  {/* Images Preview */}
                   {modalImagePreviews.length > 0 && (
                     <div
-                      className={`grid gap-3 ${
+                      className={`grid gap-1 ${
                         modalImagePreviews.length === 1
                           ? "grid-cols-1"
                           : "grid-cols-2"
@@ -1218,7 +1250,6 @@ export function Generator() {
                   )}
                 </div>
 
-                {/* Character Info */}
                 <div className="mt-4 p-3 bg-white border border-gray-200 rounded-lg">
                   <div className="flex justify-between text-xs text-gray-600 mb-2">
                     <span>Characters</span>
@@ -1245,7 +1276,7 @@ export function Generator() {
                     Platform: {selectedPost.platform || "LinkedIn"}
                   </p>
                   {selectedPost.framework && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xm font-medium">
+                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
                       {FRAMEWORKS[
                         selectedPost.framework as keyof typeof FRAMEWORKS
                       ]?.name || selectedPost.framework}
@@ -1302,6 +1333,29 @@ export function Generator() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Image Preview Modal */}
+      {showImagePreview && previewImageUrl && (
+        <div 
+          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
+          onClick={() => setShowImagePreview(false)}
+        >
+          <div className="relative max-w-4xl max-h-screen">
+            <button
+              onClick={() => setShowImagePreview(false)}
+              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition"
+            >
+              <XIcon className="w-8 h-8" />
+            </button>
+            <img
+              src={previewImageUrl}
+              alt="Preview"
+              className="max-w-full max-h-screen object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
           </div>
         </div>
       )}

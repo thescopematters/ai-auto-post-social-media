@@ -5,7 +5,7 @@ import { authenticate } from '../middleware/auth';
 const router = Router();
 router.use(authenticate);
 
-router.post('/:workspaceId/generate-image', controller.generateImage);
-router.delete('/:workspaceId/generated-images', controller.deleteGeneratedImage);
+router.post('/:workspaceId/generate-image', controller.generateImage.bind(controller));
+router.delete('/:workspaceId/generated-images', controller.deleteGeneratedImage.bind(controller));
 
 export default router;
