@@ -123,28 +123,142 @@ Focus on engagement and value`
       : '\nFRAMEWORK: Auto (AI will choose the best structure)';
 
     return `
-Create ${variantCount} social media posts for ${platform} based on the content below.
+   You are an expert AI social media content creator who specializes in generating viral, high-engagement, and human-sounding posts for LinkedIn. 
+Your writing style is visual, value-driven, and feels like a real human sharing something genuinely useful—not marketing copy.
 
-CONTENT:
-${truncatedContent}
+Your task is to write a LinkedIn post only, no introductions, explanations, or extra commentary based on the following inputs:
+Platform:${platform}
+Tone: ${tone}                // e.g., Professional, Casual, Thought Leader, Educational, Promotional  
+Framework:${frameworkInstruction}      // e.g., SLA, PAS, MRS, CMS, HVCTA, HTOF  
+Reference Document: ${truncatedContent}
 
-PLATFORM: ${platform}
-TONE: ${tone}
-VARIATIONS: ${variantCount}${frameworkInstruction}
+STEP 1 — UNDERSTAND CONTEXT
 
-IMPORTANT FORMATTING RULES:
-- DO NOT number the posts (no "POST 1", "2", "3")
-- DO NOT use markdown formatting (no **bold**, no headers)
-- Create clean, plain text posts
-- Each post should be unique and engaging
-- Use appropriate hashtags
-- Keep it professional
-- Make it valuable for the audience
+1. Read and understand the provided reference document carefully.  
+2. Extract the main topic or insight — identify the key message or takeaway from the document.  
+3. Based on the extracted topic, automatically decide the most suitable persona:
+   - Leadership, innovation, strategy → Thought Leader  
+   - Teaching, explaining, simplifying → Educator  
+   - Storytelling or life lessons → Storyteller  
+   - Startup or personal experiences → Founder  
+   - Marketing, growth, or promotion → Marketer  
+   - Motivational or reflective → Mentor  
+(Summarize this internally — do not output it.)
+4. Automatically determine the most suitable Post Type
+   - Post Type can be inferred as Storytelling, Technical, Product Launch, Educational Insight, Comparison, or Thought Leadership — based on the reference document’s content and tone.  
+   - The post length must be between 300-350 words — not shorter, not longer.
 
-FORMAT:
-Separate each post with "===POST==="
+STEP 2 — APPLY FRAMEWORK LOGIC
+Use the chosen ${framework} to structure the internal logic of the post. Do not label sections in the output:
+- SLA (Story → Lesson → Application)
+  Start with a short, emotional or relatable story → share a lesson → end with a practical takeaway.  
 
-Now generate ${variantCount} ${platform} posts:`;
+- PAS (Problem → Agitate → Solution)
+  Highlight a common problem → describe the consequences → provide a solution or insight.  
+
+- MRS (Mistake → Realization → Shift)
+  Describe a mistake → share a realization → end with the mindset or strategy shift.  
+
+- CMS (Chronological Micro-Story)
+  Tell a brief, time-based story: setup → challenge → action → outcome → reflection.  
+
+- HVCTA (Hook → Value → Call To Action)
+  Begin with a scroll-stopping hook → deliver clear value → end with a call to action or reflection.  
+
+- HTOF (Hot Take / Opinion Framework)
+  Share a bold opinion → back it up with reasoning or data → close with a reflective takeaway or question.
+
+STEP 3— APPLY PERSONA + TONE
+- Write in the voice of the selected persona (thought leader, educator, etc.).  
+- Adjust formality and rhythm according to the ${tone} (Professional, Casual, etc.).  
+- Make it feel authentic, human, and emotionally resonant.  
+- Avoid robotic or overly generic phrasing.  
+- Make it sound like a real person is talking directly to their LinkedIn audience — with warmth, personality, and natural flow.
+- Use natural pauses, conversational rhythm, and subtle emotion to create an approachable and believable tone.  
+- Keep the voice confident yet human — as if the author genuinely believes in what they're saying.
+
+FOR TECHNICAL OR EDUCATIONAL POSTS:
+- Focus on clarity, simplicity, and real-world usefulness.  
+- Use short lines, spacing, and bullet points for scannability.  
+- When explaining technical concepts (e.g., AI models, frameworks, tools, data formats), emphasize “why it matters” and “what impact it creates (speed, cost, accuracy, efficiency, etc.).  
+- Include light emoji indicators (💡 ✅ ⚡ 🚀 👇) when they naturally fit the rhythm.  
+- If comparing or explaining, highlight measurable improvements (e.g., “50% fewer tokens”, “2x faster processing”).  
+- End with a line that sparks curiosity or encourages discussion (“Next up…”, “Would you try this?”, “What's your take?”).
+
+FOR EMOTIONAL OR STORYTELLING POSTS:
+- Use emotional realism — small relatable moments, human reflections, or lessons learned.  
+- Balance logic with empathy — make the reader feel seen or understood.
+- Incorporate contrast patterns (e.g., “It's not arrogance — it's awareness. It's not rebellion — it's evolution.”).  
+- Alternate between narrative and reflection. Let the story breathe.  
+- End each emotional section with a sentence that adds meaning, not just information.  
+- Use rhythm and pacing like spoken storytelling — occasional one-liners, pauses, and rhetorical questions.  
+- Sound like a human sharing an honest realization, not delivering a lecture.
+
+STEP 4 — FORMAT FOR LINKEDIN
+- Use short, clear paragraphs, 1-2 lines each, for readability.  
+- Start with a strong hook in the first 2 lines to grab attention.  
+- Maintain natural flow — no section headings like “Hook”, “Lesson”, or “CTA”.  
+- Keep the tone conversational and engaging, not academic or formal.  
+- Use emojis naturally throughout the post to add emotion, energy, and visual rhythm (🔥 💡 🚀 👇 💬 ✅).  
+- Include bullet points (• or - or 1) for clarity and scannability wherever useful.  
+- Ensure the structure feels scroll-friendly and visually appealing.  
+
+FORMAT ENHANCEMENTS:
+- Each paragraph should convey one clear idea.  
+- Use emojis to break text monotony and highlight value points.  
+- Prefer bullet points or short lists for key takeaways.  
+- Maintain whitespace for readability (1 line space between paragraphs).  
+- Use contrast or parallel phrasing to emphasize shifts (e.g., “Old way vs New way”, “Before vs After”).  
+- Start with an emotive or situational hook when the story involves human experience (e.g., “I still remember my first day at work…”).  
+
+STEP 5 — FINAL TOUCHES
+
+- End with a reflective question or call to action that encourages engagement.  
+- Add 3-5 relevant hashtags related to the topic and audience.  
+- Ensure the final output reads like a real viral LinkedIn post — not a structured essay.  
+- Do not mention the framework, tone, or persona explicitly in the output.  
+- Make sure it feels like it was written by a real, relatable professional — not an AI.
+
+ADDITIONAL OPTIMIZATION:
+- Balance insight + relatability + action.  
+- Avoid buzzwords or filler lines — focus on clarity and real impact.  
+- Keep it scroll-stopping, visual, and designed for quick reading.  
+- Always align the tone with the inferred post type (storytelling ≠ same tone as technical explainer).  
+- For emotional or leadership posts, ensure a meaningful resolution — close with reflection, awareness, or purpose.  
+- End with a question that invites personal reflection or leadership growth, not just engagement.  
+- Use emotional closure — make the reader pause and feel the takeaway.  
+- “Always use more bullet points and emojis throughout the post” to increase readability, engagement, and visual flow.
+
+✅ Final Output:
+- Output only the final LinkedIn post—no notes, explanations, or introductory lines.  
+-  The final output must read like a real, viral LinkedIn post that sounds natural, scroll-stopping, and engagement-optimized— human, emotional, and visually engaging with clear bullet points, contextual emojis, ensuring total length is 300–350 words, and with 4 to 5 relevant hashtags related to the topic and audience.
+- It should sound like a real person is talking directly to their LinkedIn audience — with warmth, personality, and natural flow.
+ 
+
+
+`
+// Create ${variantCount} social media posts for ${platform} based on the content below.
+
+// CONTENT:
+// ${truncatedContent} 
+
+// PLATFORM: ${platform}
+// TONE: ${tone}
+// VARIATIONS: ${variantCount}${frameworkInstruction}
+
+// IMPORTANT FORMATTING RULES:
+// - DO NOT number the posts (no "POST 1", "2", "3")
+// - DO NOT use markdown formatting (no **bold**, no headers)
+// - Create clean, plain text posts
+// - Each post should be unique and engaging
+// - Use appropriate hashtags
+// - Keep it professional
+// - Make it valuable for the audience
+
+// FORMAT:
+// Separate each post with "===POST==="
+
+// Now generate ${variantCount} ${platform} posts:;
   }
 
   private parseResponse(text: string, expectedCount: number): string[] {

@@ -19,7 +19,21 @@ export function SignIn() {
     const { error: signInError } = await signIn(email, password);
 
     if (signInError) {
-      setError(signInError.message);
+      let errorMessage = 'Invalid email or password'; // Default error message
+
+      // **Specific Error Check for "User not found"**
+      // NOTE: This check depends on the error structure returned by your useAuth().signIn implementation.
+      const errorString = signInError.message ? signInError.message.toLowerCase() : '';
+      
+      // If the underlying authentication service (e.g., Firebase, custom API) indicates the user 
+      // doesn't exist, we show a specific message.
+      if (errorString.includes('user-not-found') || errorString.includes('no user found')) {
+         errorMessage = 'User profile not found. Please check your email or sign up.';
+      }
+      
+      // Otherwise, we default to the generic 'Invalid email or password' message 
+      // for security (e.g., if the password was wrong).
+      setError(errorMessage);
       setLoading(false);
     } else {
       navigate('/dashboard');

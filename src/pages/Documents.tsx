@@ -12,8 +12,7 @@ import {
   MoreVertical,
   Trash2,
   Eye,
-  Sparkles,
-  X,
+ 
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -51,12 +50,12 @@ export function Documents() {
 
     try {
       const response = await documentApi.getAll(currentWorkspace.id, 1, 100);
-
       if (response.success && response.data) {
         setDocuments(response.data as Document[]);
       }
     } catch (error) {
       console.error("Error loading documents:", error);
+      toast.error("Failed to load documents.");
     } finally {
       setLoading(false);
     }
@@ -64,8 +63,10 @@ export function Documents() {
 
   const loadWorkspaceLimits = async () => {
     if (!currentWorkspace) return;
+
     try {
       const response = await workspaceApi.getLimits(currentWorkspace.id);
+      console.log(">>>>RES", response);
       if (response.success && response.data) {
         setWorkspaceLimits(response.data);
       }
@@ -83,9 +84,10 @@ export function Documents() {
     ) {
       setShowUploadModal(false);
       setShowUpgradeModal(true);
-
       toast.error("Document Limit Reached", {
-        description: `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
+        description: workspaceLimits.documentUpload.limit === 0
+          ? "You have unlimited documents in your plan."
+          : `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
         duration: 5000,
       });
       return;
@@ -106,31 +108,42 @@ export function Documents() {
         setShowUploadModal(false);
         toast.success("Document uploaded successfully!");
       } else {
-        throw new Error(response.error);
+        throw new Error(response.error || "Upload failed");
       }
     } catch (error: any) {
       console.error("Error uploading text:", error);
-
       const errorMsg = error?.response?.data?.error || error?.message || "";
-
       if (
         errorMsg.includes("limit reached") ||
         errorMsg.includes("Document limit")
       ) {
         setShowUploadModal(false);
         setShowUpgradeModal(true);
-
-        toast.error("Document Limit Reached", {
-          description: errorMsg,
-          duration: 5000,
-        });
+        toast.error("Document Limit Reached", { description: errorMsg });
       } else {
-        toast.error("Upload failed", {
-          description: errorMsg || "Failed to upload document",
-        });
+        toast.error("Upload failed", { description: errorMsg });
       }
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleDeleteDocument = async (id: string) => {
+    if (!currentWorkspace) return;
+    if (!confirm("Are you sure you want to delete this document?")) return;
+
+    try {
+      const response = await documentApi.delete(currentWorkspace.id, id);
+      if (response.success) {
+        toast.success("Document deleted successfully!");
+        loadDocuments();
+        loadWorkspaceLimits();
+      } else {
+        throw new Error(response.error || "Failed to delete document");
+      }
+    } catch (error: any) {
+      console.error("Error deleting document:", error);
+      toast.error("Failed to delete document");
     }
   };
 
@@ -176,11 +189,13 @@ export function Documents() {
                       : "bg-red-50"
                   }`}
                 >
-                  {workspaceLimits.documentUpload.canUpload ? (
-                    <AlertCircle className="w-6 h-6 text-yellow-600" />
-                  ) : (
-                    <AlertCircle className="w-6 h-6 text-red-600" />
-                  )}
+                  <AlertCircle
+                    className={`w-6 h-6 ${
+                      workspaceLimits.documentUpload.canUpload
+                        ? "text-yellow-600"
+                        : "text-red-600"
+                    }`}
+                  />
                 </div>
                 <div>
                   <h3
@@ -203,32 +218,24 @@ export function Documents() {
                       }`}
                     >
                       {workspaceLimits.documentUpload.canUpload
-                        ? `Only ${
-                            workspaceLimits.documentUpload.remaining
+                        ? `Only ${workspaceLimits.documentUpload.limit === 0
+                            ? "Unlimited"
+                            : workspaceLimits.documentUpload.remaining
                           } document${
                             workspaceLimits.documentUpload.remaining === 1
                               ? ""
                               : "s"
                           } left`
-                        : `You've used all ${workspaceLimits.documentUpload.limit} document slots`}
+                        : `You've used all ${workspaceLimits.documentUpload.limit === 0
+                            ? "Unlimited"
+                            : workspaceLimits.documentUpload.limit
+                          } document slots`}
                     </p>
                   </div>
                 </div>
               </div>
-
-              <div className="flex items-center gap-4">
-                {/* Status Icon */}
-                <div
-                  className={`p-2 rounded-lg ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "bg-yellow-50"
-                      : "bg-red-50"
-                  }`}
-                ></div>
-              </div>
             </div>
 
-            {/* Upgrade Message */}
             <div
               className={`mt-4 p-3 rounded-lg border ${
                 workspaceLimits.documentUpload.canUpload
@@ -252,12 +259,11 @@ export function Documents() {
                   }`}
                 >
                   {workspaceLimits.documentUpload.canUpload
-                    ? `Only ${
-                        workspaceLimits.documentUpload.remaining
+                    ? `Only ${workspaceLimits.documentUpload.limit === 0
+                        ? "Unlimited"
+                        : workspaceLimits.documentUpload.remaining
                       } document${
-                        workspaceLimits.documentUpload.remaining === 1
-                          ? ""
-                          : "s"
+                        workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
                       } left. `
                     : "You've reached your document limit. "}
                   <button
@@ -320,7 +326,7 @@ export function Documents() {
               <DocumentRow
                 key={doc.id}
                 document={doc}
-                onDelete={loadDocuments}
+                onDelete={() => handleDeleteDocument(doc.id)}
               />
             ))}
           </div>
@@ -335,11 +341,12 @@ export function Documents() {
         />
       )}
 
-      {showUpgradeModal && (
+      {showUpgradeModal && workspaceLimits?.documentUpload && (
         <UpgradeModal
           onClose={() => setShowUpgradeModal(false)}
-          currentLimit={workspaceLimits?.documentUpload?.limit || 2}
-          currentCount={workspaceLimits?.documentUpload?.currentCount || 0}
+          currentLimit={workspaceLimits.documentUpload.limit}
+          currentCount={workspaceLimits.documentUpload.currentCount}
+          planType={workspaceLimits.documentUpload.planType}
         />
       )}
     </div>
@@ -357,11 +364,9 @@ function DocumentRow({
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return "0 Bytes";
-
     const k = 1024;
     const sizes = ["Bytes", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
   };
 
@@ -375,16 +380,6 @@ function DocumentRow({
         return <AlertCircle className="w-5 h-5 text-red-500" />;
       default:
         return <Clock className="w-5 h-5 text-gray-400" />;
-    }
-  };
-
-  const handleDelete = async () => {
-    if (confirm("Are you sure you want to delete this document?")) {
-      try {
-        onDelete();
-      } catch (error) {
-        console.error("Error deleting document:", error);
-      }
     }
   };
 
@@ -423,7 +418,7 @@ function DocumentRow({
                 View
               </button>
               <button
-                onClick={handleDelete}
+                onClick={onDelete}
                 className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
               >
                 <Trash2 className="w-4 h-4" />
@@ -467,7 +462,6 @@ function UploadModal({
             Add content by pasting or typing text
           </p>
         </div>
-
         <div className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
@@ -505,7 +499,6 @@ function UploadModal({
             </button>
           </form>
         </div>
-
         <div className="p-6 border-t border-gray-200 flex justify-end">
           <button
             onClick={onClose}
@@ -524,115 +517,47 @@ function UpgradeModal({
   onClose,
   currentLimit,
   currentCount,
+  planType,
 }: {
   onClose: () => void;
   currentLimit: number;
   currentCount: number;
+  planType: string;
 }) {
+  const displayLimit = currentLimit === 0 ? "Unlimited" : currentLimit;
+  const progressPercent =
+    currentLimit === 0 ? 100 : (currentCount / currentLimit) * 100;
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full">
-        {/* Header */}
-        <div className="p-6 border-b border-gray-200">
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
-                <AlertCircle className="w-6 h-6 text-red-600" />
-              </div>
-              <div>
-                <h3 className="text-xl font-bold text-gray-900">
-                  Document Limit Reached
-                </h3>
-                <p className="text-sm text-gray-600 mt-1">
-                  Free plan: {currentLimit} documents
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 transition"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Upgrade Plan</h2>
+        <p className="text-gray-600 mb-4">
+          {planType.charAt(0).toUpperCase() + planType.slice(1)} plan: {displayLimit}{" "}
+          document{displayLimit === 1 ? "" : "s"}
+        </p>
+        <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+          <div
+            className="bg-red-600 h-2 rounded-full"
+            style={{ width: `${progressPercent}%` }}
+          ></div>
         </div>
-
-        {/* Body */}
-        <div className="p-6 space-y-4">
-          <p className="text-gray-700">
-            You've reached the maximum number of documents for the free plan.
-            Upgrade to Pro to unlock more features!
-          </p>
-
-          {/* Pro Features */}
-          <div className="bg-gradient-to-br from-purple-50 to-blue-50 rounded-lg p-4 border border-purple-200">
-            <div className="flex items-center gap-2 mb-3">
-              <Sparkles className="w-5 h-5 text-purple-600" />
-              <h4 className="font-semibold text-gray-900">Pro Plan Benefits</h4>
-            </div>
-            <ul className="space-y-2 text-sm text-gray-700">
-              <li className="flex items-start gap-2">
-                <span className="text-purple-600 mt-0.5">✓</span>
-                <span>
-                  <strong>20 Documents</strong> - 10x more storage
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-600 mt-0.5">✓</span>
-                <span>
-                  <strong>100 AI Generations</strong> - Create more content
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-600 mt-0.5">✓</span>
-                <span>
-                  <strong>Unlimited Posts</strong> - Post as much as you want
-                </span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-purple-600 mt-0.5">✓</span>
-                <span>
-                  <strong>Priority Support</strong> - Get help faster
-                </span>
-              </li>
-            </ul>
-          </div>
-
-          {/* Current Usage */}
-          <div className="bg-gray-50 rounded-lg p-3 text-sm">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-gray-600">Current Plan</span>
-              <span className="font-semibold text-gray-900">Free</span>
-            </div>
-            <div className="w-full bg-gray-200 rounded-full h-2">
-              <div
-                className="bg-red-600 h-2 rounded-full"
-                style={{ width: "100%" }}
-              ></div>
-            </div>
-            <p className="text-gray-600 mt-2">
-              {currentCount} / {currentLimit} documents used
-            </p>
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="p-6 bg-gray-50 border-t border-gray-200 flex gap-3">
+        <p className="text-gray-700 mb-4">
+          You have used {currentCount} document{currentCount === 1 ? "" : "s"}.
+          Upgrade to Pro for unlimited uploads.
+        </p>
+        <div className="flex justify-end gap-2">
           <button
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-100 transition"
+            className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 transition"
           >
-            Maybe Later
+            Close
           </button>
           <button
-            onClick={() => {
-              onClose();
-              // Navigate to pricing page
-              window.location.href = "/subscription";
-            }}
-            className="flex-1 px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-lg hover:from-purple-700 hover:to-blue-700 transition font-semibold"
+            onClick={() => (window.location.href = "/subscription")}
+            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
           >
-            Upgrade to Pro
+            Upgrade Now
           </button>
         </div>
       </div>

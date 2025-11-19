@@ -5,8 +5,17 @@ import supabaseAdmin from "../config/database";
 import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse, paginatedResponse } from "../utils/response";
 import logger from "../config/logger";
-import { checkDocumentUploadLimit, incrementDocumentUploadCount } from '../utils/limitCheck';
+import {
+  checkDocumentUploadLimit,
+  incrementUsage,
+  // 1. IMPORT the new function
+  decrementUsage 
+} from "../utils/limitCheck";
 
+
+// ====================================================================================
+// GET ALL DOCUMENTS
+// ====================================================================================
 export const getAllDocuments = async (
   req: AuthRequest,
   res: Response,
@@ -14,6 +23,8 @@ export const getAllDocuments = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
+    console.log(">>>> workspace", workspaceId)
+
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
     const search = req.query.search as string;
@@ -33,6 +44,7 @@ export const getAllDocuments = async (
     const { data, error, count } = await query;
 
     if (error) {
+      logger.error("Error fetching documents:", error);
       throw new Error("Failed to fetch documents");
     }
 
@@ -49,11 +61,15 @@ export const getAllDocuments = async (
   }
 };
 
+
+// ====================================================================================
+// GET DOCUMENT BY ID
+// ====================================================================================
 export const getDocumentById = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const { workspaceId, documentId } = req.params;
 
@@ -74,11 +90,15 @@ export const getDocumentById = async (
   }
 };
 
+
+// ====================================================================================
+// CREATE DOCUMENT (WITH LIMIT CHECK)
+// ====================================================================================
 export const createDocument = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const { workspaceId } = req.params;
     const { title, fileType, fileUrl, contentText, metadata } = req.body;
@@ -87,12 +107,22 @@ export const createDocument = async (
       throw new AuthorizationError("User not authenticated");
     }
 
+    // ------------------------------
+    // Check plan-based document limit
+    // ------------------------------
     const limitCheck = await checkDocumentUploadLimit(req.user.id);
-    
+
     if (!limitCheck.canUpload) {
-      throw new Error(limitCheck.message || "Document upload limit exceeded");
+      logger.warn("Document upload blocked due to limit:", {
+        userId: req.user.id,
+        message: limitCheck.message,
+      });
+      return next(new Error(limitCheck.message || "Document upload limit exceeded"));
     }
 
+    // ------------------------------
+    // Create the new document record
+    // ------------------------------
     const { data, error } = await supabaseAdmin
       .from("documents")
       .insert({
@@ -105,7 +135,7 @@ export const createDocument = async (
         file_size: contentText ? contentText.length : 0,
         metadata: metadata || {},
         processing_status: contentText ? "completed" : "pending",
-      } as any)
+      })
       .select()
       .single();
 
@@ -114,7 +144,13 @@ export const createDocument = async (
       throw new Error("Failed to create document");
     }
 
-    await incrementDocumentUploadCount(req.user.id);
+    // ------------------------------
+    // Increment user's document usage count
+    // ------------------------------
+    await incrementUsage({
+      type: "document", // Specify the type of usage
+      userId: req.user.id,
+    });
 
     successResponse(res, data, "Document created successfully", 201);
   } catch (error) {
@@ -122,16 +158,20 @@ export const createDocument = async (
   }
 };
 
+
+// ====================================================================================
+// UPDATE DOCUMENT
+// ====================================================================================
 export const updateDocument = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const { workspaceId, documentId } = req.params;
     const { title, contentText, metadata, processingStatus } = req.body;
 
-    const updateData: any = {};
+    const updateData = {};
     if (title) updateData.title = title;
     if (contentText) updateData.content_text = contentText;
     if (metadata) updateData.metadata = metadata;
@@ -155,11 +195,15 @@ export const updateDocument = async (
   }
 };
 
+
+// ====================================================================================
+// DELETE DOCUMENT
+// ====================================================================================
 export const deleteDocument = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const { workspaceId, documentId } = req.params;
 
@@ -172,6 +216,14 @@ export const deleteDocument = async (
     if (error) {
       throw new NotFoundError("Document not found");
     }
+    
+    // 2. CALL the new decrement function
+    if (req.user) {
+        await decrementUsage({
+            type: "document",
+            userId: req.user.id,
+        });
+    }
 
     successResponse(res, null, "Document deleted successfully");
   } catch (error) {
@@ -179,11 +231,15 @@ export const deleteDocument = async (
   }
 };
 
+
+// ====================================================================================
+// DOCUMENT STATS
+// ====================================================================================
 export const getDocumentStats = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
     const { workspaceId } = req.params;
 
@@ -198,12 +254,9 @@ export const getDocumentStats = async (
 
     const stats = {
       total: data?.length || 0,
-      completed:
-        data?.filter((d) => d.processing_status === "completed").length || 0,
-      processing:
-        data?.filter((d) => d.processing_status === "processing").length || 0,
-      pending:
-        data?.filter((d) => d.processing_status === "pending").length || 0,
+      completed: data?.filter((d) => d.processing_status === "completed").length || 0,
+      processing: data?.filter((d) => d.processing_status === "processing").length || 0,
+      pending: data?.filter((d) => d.processing_status === "pending").length || 0,
       failed: data?.filter((d) => d.processing_status === "failed").length || 0,
     };
 
@@ -213,28 +266,39 @@ export const getDocumentStats = async (
   }
 };
 
+
+// ====================================================================================
+// CHECK DOCUMENT LIMITS (PLAN VALIDATION)
+// ====================================================================================
 export const checkDocumentUploadLimits = async (
   req: AuthRequest,
   res: Response,
   next: NextFunction
-): Promise<void> => {
+) => {
   try {
-    const { workspaceId } = req.params;
-    
     if (!req.user) {
-      throw new AuthorizationError('User not authenticated');
+      throw new AuthorizationError("User not authenticated");
     }
 
     const limitCheck = await checkDocumentUploadLimit(req.user.id);
 
-    successResponse(res, {
-      canUpload: limitCheck.canUpload,
-      message: limitCheck.message,
-      currentCount: limitCheck.currentCount,
-      limit: limitCheck.limit,
-      remaining: limitCheck.limit - limitCheck.currentCount,
-      planType: limitCheck.planType
-    }, 'Document upload limits retrieved successfully');
+    const remaining =
+      limitCheck.limit === 0
+        ? "unlimited"
+        : Math.max(limitCheck.limit - limitCheck.currentCount, 0);
+
+    successResponse(
+      res,
+      {
+        canUpload: limitCheck.canUpload,
+        message: limitCheck.message,
+        currentCount: limitCheck.currentCount,
+        limit: limitCheck.limit,
+        remaining,
+        planType: limitCheck.planType,
+      },
+      "Document upload limits retrieved successfully"
+    );
   } catch (error) {
     next(error);
   }

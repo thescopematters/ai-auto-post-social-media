@@ -2,6 +2,8 @@ import { Request, Response } from "express";
 import axios from "axios";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
+// 🌟 NEW: Import the built-in 'https' module for agent configuration
+import https from "https"; 
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -94,10 +96,12 @@ export const handleLinkedInCallback = async (
       client_secret: process.env.LINKEDIN_CLIENT_SECRET!,
     });
 
+    // 🌟 Timeout added previously for robustness
     const tokenResponse = await axios.post(
       "https://www.linkedin.com/oauth/v2/accessToken",
       tokenParams,
       {
+        timeout: 15000,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           // "ngrok-skip-browser-warning": "true",
@@ -108,13 +112,16 @@ export const handleLinkedInCallback = async (
     const { access_token, expires_in, refresh_token } = tokenResponse.data;
 
     // Get profile
+    // 🌟 UPDATED: Added httpsAgent with family: 4 to force IPv4
     const profileResponse = await axios.get(
       "https://api.linkedin.com/v2/userinfo",
       {
+        timeout: 15000,
         headers: {
           Authorization: `Bearer ${access_token}`,
           // "ngrok-skip-browser-warning": "true",
         },
+        httpsAgent: new https.Agent({ family: 4 }),
       }
     );
 
@@ -192,6 +199,7 @@ export const refreshLinkedInToken = async (
       "https://www.linkedin.com/oauth/v2/accessToken",
       tokenParams,
       {
+        timeout: 15000,
         headers: {
           "Content-Type": "application/x-www-form-urlencoded",
           // "ngrok-skip-browser-warning": "true",

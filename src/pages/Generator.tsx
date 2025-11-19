@@ -26,11 +26,11 @@ import {
   Plus,
   Send,
   TrendingUp,
-  Info,
   AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 
+// Type Definitions
 type Document = {
   id: string;
   title: string;
@@ -57,6 +57,36 @@ type GeneratedPost = {
   media_urls?: string[];
   created_at?: string;
   updated_at?: string;
+};
+
+type WorkspaceLimits = {
+  aiGeneration?: {
+    currentUsage: number;
+    limit: number;
+    remaining: number;
+    canGenerate: boolean;
+    planType: string;
+    message?: string;
+  };
+  documentUpload?: {
+    currentCount: number;
+    limit: number;
+    remaining: number;
+    canUpload: boolean;
+    message?: string;
+  };
+  weeklyPosting?: {
+    postsThisWeek: number;
+    limit: number;
+    remaining: number;
+    canPost: boolean;
+    nextResetDate?: string;
+    message?: string;
+  };
+  linkedinRecommendation?: {
+    idealFrequency: string;
+    note: string;
+  };
 };
 
 const FRAMEWORKS = {
@@ -95,6 +125,7 @@ const FRAMEWORKS = {
 
 export function Generator() {
   const { currentWorkspace } = useAuth();
+  const [isLoading, setIsLoading] = useState(true);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<string>("");
@@ -115,17 +146,31 @@ export function Generator() {
   const [modalImagePreviews, setModalImagePreviews] = useState<string[]>([]);
   const [isScheduleMode, setIsScheduleMode] = useState(false);
   const [uploading, setUploading] = useState(false);
-  const [workspaceLimits, setWorkspaceLimits] = useState<any>(null);
+  const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null);
   const [loadingLimits, setLoadingLimits] = useState(false);
   const [generatingAIImage, setGeneratingAIImage] = useState(false);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
 
+  // Debug logging
+  useEffect(() => {
+    console.log('Generator Component Mounted');
+    console.log('Current Workspace:', currentWorkspace);
+  }, []);
+
   useEffect(() => {
     if (currentWorkspace) {
-      loadDocuments();
-      loadSocialAccounts();
-      loadWorkspaceLimits();
+      console.log('Workspace available, loading data...');
+      setIsLoading(true);
+      Promise.all([
+        loadDocuments(),
+        loadSocialAccounts(),
+        loadWorkspaceLimits()
+      ]).finally(() => {
+        setIsLoading(false);
+      });
+    } else {
+      setIsLoading(false);
     }
   }, [currentWorkspace]);
 
@@ -149,21 +194,25 @@ export function Generator() {
   const loadDocuments = async () => {
     if (!currentWorkspace) return;
     try {
+      console.log('Loading documents for workspace:', currentWorkspace.id);
       const response = await documentApi.getAll(currentWorkspace.id, 1, 100);
       if (response.success && response.data) {
         const completedDocs = (response.data as any[]).filter(
           (doc) => doc.processing_status === "completed"
         );
+        console.log('Loaded documents:', completedDocs.length);
         setDocuments(completedDocs);
       }
     } catch (error) {
       console.error("Error loading documents:", error);
+      toast.error("Failed to load documents");
     }
   };
 
   const loadSocialAccounts = async () => {
     if (!currentWorkspace) return;
     try {
+      console.log('Loading social accounts for workspace:', currentWorkspace.id);
       const response = await socialAccountsApi.getAccounts(currentWorkspace.id);
       if (response.success && response.data) {
         setSocialAccounts(response.data as SocialAccount[]);
@@ -173,10 +222,12 @@ export function Generator() {
         if (activeAccounts.length > 0) {
           setSelectedAccount(activeAccounts[0].id);
         }
+        // console.log('Loaded social accounts:', response.data.length);
       }
     } catch (error) {
       console.error("Error loading social accounts:", error);
       setSocialAccounts([]);
+      toast.error("Failed to load social accounts");
     }
   };
 
@@ -184,9 +235,11 @@ export function Generator() {
     if (!currentWorkspace) return;
     setLoadingLimits(true);
     try {
+      console.log('Loading workspace limits for:', currentWorkspace.id);
       const response = await workspaceApi.getLimits(currentWorkspace.id);
       if (response.success && response.data) {
-        setWorkspaceLimits(response.data);
+        console.log('Workspace limits:', response.data);
+        setWorkspaceLimits(response.data as WorkspaceLimits);
       }
     } catch (error) {
       console.error("Error loading workspace limits:", error);
@@ -199,7 +252,7 @@ export function Generator() {
   const handleGenerate = async () => {
     if (!selectedDocument || !currentWorkspace) return;
 
-    if (workspaceLimits && !workspaceLimits.aiGeneration?.canGenerate) {
+    if (workspaceLimits?.aiGeneration && !workspaceLimits.aiGeneration.canGenerate) {
       toast.error("AI Generation Limit Reached", {
         description: workspaceLimits.aiGeneration.message,
       });
@@ -313,16 +366,15 @@ export function Generator() {
       );
 
       if (response.success && response.data?.imageUrl) {
-        // Store response.data in a const to maintain type narrowing
         const imageData = response.data;
-        
+
         const imageResponse = await fetch(imageData.imageUrl);
         const imageBlob = await imageResponse.blob();
-        
+
         const imageFile = new File(
           [imageBlob],
           imageData.fileName || `ai-generated-${Date.now()}.jpg`,
-          { type: imageData.mimeType || 'image/jpeg' }
+          { type: imageData.mimeType || "image/jpeg" }
         );
 
         setModalImages((prev) => [...prev, imageFile]);
@@ -334,12 +386,16 @@ export function Generator() {
       }
     } catch (error: any) {
       console.error("Error generating AI image:", error);
-      const errorMsg = error?.response?.data?.error || error?.message || "Failed to generate AI image";
+      const errorMsg =
+        error?.response?.data?.error ||
+        error?.message ||
+        "Failed to generate AI image";
       toast.error(errorMsg);
     } finally {
       setGeneratingAIImage(false);
     }
   };
+
   const handleImagePreviewClick = (imageUrl: string) => {
     setPreviewImageUrl(imageUrl);
     setShowImagePreview(true);
@@ -566,6 +622,31 @@ export function Generator() {
 
   const isPro = workspaceLimits?.aiGeneration?.planType === "pro";
 
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <RefreshCw className="w-12 h-12 animate-spin mx-auto mb-4 text-blue-600" />
+          <p className="text-gray-600 text-lg font-medium">Loading workspace...</p>
+          <p className="text-gray-500 text-sm mt-2">Please wait while we set things up</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentWorkspace) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
+        <div className="text-center">
+          <AlertCircle className="w-12 h-12 text-red-600 mx-auto mb-4" />
+          <p className="text-gray-600 text-lg font-medium">No workspace found</p>
+          <p className="text-gray-500 text-sm mt-2">Please select a workspace to continue</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
       {/* Header Section */}
@@ -579,116 +660,7 @@ export function Generator() {
         </p>
       </div>
 
-      {/* Workspace Limits Section */}
-      {loadingLimits ? (
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="bg-white rounded-lg border border-gray-200 p-4 animate-pulse"
-            >
-              <div className="h-4 bg-gray-200 rounded w-24 mb-2"></div>
-              <div className="h-8 bg-gray-200 rounded w-16 mb-2"></div>
-              <div className="h-3 bg-gray-200 rounded w-20"></div>
-            </div>
-          ))}
-        </div>
-      ) : workspaceLimits ? (
-        <div className="mb-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">
-                AI Generations
-              </span>
-              {workspaceLimits.aiGeneration?.canGenerate ? (
-                <Sparkles className="w-4 h-4 text-purple-600" />
-              ) : (
-                <AlertCircle className="w-4 h-4 text-red-600" />
-              )}
-            </div>
-            <div className="text-2xl font-bold text-gray-900">
-              {workspaceLimits.aiGeneration?.currentUsage || 0} /{" "}
-              {workspaceLimits.aiGeneration?.limit || 0}
-            </div>
-            <div className="text-xs text-gray-600 mt-1">
-              {workspaceLimits.aiGeneration?.remaining || 0} remaining
-            </div>
-
-            {!workspaceLimits.aiGeneration?.canGenerate && (
-              <div className="mt-2 text-xs text-red-600 font-medium">
-                Limit reached! Upgrade to Pro for more.
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">
-                Documents
-              </span>
-              <BookOpen className="w-4 h-4 text-blue-600" />
-            </div>
-            <div className="text-2xl font-bold text-gray-900">
-              {workspaceLimits.documentUpload?.currentCount || 0} /{" "}
-              {workspaceLimits.documentUpload?.limit || 0}
-            </div>
-            <div className="text-xs text-gray-600 mt-1">
-              {workspaceLimits.documentUpload?.remaining || 0} slots left
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-medium text-gray-700">
-                {isPro ? "Posts" : "Weekly Posts"}
-              </span>
-              <Calendar className="w-4 h-4 text-green-600" />
-            </div>
-            <div className="text-2xl font-bold text-gray-900">
-              {isPro
-                ? "∞"
-                : `${workspaceLimits.weeklyPosting?.postsThisWeek || 0} / ${
-                    workspaceLimits.weeklyPosting?.limit || 2
-                  }`}
-            </div>
-            <div className="text-xs text-gray-600 mt-1">
-              {isPro
-                ? "Unlimited"
-                : `${workspaceLimits.weeklyPosting?.remaining || 0} this week`}
-            </div>
-            {!isPro && workspaceLimits.weeklyPosting?.nextResetDate && (
-              <div className="text-xs text-gray-500 mt-1">
-                Resets:{" "}
-                {new Date(
-                  workspaceLimits.weeklyPosting.nextResetDate
-                ).toLocaleDateString()}
-              </div>
-            )}
-          </div>
-        </div>
-      ) : null}
-
-      {/* LinkedIn Recommendations */}
-      {workspaceLimits?.linkedinRecommendation && (
-        <div className="mb-6 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg border border-blue-200 p-4">
-          <div className="flex items-start gap-3">
-            <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
-                LinkedIn Best Practices
-                <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                  {workspaceLimits.linkedinRecommendation.idealFrequency}
-                </span>
-              </h4>
-              <p className="text-sm text-gray-700 mb-2">
-                {workspaceLimits.linkedinRecommendation.note}
-              </p>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Upgrade Banner */}
+      {/* Upgrade Banner for Free Users */}
       {!isPro && workspaceLimits && (
         <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -698,7 +670,8 @@ export function Generator() {
                 Upgrade to Pro Plan
               </h4>
               <p className="text-sm text-gray-600 mb-3">
-                Get 20 documents, 100 AI generations, and unlimited daily posts
+                Get unlimited AI generations, unlimited documents, and 100 posts
+                per week
               </p>
               <button
                 onClick={() => (window.location.href = "/subscription")}
@@ -845,9 +818,59 @@ export function Generator() {
                   </>
                 )}
               </button>
-            </div>
-          </div>
-        </div>
+
+              {/* Usage Limits */}
+              {workspaceLimits && (
+                <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
+                  {/* AI Generations */}
+                  {workspaceLimits.aiGeneration && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600">AI Generations:</span>
+                      <span className="font-medium text-gray-900">
+                        {isPro ? (
+                          "Unlimited"
+                        ) : (
+                          // FIX APPLIED HERE: Use 'remaining' instead of 'currentUsage'
+                          `${workspaceLimits.aiGeneration.remaining || 0}/${workspaceLimits.aiGeneration.limit || 0}`
+                        )}
+                      </span>
+                    </div>
+                  )}
+
+
+                      {workspaceLimits.documentUpload && (
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-gray-600">Documents:</span>
+                          <span className="font-medium text-gray-900">
+                            {isPro ? (
+                              "Unlimited"
+                            ) : (
+                              // FIX: Calculate REMAINING documents for the display (MAX - USED)
+                              // If limit is 2 and currentCount (used) is 2, this shows 0/2.
+                              `${Math.max(0, (workspaceLimits.documentUpload.limit || 0) - (workspaceLimits.documentUpload.currentCount || 0))}/${workspaceLimits.documentUpload.limit || 0}`
+                            )}
+                          </span>
+                        </div>
+                      )}
+
+                 {/* Weekly Posts */}
+                  {workspaceLimits.weeklyPosting && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-600">Posts (7 Days):</span>
+                      <span className="font-medium text-gray-900">
+                        {/* FIX APPLIED HERE: 
+                          Calculate remaining by (Limit - Used Posts).
+                          Assuming 'postsThisWeek' is the USED count (which caused 0/2 when limit is 2 and no posts were used). 
+                        */}
+                        {`${Math.max(0, (workspaceLimits.weeklyPosting.limit || (isPro ? 100 : 2)) - (workspaceLimits.weeklyPosting.postsThisWeek || 0))}/${workspaceLimits.weeklyPosting.limit || (isPro ? 100 : 2)}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+              </div>
+              </div>
+              </div>
 
         {/* Generated Posts Section */}
         <div className="lg:col-span-2">

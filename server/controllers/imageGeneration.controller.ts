@@ -99,3 +99,4 @@ export class ImageGenerationController {
 }
 
 export default new ImageGenerationController();
+  

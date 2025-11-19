@@ -1,3 +1,4 @@
+// scheduler.controller.ts
 import { Request, Response } from "express";
 import { createClient } from "@supabase/supabase-js";
 import cron from "node-cron";
@@ -5,9 +6,10 @@ import logger from "../config/logger";
 import fetch from "node-fetch";
 import {
   checkWeeklyPostLimit,
-  incrementPublishedPostCount,
-  incrementWeeklyPostCount,
+  checkDailyPostLimit,
+  incrementUsage,
 } from "../utils/limitCheck";
+
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -570,47 +572,68 @@ export class SchedulerController {
     return mimeTypes[ext || ""] || "image/jpeg";
   }
 
-  private async markPostAsPublished(
-    postId: string,
-    linkedinPostId: string
-  ): Promise<void> {
-    try {
-      const { data: scheduledPost } = await supabase
-        .from("scheduled_posts")
-        .select(
-          `
-        post_id,
-        generated_posts(user_id, platform)
-      `
-        )
-        .eq("id", postId)
-        .single();
+  // Fixed markPostAsPublished function
+private async markPostAsPublished(
+  postId: string,
+  linkedinPostId: string
+): Promise<void> {
+  try {
+    // First, get the scheduled post with generated post info
+    const { data: scheduledPost, error: fetchError } = await supabase
+      .from("scheduled_posts")
+      .select("post_id")
+      .eq("id", postId)
+      .single();
 
-      if (scheduledPost?.generated_posts?.[0]) {
-        const { user_id, platform } = scheduledPost.generated_posts[0];
-
-        await incrementWeeklyPostCount(user_id, platform);
-        await incrementPublishedPostCount(user_id, platform);
-      }
-
-      const { error } = await supabase
-        .from("scheduled_posts")
-        .update({
-          status: "published",
-          published_at: new Date().toISOString(),
-          external_post_id: linkedinPostId,
-          retry_count: 0,
-          error_message: null,
-        })
-        .eq("id", postId);
-
-      if (error) {
-        logger.error("Error marking post as published:", error);
-      }
-    } catch (error) {
-      logger.error("Error in markPostAsPublished:", error);
+    if (fetchError || !scheduledPost) {
+      logger.error("Error fetching scheduled post:", fetchError);
+      return;
     }
+
+    // Then fetch the generated post separately to ensure we get user_id and platform
+    const { data: generatedPost, error: genPostError } = await supabase
+      .from("generated_posts")
+      .select("user_id, platform")
+      .eq("id", scheduledPost.post_id)
+      .single();
+
+    if (genPostError || !generatedPost) {
+      logger.error("Error fetching generated post:", genPostError);
+    } else {
+      // ✅ Now we have reliable user_id and platform
+      const { user_id, platform } = generatedPost;
+      
+      console.log("🔥 Incrementing usage for:", { user_id, platform, postId });
+      
+      // Increment both weekly and daily counters
+      await incrementUsage({ 
+        type: "published_post", 
+        userId: user_id, 
+        platform 
+      });
+      
+      console.log("✅ Usage incremented successfully");
+    }
+
+    // Update the scheduled post status
+    const { error: updateError } = await supabase
+      .from("scheduled_posts")
+      .update({
+        status: "published",
+        published_at: new Date().toISOString(),
+        external_post_id: linkedinPostId,
+        retry_count: 0,
+        error_message: null,
+      })
+      .eq("id", postId);
+
+    if (updateError) {
+      logger.error("Error updating scheduled post:", updateError);
+    }
+  } catch (error) {
+    logger.error("Error in markPostAsPublished:", error);
   }
+}
 
   private async markPostAsFailed(
     postId: string,
@@ -714,6 +737,7 @@ export class SchedulerController {
         return;
       }
 
+      // CHECK WEEKLY LIMIT
       const weeklyLimitCheck = await checkWeeklyPostLimit(
         generatedPost.user_id
       );
@@ -722,6 +746,16 @@ export class SchedulerController {
         res.status(400).json({
           success: false,
           error: weeklyLimitCheck.message || "Weekly posting limit exceeded",
+        });
+        return;
+      }
+
+      // CHECK DAILY LIMIT
+      const dailyLimitCheck = await checkDailyPostLimit(generatedPost.user_id);
+      if (!dailyLimitCheck.canPostToday) {
+        res.status(400).json({
+          success: false,
+          error: dailyLimitCheck.message || "Daily posting limit exceeded",
         });
         return;
       }
@@ -763,6 +797,7 @@ export class SchedulerController {
       }
 
       // Create a scheduled_post record with workspace_id
+      // For publishNow we schedule for immediate posting (now)
       const scheduledTime = new Date().toISOString();
       const scheduledPostData = {
         workspace_id: generatedPost.workspace_id,
@@ -834,17 +869,12 @@ export class SchedulerController {
         account_id: scheduledPost.social_accounts?.[0]?.account_id,
       };
 
+      // publish immediately using the same flow as scheduler
       const result = await this.publishToLinkedIn(flatPost);
 
       if (result.success) {
-        await incrementWeeklyPostCount(
-          generatedPost.user_id,
-          generatedPost.platform
-        );
-        await incrementPublishedPostCount(
-          generatedPost.user_id,
-          generatedPost.platform
-        );
+        // markPostAsPublished already increments weekly/daily/published counters,
+        // so we DO NOT increment again here to avoid double counting.
         res.json({
           success: true,
           message: "Post published successfully",

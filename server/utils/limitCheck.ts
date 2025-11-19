@@ -26,6 +26,12 @@ interface DocumentLimits {
   planType: string;
 }
 
+/**
+ * Returns plan limits according to your scenario:
+ * - Free: 10 AI generations/day, 1 post/day, 2 posts/week, 2 documents total
+ * - Pro: unlimited AI (0 = unlimited), unlimited documents (0 = unlimited),
+ * unlimited posts/day (0), 100 posts/week
+ */
 const getUserPlanLimits = async (userId: string) => {
   try {
     const { data: userPlan, error } = await supabaseAdmin
@@ -39,35 +45,51 @@ const getUserPlanLimits = async (userId: string) => {
       // Default free plan limits
       return {
         plan_type: "free",
-        ai_limit: 10,
+        ai_daily_limit: 10,
         document_limit: 2,
+        daily_post_limit: 1,
         weekly_post_limit: 2
       };
     }
 
-    const planData = userPlan.plans?.limit || {};
-    const planType = planData.plan_type || "free";
-    
+    // Expect plan info in userPlan.plans.limit or similar shape
+    const planType = userPlan.plans?.limit?.plan_type || "free";
+
+    if (planType === "pro") {
+      return {
+        plan_type: "pro",
+        ai_daily_limit: 0,       // 0 => unlimited
+        document_limit: 0,       // 0 => unlimited
+        daily_post_limit: 0,     // 0 => unlimited per day
+        weekly_post_limit: 100
+      };
+    }
+
+    // fallback to free
     return {
-      plan_type: planType,
-      ai_limit: planType === "pro" ? 100 : 10,
-      document_limit: planType === "pro" ? 20 : 2,
-      weekly_post_limit: planType === "pro" ? 0 : 2 // 0 = unlimited
+      plan_type: "free",
+      ai_daily_limit: 10,
+      document_limit: 2,
+      daily_post_limit: 1,
+      weekly_post_limit: 2
     };
   } catch (error) {
     console.error("❌ Error getting user plan:", error);
     return {
       plan_type: "free",
-      ai_limit: 10,
+      ai_daily_limit: 10,
       document_limit: 2,
+      daily_post_limit: 1,
       weekly_post_limit: 2
     };
   }
 };
 
+/**
+ * New usage_data schema (stored in user_usage_limits.usage_data)
+ */
 const getOrCreateUsageRecord = async (userId: string) => {
   try {
-    // Try to get existing record
     const { data: existingRecord, error } = await supabaseAdmin
       .from("user_usage_limits")
       .select("*")
@@ -75,25 +97,31 @@ const getOrCreateUsageRecord = async (userId: string) => {
       .single();
 
     if (!error && existingRecord) {
-      return await checkAndResetWeeklyCounts(existingRecord);
+      let record = existingRecord;
+      record = await checkAndResetWeeklyCounts(record);
+      record = await checkAndResetDailyCounts(record);
+      return record;
     }
 
-    // Create new record
     const weekStart = getWeekStartDate();
     const nextResetDate = getNextMonday();
 
+    const initialUsage = {
+      total_ai_generations: 0,
+      ai_daily_count: 0,
+      ai_last_reset_date: getTodayDate(),
+      daily_post_count: 0,
+      post_last_reset_date: getTodayDate(),
+      weekly_posts_count: 0,
+      week_start_date: weekStart,
+      next_reset_date: nextResetDate.toISOString(),
+      total_documents: 0,
+      last_post_time: null
+    };
+
     const { data: newRecord, error: createError } = await supabaseAdmin
       .from("user_usage_limits")
-      .insert({
-        user_id: userId,
-        usage_data: {
-          total_ai_generations: 0,
-          total_documents: 0,
-          weekly_posts_count: 0,
-          week_start_date: weekStart,
-          next_reset_date: nextResetDate.toISOString()
-        }
-      })
+      .insert({ user_id: userId, usage_data: initialUsage })
       .select()
       .single();
 
@@ -111,12 +139,10 @@ const getOrCreateUsageRecord = async (userId: string) => {
 const checkAndResetWeeklyCounts = async (record: any) => {
   try {
     const currentWeekStart = getWeekStartDate();
-    const usageData = record.usage_data;
-    
-    // If week has changed, reset weekly posts count
+    const usageData = record.usage_data || {};
+
     if (usageData.week_start_date !== currentWeekStart) {
       const nextResetDate = getNextMonday();
-      
       const updatedUsageData = {
         ...usageData,
         weekly_posts_count: 0,
@@ -126,17 +152,13 @@ const checkAndResetWeeklyCounts = async (record: any) => {
 
       const { data: updatedRecord, error } = await supabaseAdmin
         .from("user_usage_limits")
-        .update({
-          usage_data: updatedUsageData,
-          updated_at: new Date().toISOString()
-        })
+        .update({ usage_data: updatedUsageData, updated_at: new Date().toISOString() })
         .eq("id", record.id)
         .select()
         .single();
 
-      if (!error && updatedRecord) {
-        return updatedRecord;
-      }
+      if (!error && updatedRecord) return updatedRecord;
+      return { ...record, usage_data: updatedUsageData };
     }
 
     return record;
@@ -146,35 +168,70 @@ const checkAndResetWeeklyCounts = async (record: any) => {
   }
 };
 
+const checkAndResetDailyCounts = async (record: any) => {
+  try {
+    const today = getTodayDate();
+    const usageData = record.usage_data || {};
+    let shouldUpdate = false;
+    const updatedUsageData = { ...usageData };
+
+    if (usageData.ai_last_reset_date !== today) {
+      updatedUsageData.ai_daily_count = 0;
+      updatedUsageData.ai_last_reset_date = today;
+      shouldUpdate = true;
+    }
+
+    if (usageData.post_last_reset_date !== today) {
+      updatedUsageData.daily_post_count = 0;
+      updatedUsageData.post_last_reset_date = today;
+      shouldUpdate = true;
+    }
+
+    if (shouldUpdate) {
+      const { data: updatedRecord, error } = await supabaseAdmin
+        .from("user_usage_limits")
+        .update({ usage_data: updatedUsageData, updated_at: new Date().toISOString() })
+        .eq("id", record.id)
+        .select()
+        .single();
+
+      if (!error && updatedRecord) return updatedRecord;
+      return { ...record, usage_data: updatedUsageData };
+    }
+
+    return record;
+  } catch (error) {
+    console.error("❌ Error in checkAndResetDailyCounts:", error);
+    return record;
+  }
+};
+
+/**
+ * -----------------------------
+ * LIMIT CHECK FUNCTIONS
+ * -----------------------------
+ */
+
 export const checkAIGenerationLimit = async (userId: string): Promise<UsageLimits> => {
   try {
     const usageRecord = await getOrCreateUsageRecord(userId);
     const planLimits = await getUserPlanLimits(userId);
-    
-    const currentUsage = usageRecord.usage_data.total_ai_generations || 0;
-    const limit = planLimits.ai_limit;
-    const remaining = Math.max(0, limit - currentUsage);
+
+    const currentUsage = usageRecord.usage_data.ai_daily_count || 0;
+    const limit = planLimits.ai_daily_limit;
+    const remaining = limit === 0 ? Infinity : Math.max(0, limit - currentUsage);
 
     return {
-      canGenerate: currentUsage < limit,
-      message: currentUsage >= limit ? 
-        `AI generation limit reached (${limit}). ${planLimits.plan_type === "free" ? "Upgrade to Pro for 100 generations." : ""}` 
-        : undefined,
+      canGenerate: limit === 0 ? true : currentUsage < limit,
+      message: limit !== 0 && currentUsage >= limit ? `AI generation daily limit reached (${limit}). Reset at 00:00.` : undefined,
       currentUsage,
       limit,
       planType: planLimits.plan_type,
-      remaining,
+      remaining: limit === 0 ? -1 : remaining
     };
   } catch (error) {
     console.error("❌ Error in AI generation limit check:", error);
-    return {
-      canGenerate: false,
-      message: "Error checking limits",
-      currentUsage: 0,
-      limit: 10,
-      planType: "free",
-      remaining: 10,
-    };
+    return { canGenerate: false, message: "Error checking limits", currentUsage: 0, limit: 10, planType: "free", remaining: 10 };
   }
 };
 
@@ -182,41 +239,44 @@ export const checkWeeklyPostLimit = async (userId: string): Promise<WeeklyPostLi
   try {
     const usageRecord = await getOrCreateUsageRecord(userId);
     const planLimits = await getUserPlanLimits(userId);
-    
-    // Pro users have unlimited posts
-    if (planLimits.weekly_post_limit === 0) {
-      return {
-        canPost: true,
-        postsThisWeek: usageRecord.usage_data.weekly_posts_count || 0,
-        limit: 0,
-        planType: planLimits.plan_type,
-        nextResetDate: usageRecord.usage_data.next_reset_date,
-      };
-    }
 
     const currentUsage = usageRecord.usage_data.weekly_posts_count || 0;
     const limit = planLimits.weekly_post_limit;
 
     return {
-      canPost: currentUsage < limit,
-      message: currentUsage >= limit ? 
-        `Weekly post limit reached (${limit}). Next reset: ${new Date(usageRecord.usage_data.next_reset_date).toLocaleDateString()}` 
-        : undefined,
+      canPost: limit === 0 || currentUsage < limit,
+      message: currentUsage >= limit ? `Weekly post limit reached (${limit}). Next reset: ${new Date(usageRecord.usage_data.next_reset_date).toLocaleDateString()}` : undefined,
       postsThisWeek: currentUsage,
       limit,
       planType: planLimits.plan_type,
-      nextResetDate: usageRecord.usage_data.next_reset_date,
+      nextResetDate: usageRecord.usage_data.next_reset_date
     };
   } catch (error) {
     console.error("❌ Error in weekly post limit check:", error);
+    return { canPost: false, message: "Error checking limits", postsThisWeek: 0, limit: 2, planType: "free", nextResetDate: new Date().toISOString() };
+  }
+};
+
+export const checkDailyPostLimit = async (userId: string) => {
+  try {
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const planLimits = await getUserPlanLimits(userId);
+
+    const dailyLimit = planLimits.daily_post_limit;
+    const currentDaily = usageRecord.usage_data.daily_post_count || 0;
+
+    if (dailyLimit === 0) return { canPostToday: true, currentDaily, dailyLimit, planType: planLimits.plan_type };
+
     return {
-      canPost: false,
-      message: "Error checking limits",
-      postsThisWeek: 0,
-      limit: 2,
-      planType: "free",
-      nextResetDate: new Date().toISOString(),
+      canPostToday: currentDaily < dailyLimit,
+      message: currentDaily >= dailyLimit ? `Daily post limit reached (${dailyLimit}). Reset at 00:00.` : undefined,
+      currentDaily,
+      dailyLimit,
+      planType: planLimits.plan_type
     };
+  } catch (error) {
+    console.error("❌ Error checking daily post limit:", error);
+    return { canPostToday: false, message: "Error checking limits", currentDaily: 0, dailyLimit: 1, planType: "free" };
   }
 };
 
@@ -224,227 +284,182 @@ export const checkDocumentUploadLimit = async (userId: string): Promise<Document
   try {
     const usageRecord = await getOrCreateUsageRecord(userId);
     const planLimits = await getUserPlanLimits(userId);
-    
+    console.log(">>>>usageRecord", usageRecord)
+    console.log(">>>>planLimits", planLimits)
+
+
     const currentCount = usageRecord.usage_data.total_documents || 0;
     const limit = planLimits.document_limit;
+    console.log(">>>>current count", currentCount)
+    console.log(">>>>current limit", limit)
 
     return {
-      canUpload: currentCount < limit,
-      message: currentCount >= limit ? 
-        `Document limit reached (${limit}). ${planLimits.plan_type === "free" ? "Upgrade to Pro for 20 documents." : ""}` 
-        : undefined,
+      canUpload: limit === 0 ? true : currentCount < limit,
+      message: limit !== 0 && currentCount >= limit ? `Document limit reached (${limit}). Upgrade to Pro for unlimited.` : undefined,
       currentCount,
       limit,
-      planType: planLimits.plan_type,
+      planType: planLimits.plan_type
     };
   } catch (error) {
     console.error("❌ Error in document limit check:", error);
-    return {
-      canUpload: false,
-      message: "Error checking limits",
-      currentCount: 0,
-      limit: 2,
-      planType: "free",
-    };
+    return { canUpload: false, message: "Error checking limits", currentCount: 0, limit: 2, planType: "free" };
   }
 };
 
-export const incrementAIGenerationCount = async (userId: string, platform: string) => {
-  try {
-    // Update global count
-    const { data: globalRecord } = await supabaseAdmin
-      .from("user_usage_limits")
-      .select("usage_data")
-      .eq("user_id", userId)
-      .single();
+/**
+ * -----------------------------
+ * INCREMENT FUNCTIONS
+ * -----------------------------
+ */
 
-    const newGlobalCount = (globalRecord?.usage_data?.total_ai_generations || 0) + 1;
+interface IncrementOptions {
+  type: "ai" | "daily_post" | "weekly_post" | "published_post" | "document";
+  userId: string;
+  platform?: string;
+  scheduledTimeISO?: string;
+}
+
+export const incrementUsage = async (options: IncrementOptions) => {
+  const { type, userId, platform, scheduledTimeISO } = options;
+
+  try {
+    const record = await getOrCreateUsageRecord(userId);
+    const usage = record.usage_data || {};
+    const updatedUsage = { ...usage };
+
+    switch (type) {
+      case "ai":
+        updatedUsage.ai_daily_count = (usage.ai_daily_count || 0) + 1;
+        updatedUsage.total_ai_generations = (usage.total_ai_generations || 0) + 1;
+        updatedUsage.ai_last_reset_date = usage.ai_last_reset_date || getTodayDate();
+        break;
+
+      case "daily_post":
+        updatedUsage.daily_post_count = (usage.daily_post_count || 0) + 1;
+        updatedUsage.last_post_time = new Date().toISOString();
+        updatedUsage.post_last_reset_date = usage.post_last_reset_date || getTodayDate();
+        break;
+
+      case "weekly_post":
+        updatedUsage.weekly_posts_count = (usage.weekly_posts_count || 0) + 1;
+        updatedUsage.daily_post_count = (usage.daily_post_count || 0) + 1;
+        updatedUsage.last_post_time = scheduledTimeISO || new Date().toISOString();
+        updatedUsage.post_last_reset_date = usage.post_last_reset_date || getTodayDate();
+        updatedUsage.week_start_date = usage.week_start_date || getWeekStartDate();
+        updatedUsage.next_reset_date = usage.next_reset_date || getNextMonday().toISOString();
+        break;
+
+      case "published_post":
+        updatedUsage.weekly_posts_count = (usage.weekly_posts_count || 0) + 1;
+        updatedUsage.daily_post_count = (usage.daily_post_count || 0) + 1;
+        updatedUsage.last_post_time = new Date().toISOString();
+        updatedUsage.post_last_reset_date = usage.post_last_reset_date || getTodayDate();
+        break;
+
+      case "document":
+        updatedUsage.total_documents = (usage.total_documents || 0) + 1;
+        break;
+    }
 
     await supabaseAdmin
       .from("user_usage_limits")
-      .update({
-        usage_data: {
-          ...globalRecord?.usage_data,
-          total_ai_generations: newGlobalCount
-        },
-        updated_at: new Date().toISOString()
-      })
+      .update({ usage_data: updatedUsage, updated_at: new Date().toISOString() })
       .eq("user_id", userId);
 
-    // Update platform count
-    const { data: platformRecord } = await supabaseAdmin
-      .from("platform_usage")
-      .select("platform_data")
-      .eq("user_id", userId)
-      .eq("platform", platform)
-      .single();
-
-    if (platformRecord) {
-      const newPlatformCount = (platformRecord.platform_data?.ai_generations_count || 0) + 1;
-      
-      await supabaseAdmin
+    if (platform && type !== "document") {
+      const { data: platformRecord } = await supabaseAdmin
         .from("platform_usage")
-        .update({
-          platform_data: {
-            ...platformRecord.platform_data,
-            ai_generations_count: newPlatformCount,
-            last_activity: new Date().toISOString()
-          },
-          updated_at: new Date().toISOString()
-        })
+        .select("platform_data")
         .eq("user_id", userId)
-        .eq("platform", platform);
-    } else {
-      await supabaseAdmin
-        .from("platform_usage")
-        .insert({
-          user_id: userId,
-          platform: platform,
-          platform_data: {
-            ai_generations_count: 1,
-            published_posts_count: 0,
-            scheduled_posts_count: 0,
-            last_activity: new Date().toISOString()
-          }
-        });
+        .eq("platform", platform)
+        .single();
+
+      const platformData = platformRecord?.platform_data || {
+        ai_generations_count: 0,
+        published_posts_count: 0,
+        scheduled_posts_count: 0,
+        last_activity: new Date().toISOString()
+      };
+
+      switch (type) {
+        case "ai":
+          platformData.ai_generations_count = (platformData.ai_generations_count || 0) + 1;
+          break;
+        case "weekly_post":
+          platformData.scheduled_posts_count = (platformData.scheduled_posts_count || 0) + 1;
+          break;
+        case "published_post":
+        case "daily_post":
+          platformData.published_posts_count = (platformData.published_posts_count || 0) + 1;
+          break;
+      }
+
+      platformData.last_activity = new Date().toISOString();
+
+      if (platformRecord) {
+        await supabaseAdmin
+          .from("platform_usage")
+          .update({ platform_data: platformData, updated_at: new Date().toISOString() })
+          .eq("user_id", userId)
+          .eq("platform", platform);
+      } else {
+        await supabaseAdmin
+          .from("platform_usage")
+          .insert({ user_id: userId, platform, platform_data: platformData });
+      }
     }
   } catch (error) {
-    console.error("❌ Error incrementing AI generation count:", error);
+    console.error(`❌ Error incrementing ${type} count:`, error);
   }
 };
 
-export const incrementWeeklyPostCount = async (userId: string, platform: string) => {
-  try {
-    // Update global count
-    const { data: globalRecord } = await supabaseAdmin
-      .from("user_usage_limits")
-      .select("usage_data")
-      .eq("user_id", userId)
-      .single();
+/**
+ * -----------------------------
+ * DECREMENT FUNCTIONS (NEW)
+ * -----------------------------
+ */
 
-    const newWeeklyCount = (globalRecord?.usage_data?.weekly_posts_count || 0) + 1;
+interface DecrementOptions {
+  type: "document";
+  userId: string;
+}
+
+export const decrementUsage = async (options: DecrementOptions) => {
+  const { type, userId } = options;
+
+  if (type !== "document") {
+    console.warn("Attempted to decrement unsupported type:", type);
+    return;
+  }
+
+  try {
+    const record = await getOrCreateUsageRecord(userId);
+    const usage = record.usage_data || {};
+    const updatedUsage = { ...usage };
+
+    // Ensure we don't go below zero
+    if (usage.total_documents > 0) {
+      updatedUsage.total_documents = (usage.total_documents || 0) - 1;
+    } else {
+        console.warn(`User ${userId} attempted to decrement document count below zero.`);
+    }
 
     await supabaseAdmin
       .from("user_usage_limits")
-      .update({
-        usage_data: {
-          ...globalRecord?.usage_data,
-          weekly_posts_count: newWeeklyCount
-        },
-        updated_at: new Date().toISOString()
-      })
+      .update({ usage_data: updatedUsage, updated_at: new Date().toISOString() })
       .eq("user_id", userId);
 
-    // Update platform count
-    const { data: platformRecord } = await supabaseAdmin
-      .from("platform_usage")
-      .select("platform_data")
-      .eq("user_id", userId)
-      .eq("platform", platform)
-      .single();
-
-    if (platformRecord) {
-      const newScheduledCount = (platformRecord.platform_data?.scheduled_posts_count || 0) + 1;
-      
-      await supabaseAdmin
-        .from("platform_usage")
-        .update({
-          platform_data: {
-            ...platformRecord.platform_data,
-            scheduled_posts_count: newScheduledCount,
-            last_activity: new Date().toISOString()
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq("user_id", userId)
-        .eq("platform", platform);
-    } else {
-      await supabaseAdmin
-        .from("platform_usage")
-        .insert({
-          user_id: userId,
-          platform: platform,
-          platform_data: {
-            ai_generations_count: 0,
-            published_posts_count: 0,
-            scheduled_posts_count: 1,
-            last_activity: new Date().toISOString()
-          }
-        });
-    }
   } catch (error) {
-    console.error("❌ Error incrementing weekly post count:", error);
+    console.error(`❌ Error decrementing ${type} count:`, error);
   }
 };
 
-export const incrementDocumentUploadCount = async (userId: string) => {
-  try {
-    const { data: globalRecord } = await supabaseAdmin
-      .from("user_usage_limits")
-      .select("usage_data")
-      .eq("user_id", userId)
-      .single();
-
-    const newDocumentCount = (globalRecord?.usage_data?.total_documents || 0) + 1;
-
-    await supabaseAdmin
-      .from("user_usage_limits")
-      .update({
-        usage_data: {
-          ...globalRecord?.usage_data,
-          total_documents: newDocumentCount
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq("user_id", userId);
-  } catch (error) {
-    console.error("❌ Error incrementing document upload count:", error);
-  }
-};
-
-export const incrementPublishedPostCount = async (userId: string, platform: string) => {
-  try {
-    // Update platform count for published posts
-    const { data: platformRecord } = await supabaseAdmin
-      .from("platform_usage")
-      .select("platform_data")
-      .eq("user_id", userId)
-      .eq("platform", platform)
-      .single();
-
-    if (platformRecord) {
-      const newPublishedCount = (platformRecord.platform_data?.published_posts_count || 0) + 1;
-      
-      await supabaseAdmin
-        .from("platform_usage")
-        .update({
-          platform_data: {
-            ...platformRecord.platform_data,
-            published_posts_count: newPublishedCount,
-            last_activity: new Date().toISOString()
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq("user_id", userId)
-        .eq("platform", platform);
-    } else {
-      await supabaseAdmin
-        .from("platform_usage")
-        .insert({
-          user_id: userId,
-          platform: platform,
-          platform_data: {
-            ai_generations_count: 0,
-            published_posts_count: 1,
-            scheduled_posts_count: 0,
-            last_activity: new Date().toISOString()
-          }
-        });
-    }
-  } catch (error) {
-    console.error("❌ Error incrementing published post count:", error);
-  }
-};
+/**
+ * -----------------------------
+ * DATE HELPERS
+ * -----------------------------
+ */
+const getTodayDate = (): string => new Date().toISOString().split("T")[0];
 
 const getWeekStartDate = (): string => {
   const now = new Date();
@@ -453,7 +468,7 @@ const getWeekStartDate = (): string => {
   const monday = new Date(now);
   monday.setDate(now.getDate() - daysSinceMonday);
   monday.setHours(0, 0, 0, 0);
-  return monday.toISOString().split('T')[0];
+  return monday.toISOString().split("T")[0];
 };
 
 const getNextMonday = (): Date => {

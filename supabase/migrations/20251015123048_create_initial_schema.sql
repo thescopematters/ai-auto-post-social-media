@@ -524,6 +524,7 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   merchant_transaction_id text UNIQUE NOT NULL,             
   amount numeric(10,2) NOT NULL,
   status text DEFAULT 'PENDING',
+  plan_id: string;
   payment_method text,          
   phonepe_reference_id text,    
   created_at timestamptz DEFAULT now(),

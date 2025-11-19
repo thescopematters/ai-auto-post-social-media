@@ -9,11 +9,12 @@ import geminiService from "../services/gemini.service";
 import { uploadToSupabaseStorage } from "../utils/fileUpload";
 import {
   checkAIGenerationLimit,
+  checkDailyPostLimit,
   checkWeeklyPostLimit,
-  incrementAIGenerationCount,
-  incrementWeeklyPostCount,
+  incrementUsage,
 } from "../utils/limitCheck";
 
+// Generate AI post
 export const generateContent = async (
   req: AuthRequest,
   res: Response,
@@ -21,31 +22,17 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const {
-      documentId,
-      platform,
-      tone,
-      framework,
-      agentConfigId,
-      variantCount = 1,
-    } = req.body;
+    const { documentId, platform, tone, framework, agentConfigId, variantCount = 1 } = req.body;
 
-    if (!req.user) {
-      throw new Error("User not authenticated");
-    }
-
+    if (!req.user) throw new Error("User not authenticated");
     const userId = req.user.id;
 
-    if (variantCount > 1) {
-      throw new Error(
-        "Only 1 variant can be generated at a time. Please generate one post at a time."
-      );
-    }
+    if (variantCount > 1)
+      throw new Error("Free users can only generate 1 post at a time.");
 
-    const aiLimitCheck = await checkAIGenerationLimit(userId);
-    if (!aiLimitCheck.canGenerate) {
-      throw new Error(aiLimitCheck.message || "AI generation limit exceeded");
-    }
+    // Check AI generation limit (daily)
+    const aiLimit = await checkAIGenerationLimit(userId);
+    if (!aiLimit.canGenerate) throw new Error(aiLimit.message || "AI generation limit reached");
 
     // Fetch document
     const { data: document, error: docError } = await supabaseAdmin
@@ -55,30 +42,23 @@ export const generateContent = async (
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (docError || !document) {
-      console.error("Document fetch error:", docError);
-      throw new NotFoundError("Document not found");
-    }
+    if (docError || !document) throw new NotFoundError("Document not found");
+    if (!document.content_text) throw new Error("Document has no content to generate posts from");
 
-    if (!document.content_text) {
-      throw new Error("Document has no content to generate posts from");
-    }
-
-    // Generate posts from Gemini
+    // Generate content via AI
     const generatedContent = await geminiService.generateWithRetry(
       document.content_text,
       platform as "linkedin" | "twitter",
       tone,
-      1, // Always generate 1 variant
+      1,
       2,
       framework
     );
 
-    if (!generatedContent || generatedContent.length === 0) {
+    if (!generatedContent || generatedContent.length === 0)
       throw new Error("Failed to generate posts from AI service");
-    }
 
-    // Prepare all inserts
+    // Prepare posts
     const postsToInsert = generatedContent.map((content, index) => ({
       workspace_id: workspaceId,
       user_id: userId,
@@ -94,133 +74,117 @@ export const generateContent = async (
       moderation_status: "pending",
     }));
 
-    // Insert all posts at once
     const { data: savedPosts, error: insertError } = await supabaseAdmin
       .from("generated_posts")
       .insert(postsToInsert)
       .select();
 
-    if (insertError) {
-      console.error("❌ Insert error:", insertError.message);
-      throw new Error(`Failed to save posts: ${insertError.message}`);
-    }
+    if (insertError) throw new Error(`Failed to save posts: ${insertError.message}`);
 
-    if (savedPosts && savedPosts.length > 0) {
-      await incrementAIGenerationCount(userId, platform);
-    }
+    // ✅ FIX: Changed from "ai_generation" to "ai"
+    await incrementUsage({ userId, type: "ai", platform });
 
-    // Get updated limits
-    const updatedAILimitCheck = await checkAIGenerationLimit(userId);
+    const updatedLimit = await checkAIGenerationLimit(userId);
 
     successResponse(
       res,
       {
         posts: savedPosts,
         limits: {
-          remainingAIGenerations: updatedAILimitCheck.remaining,
-          totalAIGenerations: updatedAILimitCheck.limit,
-          currentUsage: updatedAILimitCheck.currentUsage,
-          planType: updatedAILimitCheck.planType,
+          remainingAIGenerations: updatedLimit.remaining,
+          totalAIGenerations: updatedLimit.limit,
+          currentUsage: updatedLimit.currentUsage,
+          planType: updatedLimit.planType,
         },
       },
       "Content generated successfully",
       201
     );
   } catch (error: any) {
-    console.error("❌ Error in generateContent:", error.message);
-    logger.error("Generation error:", error.message);
+    logger.error("❌ generateContent error:", error.message);
     next(error);
   }
 };
 
-export const uploadPostImage = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Upload image to a post
+export const uploadPostImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    if (!req.file) {
-      throw new Error("No image file provided");
-    }
+    if (!req.file) throw new Error("No image file provided");
 
     const { workspaceId, postId } = req.params;
     const userId = req.user.id;
 
-    // Verify post exists and user has access
     const { data: post, error: postError } = await supabaseAdmin
       .from("generated_posts")
-      .select("id, workspace_id")
+      .select("id")
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (postError || !post) {
-      throw new NotFoundError("Post not found");
-    }
+    if (postError || !post) throw new NotFoundError("Post not found");
 
-    // Upload image to Supabase Storage
-    const file = req.file;
-    const fileName = `posts/${workspaceId}/${postId}/${Date.now()}-${
-      file.originalname
-    }`;
-
+    const fileName = `posts/${workspaceId}/${postId}/${Date.now()}-${req.file.originalname}`;
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from("post-images")
-      .upload(fileName, file.buffer, {
-        contentType: file.mimetype,
-        upsert: false,
-      });
+      .upload(fileName, req.file.buffer, { contentType: req.file.mimetype });
 
-    if (uploadError) {
-      throw new Error(`Failed to upload image: ${uploadError.message}`);
-    }
+    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
 
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabaseAdmin.storage.from("post-images").getPublicUrl(fileName);
+    const { data: publicUrlData } = supabaseAdmin.storage.from("post-images").getPublicUrl(fileName);
 
-    // Update post with image info
     const { data: updatedPost, error: updateError } = await supabaseAdmin
       .from("generated_posts")
-      .update({
-        media_urls: [publicUrl],
-      })
+      .update({ media_urls: [publicUrlData.publicUrl] })
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .select()
       .single();
 
-    if (updateError) {
-      throw new Error(
-        `Failed to update post with image: ${updateError.message}`
-      );
-    }
+    if (updateError) throw new Error(`Failed to update post with image: ${updateError.message}`);
 
-    successResponse(
-      res,
-      {
-        post: updatedPost,
-        imageUrl: publicUrl,
-        fileName: fileName,
-      },
-      "Image uploaded successfully",
-      200
-    );
+    successResponse(res, { post: updatedPost, imageUrl: publicUrlData.publicUrl }, "Image uploaded successfully");
   } catch (error: any) {
-    console.error("❌ Image upload error:", error.message);
+    logger.error("❌ uploadPostImage error:", error.message);
     next(error);
   }
 };
 
-export const updatePost = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Remove image from a post
+export const removePostImage = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId, postId } = req.params;
-    const { content, hashtags, mediaUrls, removeImage } = req.body;
+
+    const { data: post, error: postError } = await supabaseAdmin
+      .from("generated_posts")
+      .select("*")
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .single();
+
+    if (postError || !post) throw new NotFoundError("Post not found");
+
+    const { data: updatedPost, error: updateError } = await supabaseAdmin
+      .from("generated_posts")
+      .update({ media_urls: [] })
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (updateError) throw new Error(`Failed to remove image: ${updateError.message}`);
+
+    successResponse(res, updatedPost, "Image removed successfully");
+  } catch (error: any) {
+    logger.error("❌ removePostImage error:", error.message);
+    next(error);
+  }
+};
+
+// Update post content/hashtags/media
+export const updatePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { workspaceId, postId } = req.params;
+    const { content, hashtags, mediaUrls } = req.body;
 
     const updateData: any = {};
     if (content) updateData.content = content;
@@ -235,61 +199,16 @@ export const updatePost = async (
       .select()
       .single();
 
-    if (error || !data) {
-      throw new NotFoundError("Post not found");
-    }
+    if (error || !data) throw new NotFoundError("Post not found");
+
     successResponse(res, data, "Post updated successfully");
   } catch (error) {
     next(error);
   }
 };
 
-export const removePostImage = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
-  try {
-    const { workspaceId, postId } = req.params;
-
-    // Get current post to find image filename
-    const { data: post, error: postError } = await supabaseAdmin
-      .from("generated_posts")
-      .eq("id", postId)
-      .eq("workspace_id", workspaceId)
-      .single();
-
-    if (postError || !post) {
-      throw new NotFoundError("Post not found");
-    }
-
-    // Update post to remove image references
-    const { data: updatedPost, error: updateError } = await supabaseAdmin
-      .from("generated_posts")
-      .update({
-        media_urls: [],
-      })
-      .eq("id", postId)
-      .eq("workspace_id", workspaceId)
-      .select()
-      .single();
-
-    if (updateError) {
-      throw new Error(`Failed to remove image: ${updateError.message}`);
-    }
-
-    successResponse(res, updatedPost, "Image removed successfully", 200);
-  } catch (error: any) {
-    console.error("❌ Remove image error:", error.message);
-    next(error);
-  }
-};
-
-export const getAllPosts = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Get all posts
+export const getAllPosts = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId } = req.params;
     const page = parseInt(req.query.page as string) || 1;
@@ -300,48 +219,26 @@ export const getAllPosts = async (
 
     let query = supabaseAdmin
       .from("generated_posts")
-      .select(
-        "*, documents(title), profiles!generated_posts_user_id_fkey(full_name, email)",
-        {
-          count: "exact",
-        }
-      )
+      .select("*, documents(title), profiles!generated_posts_user_id_fkey(full_name, email)", { count: "exact" })
       .eq("workspace_id", workspaceId)
       .order("generated_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (status) {
-      query = query.eq("moderation_status", status);
-    }
-
-    if (platform) {
-      query = query.eq("platform", platform);
-    }
+    if (status) query = query.eq("moderation_status", status);
+    if (platform) query = query.eq("platform", platform);
 
     const { data, error, count } = await query;
 
-    if (error) {
-      throw new Error("Failed to fetch posts");
-    }
+    if (error) throw new Error("Failed to fetch posts");
 
-    paginatedResponse(
-      res,
-      data || [],
-      page,
-      limit,
-      count || 0,
-      "Posts retrieved successfully"
-    );
+    paginatedResponse(res, data || [], page, limit, count || 0, "Posts retrieved successfully");
   } catch (error) {
     next(error);
   }
 };
 
-export const getPostById = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Get post by ID
+export const getPostById = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId, postId } = req.params;
 
@@ -352,9 +249,7 @@ export const getPostById = async (
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (error || !data) {
-      throw new NotFoundError("Post not found");
-    }
+    if (error || !data) throw new NotFoundError("Post not found");
 
     successResponse(res, data, "Post retrieved successfully");
   } catch (error) {
@@ -362,11 +257,8 @@ export const getPostById = async (
   }
 };
 
-export const deletePost = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Delete post
+export const deletePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId, postId } = req.params;
 
@@ -376,9 +268,7 @@ export const deletePost = async (
       .eq("id", postId)
       .eq("workspace_id", workspaceId);
 
-    if (error) {
-      throw new NotFoundError("Post not found");
-    }
+    if (error) throw new NotFoundError("Post not found");
 
     successResponse(res, null, "Post deleted successfully");
   } catch (error) {
@@ -386,18 +276,12 @@ export const deletePost = async (
   }
 };
 
-export const moderatePost = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Moderate post
+export const moderatePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId, postId } = req.params;
     const { action, reason } = req.body;
-
-    if (!req.user) {
-      throw new Error("User not authenticated");
-    }
+    if (!req.user) throw new Error("User not authenticated");
 
     const { data: post } = await supabaseAdmin
       .from("generated_posts")
@@ -406,16 +290,9 @@ export const moderatePost = async (
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (!post) {
-      throw new NotFoundError("Post not found");
-    }
+    if (!post) throw new NotFoundError("Post not found");
 
-    const newStatus =
-      action === "approve"
-        ? "approved"
-        : action === "reject"
-        ? "rejected"
-        : "flagged";
+    const newStatus = action === "approve" ? "approved" : action === "reject" ? "rejected" : "flagged";
 
     const { data, error } = await supabaseAdmin
       .from("generated_posts")
@@ -430,9 +307,7 @@ export const moderatePost = async (
       .select()
       .single();
 
-    if (error) {
-      throw new Error("Failed to moderate post");
-    }
+    if (error) throw new Error("Failed to moderate post");
 
     await supabaseAdmin.from("moderation_logs").insert({
       post_id: postId,
@@ -449,20 +324,13 @@ export const moderatePost = async (
   }
 };
 
-export const schedulePost = async (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-): Promise<void> => {
+// Schedule post with free user limits
+export const schedulePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const { workspaceId } = req.params;
     const { postId, socialAccountId, scheduledTime } = req.body;
+    if (!req.user) throw new Error("User not authenticated");
 
-    if (!req.user) {
-      throw new Error("User not authenticated");
-    }
-
-    // Verify post exists and belongs to workspace
     const { data: post, error: postError } = await supabaseAdmin
       .from("generated_posts")
       .select("id, platform")
@@ -470,18 +338,16 @@ export const schedulePost = async (
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (postError || !post) {
-      throw new NotFoundError("Post not found");
-    }
+    if (postError || !post) throw new NotFoundError("Post not found");
+
+    // Check limits BEFORE allowing the action
+    const dailyLimitCheck = await checkDailyPostLimit(req.user.id);
+    if (!dailyLimitCheck.canPostToday) throw new Error(dailyLimitCheck.message);
 
     const weeklyLimitCheck = await checkWeeklyPostLimit(req.user.id);
-    if (!weeklyLimitCheck.canPost) {
-      throw new Error(
-        weeklyLimitCheck.message || "Weekly posting limit exceeded"
-      );
-    }
+    if (!weeklyLimitCheck.canPost) throw new Error(weeklyLimitCheck.message);
 
-    // Create scheduled post record
+    // Create scheduled post
     const { data, error } = await supabaseAdmin
       .from("scheduled_posts")
       .insert({
@@ -495,19 +361,18 @@ export const schedulePost = async (
       .select()
       .single();
 
-    if (error) {
-      throw new Error(`Failed to schedule post: ${error.message}`);
-    }
+    if (error) throw new Error(`Failed to schedule post: ${error.message}`);
 
     // Update post status
-    await supabaseAdmin
-      .from("generated_posts")
-      .update({ moderation_status: "scheduled" })
-      .eq("id", postId);
+    await supabaseAdmin.from("generated_posts").update({ moderation_status: "scheduled" }).eq("id", postId);
 
-    if (data) {
-      await incrementWeeklyPostCount(req.user.id, post.platform);
-    }
+    // ✅ FIX: Use incrementUsage with correct types
+    await incrementUsage({ 
+      type: "weekly_post", 
+      userId: req.user.id, 
+      platform: post.platform,
+      scheduledTimeISO: scheduledTime 
+    });
 
     successResponse(res, data, "Post scheduled successfully", 201);
   } catch (error) {

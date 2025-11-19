@@ -473,6 +473,8 @@ export interface Database {
           merchant_transaction_id: string;
           amount: number;
           status: string;
+          plan_id: string;
+          phonepe_order_id:string,
           payment_method: string | null;
           phonepe_reference_id: string | null;
           created_at: string;
@@ -484,6 +486,8 @@ export interface Database {
           merchant_transaction_id: string;
           amount: number;
           status?: string;
+          plan_id: string;
+          phonepe_order_id:string,
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
           created_at?: string;
@@ -495,6 +499,8 @@ export interface Database {
           merchant_transaction_id?: string;
           amount?: number;
           status?: string;
+          phonepe_order_id:string,
+          plan_id: string;
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
           created_at?: string;

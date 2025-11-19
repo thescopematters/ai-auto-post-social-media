@@ -20,7 +20,9 @@ import workspaceSocialAccountsRoutes from "./routes/workspaceSocialAccounts.rout
 import mediaRoutes from "./routes/media.routes";
 import paymentRoutes from "./routes/payment.routes";
 import imageGenerationRoutes from "./routes/imageGeneration.routes";
-
+import { webhook } from "./controllers/phone-pay";
+import * as paymentController from "./controllers/phone-pay";
+import bodyParser from "body-parser";
 const app: Application = express();
 app.set("trust proxy", 1);
 
@@ -29,6 +31,10 @@ const allowedOrigins = [
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 
+app.use("/api/v1/payment/webhook", 
+  bodyParser.raw({ type: "*/*" }), 
+  webhook
+);
 
 app.use(
   cors({
@@ -58,6 +64,11 @@ app.use(
       "ngrok-skip-browser-warning",
     ],
   })
+);
+
+app.use("/api/v1/payment/webhook", 
+  bodyParser.raw({ type: "*/*" }), 
+  webhook
 );
 
 // Apply helmet AFTER CORS
@@ -121,6 +132,8 @@ app.use(errorHandler);
 
 // 🕒 SCHEDULER
 schedulerController.startScheduler();
+paymentController.startScheduler();
+
 
 // 🚀 SERVER STARTUP
 const startServer = () => {

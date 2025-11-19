@@ -3,6 +3,33 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
 
+// Custom password validation function
+const validatePassword = (password: string): string | null => {
+  if (password.length < 8) { // Increased minimum length for better security
+    return 'Password must be at least 8 characters long.';
+  }
+  // Check for uppercase, lowercase, number, and special character
+  const hasUpperCase = /[A-Z]/.test(password);
+  const hasLowerCase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const hasSpecialChar = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+  if (!hasUpperCase) {
+    return 'Password must contain at least one uppercase letter.';
+  }
+  if (!hasLowerCase) {
+    return 'Password must contain at least one lowercase letter.';
+  }
+  if (!hasNumber) {
+    return 'Password must contain at least one number.';
+  }
+  if (!hasSpecialChar) {
+    return 'Password must contain at least one special character (e.g., !, @, #, $).';
+  }
+
+  return null; // Password is valid
+};
+
 export function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -17,16 +44,41 @@ export function SignUp() {
     setError('');
     setLoading(true);
 
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters long');
+    // --- 1. NEW CLIENT-SIDE PASSWORD VALIDATION ---
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       setLoading(false);
       return;
     }
 
+    // --- 2. SIGN UP CALL ---
     const { error: signUpError } = await signUp(email, password, fullName);
 
     if (signUpError) {
-      setError(signUpError.message);
+      // --- 3. CUSTOM ERROR MESSAGE HANDLING ---
+      let customErrorMessage = 'An unknown error occurred during sign up.';
+
+      // Logic to check if the error is due to a duplicate email.
+      const errorMessage = (signUpError.message || '').toLowerCase();
+      const errorCode = (signUpError as any).code || '';
+
+      // *** MODIFIED LOGIC HERE ***
+      // We check for 'already exists', 'duplicate', 'auth/email-already-in-use', 
+      // OR explicitly check for the status code 409, which the server returns.
+      if (errorCode === 'auth/email-already-in-use' || errorMessage.includes('already exists') || errorMessage.includes('duplicate') || errorMessage.includes('status code 409')) {
+        customErrorMessage = 'This email is already in use. Please sign in or use a different email.';
+      } else if (errorMessage.includes('password') && !passwordError) {
+        // Catch any remaining password errors from the server side
+        customErrorMessage = 'Server-side password requirement failed. Please check your password.';
+      } else if (errorMessage.includes('404') || errorMessage.includes('network') || errorMessage.includes('failed to fetch')) {
+        customErrorMessage = 'A network error occurred. Please check your connection and try again.';
+      } else {
+        // Default to the error message returned by the auth function if not specifically handled
+        customErrorMessage = signUpError.message;
+      }
+
+      setError(customErrorMessage);
       setLoading(false);
     } else {
       navigate('/onboarding');
@@ -103,7 +155,7 @@ export function SignUp() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="At least 6 characters"
+                  placeholder="At least 8 chars, incl. special & upper/lower/num"
                 />
               </div>
             </div>
