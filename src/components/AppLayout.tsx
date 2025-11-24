@@ -16,8 +16,9 @@ import {
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { SocialConnectionModal } from '../pages/SocialConnectionModal';
-import { socialAccountsApi } from '../lib/apiClient';
-import { documentApi } from '../lib/apiClient';
+// Removed documentApi import as it wasn't the correct API for plan fetching
+import { socialAccountsApi, workspaceApi } from '../lib/apiClient';
+
 interface SocialAccount {
   id: string;
   workspace_id: string;
@@ -31,54 +32,77 @@ interface SocialAccount {
   last_sync: string;
 }
 
-interface PlanLimits {
-  plan_type?: string;
-  plan_name?: string;
-  document_limit?: number; // 0 means unlimited
-  daily_post_limit?: number;
-  weekly_post_limit?: number;
+// ------------------------------------------------------------------
+// CORRECTED INTERFACES START HERE (Replaced old PlanLimits/UploadLimitsResponse)
+// ------------------------------------------------------------------
+
+interface UsageLimitDetail {
+  planType: string; // The crucial property we need
+  [key: string]: any; // Allows for other properties like limit, remaining, etc.
 }
 
+/**
+ * Interface to represent the actual API response from workspaceApi.getLimits
+ */
 interface UploadLimitsResponse {
-  planType?: string; 
-  usageRecord?: any;  // you can type it if needed
-  planLimits?: PlanLimits;
+  documentUpload: UsageLimitDetail;
+  aiGeneration: UsageLimitDetail;
+  weeklyPosting: UsageLimitDetail;
+  linkedinRecommendation: { [key: string]: any; };
 }
+
+// ------------------------------------------------------------------
+// CORRECTED INTERFACES END HERE
+// ------------------------------------------------------------------
+
 
 export function AppLayout() {
   const { profile, currentWorkspace, workspaces, setCurrentWorkspace, signOut } = useAuth();
 
   // ---------------------
-  // CORRECT PLAN STATE
+  // ADDED: State to track if the plan is still loading
   // ---------------------
   const [planType, setPlanType] = useState<string>("Free");
+  const [isLoadingPlan, setIsLoadingPlan] = useState<boolean>(true);
+
 
 useEffect(() => {
   const fetchPlan = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace) {
+      setIsLoadingPlan(false);
+      return;
+    }
 
+    setIsLoadingPlan(true); 
+    
     try {
-      // tell TS what type res.data is
-      const res = await documentApi.getUploadLimits(currentWorkspace.id);
-      const data = res.data as UploadLimitsResponse;
+      const res = await workspaceApi.getLimits(currentWorkspace.id);
+      
+      // Data is correctly cast to the new, accurate interface
+      const data = res.data as UploadLimitsResponse; 
 
-      console.log(">>>>>>>>>>", data); // shows { canUpload: true, planType: 'pro', ... }
+      console.log(">>>>>>>>>> FULL RESPONSE DATA:", data);
 
-      // Access planType directly
-      const plan = data.planType || "Free";
+      // ------------------------------------------------------------------
+      // FINAL FIX: Accessing the correct path data.aiGeneration.planType
+      // This path is now valid thanks to the updated UploadLimitsResponse interface.
+      // ------------------------------------------------------------------
+      const plan = data?.aiGeneration?.planType 
+                   || "Free"; 
 
-      console.log(">>>>>plan", plan); // should now show "pro"
+      console.log(">>>>> EXTRACTED PLAN:", plan);
 
       setPlanType(plan);
     } catch (err) {
       console.error("Error loading plan", err);
       setPlanType("Free");
+    } finally {
+        setIsLoadingPlan(false);
     }
   };
 
   fetchPlan();
 }, [currentWorkspace]);
-
 
 
 
@@ -147,6 +171,12 @@ useEffect(() => {
     setSidebarOpen(false);
   };
 
+  // Helper to capitalize the first letter of the plan type
+  const formatPlanType = (plan: string) => {
+    if (!plan) return 'N/A';
+    return plan.charAt(0).toUpperCase() + plan.slice(1);
+  };
+
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
     { icon: FileText, label: 'Documents', path: '/documents' },
@@ -184,9 +214,9 @@ useEffect(() => {
                         ContentAI
                       </span>
                       
-                      {/* MODIFIED: Increased margin-left to ml-6 for more indentation */}
+                      {/* MODIFIED: Use isLoadingPlan and formatPlanType */}
                       <p className="text-xs text-gray-500 capitalize leading-none mt-1 ml-6"> 
-                        {planType} Plan
+                        {isLoadingPlan ? 'Loading...' : `${formatPlanType(planType)} Plan`}
                       </p>
                     </div>
                   </Link>

@@ -1,15 +1,23 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Sparkles, Mail, Lock, AlertCircle } from 'lucide-react';
+import { Sparkles, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
 
 export function SignIn() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // --- NEW STATE: to toggle password visibility ---
+  const [showPassword, setShowPassword] = useState(false); 
+  
   const { signIn } = useAuth();
   const navigate = useNavigate();
+
+  // --- NEW HANDLER: to switch the password visibility state ---
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,8 +35,11 @@ export function SignIn() {
       
       // If the underlying authentication service (e.g., Firebase, custom API) indicates the user 
       // doesn't exist, we show a specific message.
-      if (errorString.includes('user-not-found') || errorString.includes('no user found')) {
+      if (errorString.includes('user-not-found') || errorString.includes('no user found') || errorString.includes('auth/user-not-found')) {
          errorMessage = 'User profile not found. Please check your email or sign up.';
+      } else if (errorString.includes('wrong-password') || errorString.includes('invalid-credential')) {
+         // Keep the generic message for wrong passwords to avoid leaking info about valid emails
+         errorMessage = 'Invalid email or password';
       }
       
       // Otherwise, we default to the generic 'Invalid email or password' message 
@@ -95,13 +106,28 @@ export function SignIn() {
                 <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
                 <input
                   id="password"
-                  type="password"
+                  // --- CHANGE: Dynamically set input type based on showPassword state ---
+                  type={showPassword ? 'text' : 'password'}
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  // --- CHANGE: Increased padding to the right (pr-12) to make space for the toggle button ---
+                  className="w-full pl-10 pr-12 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   placeholder="Enter your password"
                 />
+                {/* --- NEW ELEMENT: Visibility Toggle Button --- */}
+                <button
+                  type="button"
+                  onClick={togglePasswordVisibility}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600 transition"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  {showPassword ? (
+                    <EyeOff className="w-5 h-5" />
+                  ) : (
+                    <Eye className="w-5 h-5" />
+                  )}
+                </button>
               </div>
             </div>
 

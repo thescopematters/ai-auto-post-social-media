@@ -80,8 +80,10 @@ type WorkspaceLimits = {
     limit: number;
     remaining: number;
     canPost: boolean;
-    nextResetDate?: string;
+    canPostNow: boolean;
+    nextAvailableTime?: string;
     message?: string;
+    planType?: string;
   };
   linkedinRecommendation?: {
     idealFrequency: string;
@@ -147,12 +149,11 @@ export function Generator() {
   const [isScheduleMode, setIsScheduleMode] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [workspaceLimits, setWorkspaceLimits] = useState<WorkspaceLimits | null>(null);
-  const [loadingLimits, setLoadingLimits] = useState(false);
+  const [_loadingLimits, setLoadingLimits] = useState(false);
   const [generatingAIImage, setGeneratingAIImage] = useState(false);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
 
-  // Debug logging
   useEffect(() => {
     console.log('Generator Component Mounted');
     console.log('Current Workspace:', currentWorkspace);
@@ -222,7 +223,6 @@ export function Generator() {
         if (activeAccounts.length > 0) {
           setSelectedAccount(activeAccounts[0].id);
         }
-        // console.log('Loaded social accounts:', response.data.length);
       }
     } catch (error) {
       console.error("Error loading social accounts:", error);
@@ -449,70 +449,93 @@ export function Generator() {
     }
   };
 
-  const handlePublishNow = async () => {
+const handlePublishNow = async () => {
     if (!selectedPost || !currentWorkspace || !selectedAccount) {
-      toast.error("Please select a social account first");
-      return;
+        toast.error("Please select a social account first");
+        return;
     }
 
-    if (
-      workspaceLimits?.weeklyPosting &&
-      !workspaceLimits.weeklyPosting.canPost
-    ) {
-      toast.error("Weekly Post Limit Reached", {
-        description:
-          workspaceLimits.weeklyPosting.message ||
-          "You've reached your weekly posting limit",
-      });
-      return;
+    // ✅ FIX 1: Check Weekly Limit First (Hard Stop)
+    if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPost) {
+        toast.error("Weekly Post Limit Reached", {
+            description: workspaceLimits.weeklyPosting.message ||
+                "You've reached your weekly posting limit",
+            duration: 5000,
+        });
+        return;
+    }
+
+    // ✅ FIX 2: NEW - Check Daily Limit (1 post per day for free plan)
+    // This check was missing - it's critical for free plan users
+    if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow) {
+        toast.error("Daily Post Limit Reached", {
+            description: "You can only post once per day on the free plan. " +
+                (workspaceLimits.weeklyPosting.nextAvailableTime 
+                    ? `Next available: ${new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleString()}`
+                    : "Try again tomorrow."),
+            duration: 5000,
+        });
+        return;
     }
 
     setScheduling(selectedPost.id);
 
     try {
-      if (editedContent !== selectedPost.content) {
-        const updateResponse = await contentApi.updatePost(
-          currentWorkspace.id,
-          selectedPost.id,
-          { content: editedContent }
-        );
+        if (editedContent !== selectedPost.content) {
+            const updateResponse = await contentApi.updatePost(
+                currentWorkspace.id,
+                selectedPost.id,
+                { content: editedContent }
+            );
 
-        if (!updateResponse.success) {
-          throw new Error("Failed to update content");
+            if (!updateResponse.success) {
+                throw new Error("Failed to update content");
+            }
         }
-      }
 
-      if (modalImages.length > 0) {
-        const uploadSuccess = await uploadPostImages();
-        if (!uploadSuccess) {
-          throw new Error("Failed to upload images");
+        if (modalImages.length > 0) {
+            const uploadSuccess = await uploadPostImages();
+            if (!uploadSuccess) {
+                throw new Error("Failed to upload images");
+            }
         }
-      }
 
-      const publishResponse = await schedulerApi.publishNow({
-        postId: selectedPost.id,
-        socialAccountId: selectedAccount,
-      });
-
-      if (publishResponse.success) {
-        toast.success("Post published successfully!");
-        await loadWorkspaceLimits();
-        closeScheduleModal();
-      } else {
-        toast.error("Failed to publish post", {
-          description: publishResponse.error || "Unknown error",
+        const publishResponse = await schedulerApi.publishNow({
+            postId: selectedPost.id,
+            socialAccountId: selectedAccount,
         });
-      }
-    } catch (error: any) {
-      console.error("Error publishing post:", error);
-      toast.error("Error publishing post", {
-        description: error.message,
-      });
-    } finally {
-      setScheduling(null);
-    }
-  };
 
+        if (publishResponse.success) {
+            toast.success("Post published successfully!");
+            await loadWorkspaceLimits();
+            closeScheduleModal();
+        } else {
+            toast.error("Failed to publish post", {
+                description: publishResponse.error || "Unknown error",
+            });
+        }
+    } catch (error: any) {
+        console.error("Error publishing post:", error);
+        
+        const errorMsg = error?.response?.data?.error || error?.message || "Error publishing post";
+        
+        // Handle server-side daily limit errors as well
+        if (errorMsg.includes("Daily post limit reached") || 
+            errorMsg.includes("Daily posting limit exceeded") ||
+            errorMsg.includes("24-hour")) {
+             toast.error("Daily Post Limit Reached", {
+                description: errorMsg,
+                duration: 5000,
+            });
+        } else {
+            toast.error("Error publishing post", {
+                description: errorMsg,
+            });
+        }
+    } finally {
+        setScheduling(null);
+    }
+};
   const handleSchedulePost = async () => {
     if (
       !currentWorkspace ||
@@ -622,7 +645,6 @@ export function Generator() {
 
   const isPro = workspaceLimits?.aiGeneration?.planType === "pro";
 
-  // Loading state
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
@@ -649,7 +671,6 @@ export function Generator() {
 
   return (
     <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Content Generator
@@ -660,7 +681,6 @@ export function Generator() {
         </p>
       </div>
 
-      {/* Upgrade Banner for Free Users */}
       {!isPro && workspaceLimits && (
         <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
           <div className="flex items-start gap-3">
@@ -684,9 +704,7 @@ export function Generator() {
         </div>
       )}
 
-      {/* Main Content Grid */}
       <div className="grid lg:grid-cols-3 gap-6">
-        {/* Configuration Panel */}
         <div className="lg:col-span-1">
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -819,60 +837,126 @@ export function Generator() {
                 )}
               </button>
 
-              {/* Usage Limits */}
               {workspaceLimits && (
-                <div className="mt-4 pt-4 border-t border-gray-200 space-y-2">
-                  {/* AI Generations */}
+                <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
                   {workspaceLimits.aiGeneration && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600">AI Generations:</span>
-                      <span className="font-medium text-gray-900">
-                        {isPro ? (
-                          "Unlimited"
-                        ) : (
-                          // FIX APPLIED HERE: Use 'remaining' instead of 'currentUsage'
-                          `${workspaceLimits.aiGeneration.remaining || 0}/${workspaceLimits.aiGeneration.limit || 0}`
-                        )}
-                      </span>
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-gray-600 font-medium">AI Generations Today:</span>
+                        <span className="font-semibold text-gray-900">
+                          {isPro ? (
+                            <span className="text-purple-600">Unlimited ∞</span>
+                          ) : (
+                            `${workspaceLimits.aiGeneration.remaining}/${workspaceLimits.aiGeneration.limit}`
+                          )}
+                        </span>
+                      </div>
+                      {!isPro && (
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-blue-600 h-1.5 rounded-full transition-all"
+                            style={{
+                              width: `${
+                                ((workspaceLimits.aiGeneration.limit - workspaceLimits.aiGeneration.remaining) /
+                                  workspaceLimits.aiGeneration.limit) *
+                                100
+                              }%`,
+                            }}
+                          />
+                        </div>
+                      )}
                     </div>
                   )}
 
-
-                      {workspaceLimits.documentUpload && (
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-gray-600">Documents:</span>
-                          <span className="font-medium text-gray-900">
-                            {isPro ? (
-                              "Unlimited"
-                            ) : (
-                              // FIX: Calculate REMAINING documents for the display (MAX - USED)
-                              // If limit is 2 and currentCount (used) is 2, this shows 0/2.
-                              `${Math.max(0, (workspaceLimits.documentUpload.limit || 0) - (workspaceLimits.documentUpload.currentCount || 0))}/${workspaceLimits.documentUpload.limit || 0}`
-                            )}
-                          </span>
+                  {workspaceLimits.documentUpload && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-gray-600 font-medium">Documents:</span>
+                        <span className="font-semibold text-gray-900">
+                          {isPro ? (
+                            <span className="text-purple-600">Unlimited ∞</span>
+                          ) : (
+                            `${workspaceLimits.documentUpload.remaining}/${workspaceLimits.documentUpload.limit}`
+                          )}
+                        </span>
+                      </div>
+                      {!isPro && (
+                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                          <div
+                            className="bg-green-600 h-1.5 rounded-full transition-all"
+                            style={{
+                              width: `${
+                                ((workspaceLimits.documentUpload.limit - workspaceLimits.documentUpload.remaining) /
+                                  workspaceLimits.documentUpload.limit) *
+                                100
+                              }%`,
+                            }}
+                          />
                         </div>
                       )}
+                    </div>
+                  )}
 
-                 {/* Weekly Posts */}
-                  {workspaceLimits.weeklyPosting && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-gray-600">Posts (7 Days):</span>
-                      <span className="font-medium text-gray-900">
-                        {/* FIX APPLIED HERE: 
-                          Calculate remaining by (Limit - Used Posts).
-                          Assuming 'postsThisWeek' is the USED count (which caused 0/2 when limit is 2 and no posts were used). 
-                        */}
-                        {`${Math.max(0, (workspaceLimits.weeklyPosting.limit || (isPro ? 100 : 2)) - (workspaceLimits.weeklyPosting.postsThisWeek || 0))}/${workspaceLimits.weeklyPosting.limit || (isPro ? 100 : 2)}`}
-                      </span>
+                 {workspaceLimits.weeklyPosting && (
+                    <div>
+                      <div className="flex items-center justify-between text-xs mb-1">
+                        <span className="text-gray-600 font-medium">Posts (Last 7 Days):</span>
+                        <span className="font-semibold text-gray-900">
+                          {`${Math.max(0, workspaceLimits.weeklyPosting.remaining)}/${workspaceLimits.weeklyPosting.limit}`}
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full transition-all ${
+                            workspaceLimits.weeklyPosting.remaining <= 0
+                              ? "bg-red-400"
+                              : workspaceLimits.weeklyPosting.remaining <= 1
+                              ? "bg-orange-500"
+                              : "bg-orange-600"
+                          }`}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              ((workspaceLimits.weeklyPosting.limit - workspaceLimits.weeklyPosting.remaining) /
+                                workspaceLimits.weeklyPosting.limit) *
+                              100
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                      
+                      {!workspaceLimits.weeklyPosting.canPostNow && 
+                       workspaceLimits.weeklyPosting.nextAvailableTime && (
+                        <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          Next post: {new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleString()}
+                        </p>
+                      )}
+                      
+                      {!workspaceLimits.weeklyPosting.canPost && (
+                        <p className="text-xs text-red-500 mt-1 font-medium">
+                          ⚠️ Weekly limit reached
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {!isPro && (
+                    <div className="pt-2 border-t border-gray-200">
+                      <button
+                        onClick={() => (window.location.href = "/subscription")}
+                        className="w-full text-xs py-2 px-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition font-medium"
+                      >
+                        ✨ Upgrade to Pro
+                      </button>
                     </div>
                   )}
                 </div>
               )}
-              </div>
-              </div>
-              </div>
+            </div>
+          </div>
+        </div>
 
-        {/* Generated Posts Section */}
         <div className="lg:col-span-2">
           {generatedPosts.length === 0 ? (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
@@ -967,7 +1051,6 @@ export function Generator() {
         </div>
       </div>
 
-      {/* Schedule Modal */}
       {showScheduleModal && selectedPost && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
           <div className="w-full max-w-6xl max-h-screen flex bg-white rounded-xl shadow-2xl overflow-hidden">
@@ -1210,7 +1293,6 @@ export function Generator() {
               </div>
             </div>
 
-            {/* LinkedIn Preview Panel */}
             <div className="w-1/2 flex flex-col bg-gray-50 overflow-hidden">
               <div className="p-4 border-b border-gray-200 bg-white">
                 <h3 className="text-sm font-semibold text-gray-900">
@@ -1285,7 +1367,6 @@ export function Generator() {
         </div>
       )}
 
-      {/* Preview Modal */}
       {showPreviewModal && selectedPost && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
           <div className="flex items-center justify-center w-full max-h-screen">
@@ -1360,7 +1441,6 @@ export function Generator() {
         </div>
       )}
 
-      {/* Image Preview Modal */}
       {showImagePreview && previewImageUrl && (
         <div 
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"

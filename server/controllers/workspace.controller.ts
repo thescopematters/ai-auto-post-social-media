@@ -6,8 +6,10 @@ import { NotFoundError, AuthorizationError } from "../utils/errors";
 import { successResponse } from "../utils/response";
 import logger from "../config/logger";
 import {
+  getUserPlanLimits,
   checkDocumentUploadLimit,
   checkAIGenerationLimit,
+  checkDailyPostLimit, // ✅ ADDED
   checkWeeklyPostLimit,
 } from "../utils/limitCheck";
 
@@ -308,29 +310,37 @@ export const getWorkspaceLimits = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { workspaceId } = req.params;
-
     if (!req.user) {
       throw new AuthorizationError("User not authenticated");
     }
 
-    const aiLimitCheck = await checkAIGenerationLimit(req.user.id);
-    const docLimitCheck = await checkDocumentUploadLimit(req.user.id);
-    const weeklyPostCheck = await checkWeeklyPostLimit(req.user.id);
+    // ✅ CRITICAL: Fetch plan limits ONCE to avoid race conditions
+    const planLimits = await getUserPlanLimits(req.user.id);
+    
+    console.log("✅ Plan limits fetched once:", planLimits);
+
+    // ✅ FIX: Now checking BOTH daily AND weekly limits
+    const [aiLimitCheck, docLimitCheck, dailyPostCheck, weeklyPostCheck] = await Promise.all([
+      checkAIGenerationLimit(req.user.id, planLimits),
+      checkDocumentUploadLimit(req.user.id, planLimits),
+      checkDailyPostLimit(req.user.id, planLimits), // ✅ NEW: Daily limit check
+      checkWeeklyPostLimit(req.user.id, planLimits)
+    ]);
+
+    console.log("🔍 Daily Post Check:", dailyPostCheck);
+    console.log("🔍 Weekly Post Check:", weeklyPostCheck);
 
     successResponse(
       res,
       {
-        // Document upload limits
         documentUpload: {
           canUpload: docLimitCheck.canUpload,
           message: docLimitCheck.message,
           currentCount: docLimitCheck.currentCount,
           limit: docLimitCheck.limit,
-          remaining: docLimitCheck.limit - docLimitCheck.currentCount,
+          remaining: docLimitCheck.limit === 0 ? -1 : docLimitCheck.limit - docLimitCheck.currentCount,
           planType: docLimitCheck.planType,
         },
-        // AI generation limits (10 for free, 100 for pro)
         aiGeneration: {
           canGenerate: aiLimitCheck.canGenerate,
           message: aiLimitCheck.message,
@@ -340,15 +350,19 @@ export const getWorkspaceLimits = async (
           planType: aiLimitCheck.planType,
         },
         weeklyPosting: {
-          canPost: weeklyPostCheck.canPost,
-          message: weeklyPostCheck.message,
+          canPost: weeklyPostCheck.canPost, // ✅ Weekly limit (2/week for free)
+          canPostNow: dailyPostCheck.canPostToday, // ✅ CRITICAL FIX: Daily limit (1/day for free)
+          message: !weeklyPostCheck.canPost 
+            ? weeklyPostCheck.message 
+            : !dailyPostCheck.canPostToday 
+            ? dailyPostCheck.message 
+            : undefined,
           postsThisWeek: weeklyPostCheck.postsThisWeek,
           limit: weeklyPostCheck.limit,
-          remaining: weeklyPostCheck.limit === 0 ? 0 : weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
+          remaining: weeklyPostCheck.limit === 0 ? -1 : weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
           nextResetDate: weeklyPostCheck.nextResetDate,
           planType: weeklyPostCheck.planType,
         },
-        // LinkedIn best practices note
         linkedinRecommendation: {
           note: "LinkedIn recommends posting 1-2 times per day for optimal engagement. Consistency is more important than frequency.",
           idealFrequency: "1-2 posts/day",

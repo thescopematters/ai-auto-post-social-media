@@ -29,10 +29,22 @@ interface CheckStatusResponse {
   };
 }
 
+interface PaymentHistoryItem {
+  id: string;
+  created_at: string;
+  end_date: string | null;
+  amount: number;
+  status: string;
+  payment_method: string;
+  phonepe_reference_id?: string;
+  merchant_transaction_id?: string;
+}
+
+
 export function Subscription() {
   const [loading, setLoading] = useState<boolean>(false);
   const [historyLoading, setHistoryLoading] = useState<boolean>(false);
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<PaymentHistoryItem[]>([]); 
   const [page, setPage] = useState<number>(1);
   const [totalPages, setTotalPages] = useState<number>(1);
 
@@ -55,7 +67,7 @@ export function Subscription() {
     try {
       const res = await paymentApi.getHistory();
       if (res?.success && Array.isArray(res.data)) {
-        setHistory(res.data);
+        setHistory(res.data as PaymentHistoryItem[]); 
         setTotalPages(Math.ceil(res.data.length / ITEMS_PER_PAGE));
         setPage(1);
       } else {
@@ -153,7 +165,7 @@ export function Subscription() {
     try {
       const res = await apiClient.post<CreateOrderResponse>('/payment/createorder', {
         plan: selectedPlan, 
-        amount:399// ✅ send selected plan
+        amount:399
       });
 
       console.log('createOrder response:', res);
@@ -173,16 +185,30 @@ export function Subscription() {
     }
   };
 
+  const getFormattedDate = (dateString: string | null) => {
+      if (!dateString) return '-';
+      try {
+          return new Date(dateString).toLocaleDateString('en-IN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+          });
+      } catch {
+          return dateString;
+      }
+  }
+
+
   return (
     <div className="max-w-6xl mx-auto p-6">
-      {/* Subscription Plans */}
+      {/* Subscription Plans (omitted for brevity) */}
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-gray-900">Upgrade your plan</h1>
         <p className="text-gray-600 mt-1">Choose the plan that fits your workflow.</p>
       </div>
 
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Free Plan */}
+        {/* Free Plan (omitted for brevity) */}
         <div className="bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900">Free</h2>
           <div className="mt-4 flex items-baseline gap-2">
@@ -195,16 +221,14 @@ export function Subscription() {
           </button>
           <ul className="mt-6 space-y-3 text-sm">
             <Feature text="Access to GPT-5" /> 
-            
             <Feature text="Limited file uploads (2 posts per week)" icon={<Upload className="w-4 h-4" />} />
-            
             <Feature text="Limited and slower image generation" icon={<Sparkles className="w-4 h-4" />} />
             <Feature text="Limited memory and context" icon={<Shield className="w-4 h-4" />} />
             <Feature text="Limited deep research" icon={<Star className="w-4 h-4" />} />
           </ul>
         </div>
 
-        {/* Pro Plan */}
+        {/* Pro Plan (omitted for brevity) */}
         <div className="bg-white border border-blue-200 rounded-2xl p-6 shadow-sm relative">
           <div className="absolute -top-3 right-4 text-xs bg-blue-600 text-white px-2 py-0.5 rounded-full">NEW</div>
           <h2 className="text-lg font-semibold text-gray-900">Pro</h2>
@@ -223,23 +247,20 @@ export function Subscription() {
           </button>
 
           <ul className="mt-6 space-y-3 text-sm">
-            {/* MODIFIED: Swapped positions */}
             <Feature text="Expanded access to GPT-5" />
             <Feature text="Unlimited posts publish/scheduling" />
-            
             <Feature text="Expanded messaging and uploads" icon={<Upload className="w-4 h-4" />} />
-            
             <Feature text="Expanded and faster image creation" icon={<Sparkles className="w-4 h-4" />} />
             <Feature text="Longer memory and context" icon={<Shield className="w-4 h-4" />} />
             <Feature text="Limited deep research" icon={<Star className="w-4 h-4" />} />
-            
-            {/* Feature "Projects, tasks, custom GPTs" remains removed */}
           </ul>
 
           <p className="mt-4 text-xs text-gray-500">Only available in certain regions. Limits apply.</p>
         </div>
       </div>
-
+      
+      ---
+      
       {/* Payment History */}
       <div className="mt-10 bg-white border border-gray-200 rounded-2xl p-6 shadow-sm">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment history</h2>
@@ -251,44 +272,61 @@ export function Subscription() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="min-w-full text-sm">
+              <table className="min-w-full text-sm table-fixed">
                 <thead>
                   <tr className="text-left text-gray-500">
-                    <th className="py-2 pr-4">Date</th>
-                    <th className="py-2 pr-4">Amount</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2 pr-4">Method</th>
-                    <th className="py-2 pr-4">Reference</th>
+                    <th className="py-2 pr-4 w-1/5">Start Date</th>
+                    <th className="py-2 pr-4 w-1/5">End Date</th>
+                    <th className="py-2 pr-4 w-1/5">Amount</th>
+                    <th className="py-2 pr-4 w-1/5">Status</th>
+                    <th className="py-2 pr-4 w-1/5">Reference</th>
                   </tr>
                 </thead>
                 <tbody>
                   {history
                     .slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE)
-                    .map((t) => (
-                      <tr key={t.id} className="border-t border-gray-100">
-                        <td className="py-2 pr-4">{new Date(t.created_at).toLocaleString()}</td>
-                        <td className="py-2 pr-4">₹{Number(t.amount).toFixed(2)}</td>
-                        <td className="py-2 pr-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs ${
-                              t.status === 'SUCCESS' || t.status === 'COMPLETED'
-                                ? 'bg-green-100 text-green-700'
-                                : t.status === 'PENDING'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : t.status === 'FAILED'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-gray-100 text-gray-700'
-                            }`}
-                          >
-                            {t.status}
-                          </span>
-                        </td>
-                        <td className="py-2 pr-4">{t.payment_method || '-'}</td>
-                        <td className="py-2 pr-4 truncate max-w-[220px]" title={t.phonepe_reference_id || t.merchant_transaction_id}>
-                          {t.phonepe_reference_id || t.merchant_transaction_id}
-                        </td>
-                      </tr>
-                    ))}
+                    .map((t) => {
+                        const referenceId = t.phonepe_reference_id || t.merchant_transaction_id;
+
+                        return (
+                          <tr key={t.id} className="border-t border-gray-100">
+                            <td className="py-2 pr-4 w-1/5">{getFormattedDate(t.created_at)}</td>
+                            <td className="py-2 pr-4 w-1/5">{getFormattedDate(t.end_date)}</td>
+                            <td className="py-2 pr-4 w-1/5">₹{Number(t.amount).toFixed(2)}</td>
+                            <td className="py-2 pr-4 w-1/5">
+                              <span
+                                className={`px-2 py-0.5 rounded text-xs ${
+                                  t.status === 'SUCCESS' || t.status === 'COMPLETED'
+                                    ? 'bg-green-100 text-green-700'
+                                    : t.status === 'PENDING'
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : t.status === 'FAILED'
+                                    ? 'bg-red-100 text-red-700'
+                                    : 'bg-gray-100 text-gray-700'
+                                }`}
+                              >
+                                {t.status}
+                              </span>
+                            </td>
+                            {/* 🎯 CUSTOM HOVER LOGIC IMPLEMENTED HERE */}
+                            <td 
+                                className="py-2 pr-4 w-1/5 relative group" // Added relative and group
+                            >
+                                <span className="truncate block" >
+                                    {referenceId}
+                                </span>
+                                {referenceId && (
+                                    <div className="absolute left-1/2 transform -translate-x-1/2 bottom-full mb-2 
+                                                    bg-gray-800 text-white text-xs rounded py-1 px-2 
+                                                    opacity-0 group-hover:opacity-100 transition-opacity 
+                                                    pointer-events-none whitespace-nowrap z-10 shadow-lg">
+                                        {referenceId}
+                                    </div>
+                                )}
+                            </td>
+                          </tr>
+                        );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -308,7 +346,7 @@ export function Subscription() {
         )}
       </div>
 
-      {/* ✅ Payment Result Modal */}
+      {/* Payment Result Modal (omitted for brevity) */}
       {resultOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/40" onClick={() => setResultOpen(false)} />

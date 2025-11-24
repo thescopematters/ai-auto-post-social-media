@@ -11,7 +11,9 @@ interface MediaFile {
 }
 
 export class ImageGenerationController {
+
   async generateImage(req: Request, res: Response) {
+    console.log(">>>>>", "step 1")
     try {
       const { workspaceId } = req.params;
       const { prompt } = req.body;

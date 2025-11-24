@@ -54,6 +54,7 @@ export function LimitsDisplay() {
           },
         }
       );
+      console.log(">>>>>res", response)
       const data = await response.json();
       if (data.success) {
         setLimits(data.data);

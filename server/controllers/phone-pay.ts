@@ -13,8 +13,16 @@ import { addMonths } from "date-fns";
 
 dotenv.config();
 
-type TransactionInsert = Database["public"]["Tables"]["payment_transactions"]["Insert"];
+type TransactionInsertBase = Database["public"]["Tables"]["payment_transactions"]["Insert"];
 type PaymentTransaction = Database["public"]["Tables"]["payment_transactions"]["Row"];
+
+// 🐛 FIX: Custom type definition to resolve TypeScript error (Code 2353).
+// This explicitly adds 'recheck_count' and 'last_checked_at' to the insert
+// payload, as the generated Supabase 'Insert' type often omits columns with DB defaults.
+type PaymentInsertPayload = TransactionInsertBase & {
+  recheck_count: number;
+  last_checked_at: string;
+};
 
 
 // 🔹 Helper to activate any plan after payment success
@@ -100,14 +108,15 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     const phonePeOrderId = response.orderId;
 
-    const insertPayload: TransactionInsert = {
+    // Type changed to resolve error 2353
+    const insertPayload: PaymentInsertPayload = {
       user_id: userId,
       merchant_transaction_id: merchantTransactionId,
       phonepe_order_id: phonePeOrderId,
       amount,
       status: "PENDING", // Status is PENDING upon creation
-      recheck_count: 0,
-      last_checked_at: new Date().toISOString(), // Initialize check time
+      recheck_count: 0, // This is now correctly included in the type
+      last_checked_at: new Date().toISOString(), // This is now correctly included in the type
       plan_id: planData.id,
     };
 

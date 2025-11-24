@@ -26,68 +26,86 @@ interface DocumentLimits {
   planType: string;
 }
 
-/**
- * Returns plan limits according to your scenario:
- * - Free: 10 AI generations/day, 1 post/day, 2 posts/week, 2 documents total
- * - Pro: unlimited AI (0 = unlimited), unlimited documents (0 = unlimited),
- * unlimited posts/day (0), 100 posts/week
- */
-const getUserPlanLimits = async (userId: string) => {
+interface DailyPostLimits {
+  canPostToday: boolean;
+  message?: string;
+  currentDaily: number;
+  dailyLimit: number;
+  planType: string;
+}
+
+export const getUserPlanLimits = async (userId: string) => {
+  console.log("inside getUserPlanLimits");
+
+  const FREE_LIMITS = {
+    plan_type: "free",
+    ai_daily_limit: 10,
+    document_limit: 2,
+    daily_post_limit: 1,
+    weekly_post_limit: 2,
+  };
+
+  const PRO_LIMITS = {
+    plan_type: "pro",
+    ai_daily_limit: 0,
+    document_limit: 0,
+    daily_post_limit: 0,
+    weekly_post_limit: 100,
+  };
+  
   try {
-    const { data: userPlan, error } = await supabaseAdmin
+    const { data: userPlan, error: userPlanError } = await supabaseAdmin
       .from("users_plans")
-      .select("*, plans:subs_plan_id(limit)")
+      .select("subs_plan_id")
       .eq("user_id", userId)
       .eq("status", "active")
       .single();
 
-    if (error || !userPlan) {
-      // Default free plan limits
-      return {
-        plan_type: "free",
-        ai_daily_limit: 10,
-        document_limit: 2,
-        daily_post_limit: 1,
-        weekly_post_limit: 2
-      };
+    if (userPlanError || !userPlan) {
+      console.warn("⚠️ No active plan found, defaulting to free");
+      return FREE_LIMITS;
+    }
+    console.log(">>>>>userplan", userPlan)
+
+    const { data: planData, error: planError } = await supabaseAdmin
+      .from("plans")
+      .select("*")
+      .eq("id", userPlan.subs_plan_id)
+      .maybeSingle();
+
+    console.log("📊 Full plan data:", JSON.stringify(planData, null, 2));
+
+    if (!planData) {
+      console.error(`❌ Plan ID ${userPlan.subs_plan_id} not found in plans table`);
+      if (planError) {
+        console.error(`❌ Error details:`, planError);
+      }
+      return FREE_LIMITS;
     }
 
-    // Expect plan info in userPlan.plans.limit or similar shape
-    const planType = userPlan.plans?.limit?.plan_type || "free";
+    const limitData = planData.limit || planData.limits || planData.plan_limits;
+
+    if (!limitData) {
+      console.error("❌ Plan exists but no limit field found. Available fields:", Object.keys(planData));
+      return FREE_LIMITS;
+    }
+
+    const planType = limitData.plan_type.toLowerCase();
 
     if (planType === "pro") {
-      return {
-        plan_type: "pro",
-        ai_daily_limit: 0,       // 0 => unlimited
-        document_limit: 0,       // 0 => unlimited
-        daily_post_limit: 0,     // 0 => unlimited per day
-        weekly_post_limit: 100
-      };
+      console.log("✅ User has PRO plan!");
+      return PRO_LIMITS;
     }
 
-    // fallback to free
-    return {
-      plan_type: "free",
-      ai_daily_limit: 10,
-      document_limit: 2,
-      daily_post_limit: 1,
-      weekly_post_limit: 2
-    };
+    console.log(`✅ User has ${planType} plan, defaulting to FREE limits for non-PRO.`);
+    return FREE_LIMITS;
+
   } catch (error) {
     console.error("❌ Error getting user plan:", error);
-    return {
-      plan_type: "free",
-      ai_daily_limit: 10,
-      document_limit: 2,
-      daily_post_limit: 1,
-      weekly_post_limit: 2
-    };
+    return FREE_LIMITS;
   }
 };
 
-/**
- * New usage_data schema (stored in user_usage_limits.usage_data)
- */
 const getOrCreateUsageRecord = async (userId: string) => {
   try {
     const { data: existingRecord, error } = await supabaseAdmin
@@ -142,6 +160,7 @@ const checkAndResetWeeklyCounts = async (record: any) => {
     const usageData = record.usage_data || {};
 
     if (usageData.week_start_date !== currentWeekStart) {
+      console.log("🔄 Resetting weekly counts - new week detected");
       const nextResetDate = getNextMonday();
       const updatedUsageData = {
         ...usageData,
@@ -176,12 +195,14 @@ const checkAndResetDailyCounts = async (record: any) => {
     const updatedUsageData = { ...usageData };
 
     if (usageData.ai_last_reset_date !== today) {
+      console.log("🔄 Resetting AI daily count - new day detected");
       updatedUsageData.ai_daily_count = 0;
       updatedUsageData.ai_last_reset_date = today;
       shouldUpdate = true;
     }
 
     if (usageData.post_last_reset_date !== today) {
+      console.log("🔄 Resetting daily post count - new day detected");
       updatedUsageData.daily_post_count = 0;
       updatedUsageData.post_last_reset_date = today;
       shouldUpdate = true;
@@ -206,111 +227,160 @@ const checkAndResetDailyCounts = async (record: any) => {
   }
 };
 
-/**
- * -----------------------------
- * LIMIT CHECK FUNCTIONS
- * -----------------------------
- */
-
-export const checkAIGenerationLimit = async (userId: string): Promise<UsageLimits> => {
+export const checkAIGenerationLimit = async (
+  userId: string,
+  planLimits?: any
+): Promise<UsageLimits> => {
   try {
     const usageRecord = await getOrCreateUsageRecord(userId);
-    const planLimits = await getUserPlanLimits(userId);
+    const limits = planLimits || await getUserPlanLimits(userId);
 
     const currentUsage = usageRecord.usage_data.ai_daily_count || 0;
-    const limit = planLimits.ai_daily_limit;
+    const limit = limits.ai_daily_limit;
     const remaining = limit === 0 ? Infinity : Math.max(0, limit - currentUsage);
 
     return {
       canGenerate: limit === 0 ? true : currentUsage < limit,
-      message: limit !== 0 && currentUsage >= limit ? `AI generation daily limit reached (${limit}). Reset at 00:00.` : undefined,
+      message: limit !== 0 && currentUsage >= limit
+        ? `AI generation daily limit reached (${limit}). Reset at 00:00.`
+        : undefined,
       currentUsage,
       limit,
-      planType: planLimits.plan_type,
+      planType: limits.plan_type,
       remaining: limit === 0 ? -1 : remaining
     };
   } catch (error) {
     console.error("❌ Error in AI generation limit check:", error);
-    return { canGenerate: false, message: "Error checking limits", currentUsage: 0, limit: 10, planType: "free", remaining: 10 };
-  }
-};
-
-export const checkWeeklyPostLimit = async (userId: string): Promise<WeeklyPostLimits> => {
-  try {
-    const usageRecord = await getOrCreateUsageRecord(userId);
-    const planLimits = await getUserPlanLimits(userId);
-
-    const currentUsage = usageRecord.usage_data.weekly_posts_count || 0;
-    const limit = planLimits.weekly_post_limit;
-
     return {
-      canPost: limit === 0 || currentUsage < limit,
-      message: currentUsage >= limit ? `Weekly post limit reached (${limit}). Next reset: ${new Date(usageRecord.usage_data.next_reset_date).toLocaleDateString()}` : undefined,
-      postsThisWeek: currentUsage,
-      limit,
-      planType: planLimits.plan_type,
-      nextResetDate: usageRecord.usage_data.next_reset_date
+      canGenerate: false,
+      message: "Error checking limits",
+      currentUsage: 0,
+      limit: 10,
+      planType: "free",
+      remaining: 10
     };
-  } catch (error) {
-    console.error("❌ Error in weekly post limit check:", error);
-    return { canPost: false, message: "Error checking limits", postsThisWeek: 0, limit: 2, planType: "free", nextResetDate: new Date().toISOString() };
   }
 };
 
-export const checkDailyPostLimit = async (userId: string) => {
+export const checkDocumentUploadLimit = async (
+  userId: string,
+  planLimits?: any
+): Promise<DocumentLimits> => {
   try {
     const usageRecord = await getOrCreateUsageRecord(userId);
-    const planLimits = await getUserPlanLimits(userId);
-
-    const dailyLimit = planLimits.daily_post_limit;
-    const currentDaily = usageRecord.usage_data.daily_post_count || 0;
-
-    if (dailyLimit === 0) return { canPostToday: true, currentDaily, dailyLimit, planType: planLimits.plan_type };
-
-    return {
-      canPostToday: currentDaily < dailyLimit,
-      message: currentDaily >= dailyLimit ? `Daily post limit reached (${dailyLimit}). Reset at 00:00.` : undefined,
-      currentDaily,
-      dailyLimit,
-      planType: planLimits.plan_type
-    };
-  } catch (error) {
-    console.error("❌ Error checking daily post limit:", error);
-    return { canPostToday: false, message: "Error checking limits", currentDaily: 0, dailyLimit: 1, planType: "free" };
-  }
-};
-
-export const checkDocumentUploadLimit = async (userId: string): Promise<DocumentLimits> => {
-  try {
-    const usageRecord = await getOrCreateUsageRecord(userId);
-    const planLimits = await getUserPlanLimits(userId);
-    console.log(">>>>usageRecord", usageRecord)
-    console.log(">>>>planLimits", planLimits)
-
+    const limits = planLimits || await getUserPlanLimits(userId);
 
     const currentCount = usageRecord.usage_data.total_documents || 0;
-    const limit = planLimits.document_limit;
-    console.log(">>>>current count", currentCount)
-    console.log(">>>>current limit", limit)
+    const limit = limits.document_limit;
 
     return {
       canUpload: limit === 0 ? true : currentCount < limit,
-      message: limit !== 0 && currentCount >= limit ? `Document limit reached (${limit}). Upgrade to Pro for unlimited.` : undefined,
+      message: limit !== 0 && currentCount >= limit
+        ? `Document limit reached (${limit}). Upgrade to Pro for unlimited.`
+        : undefined,
       currentCount,
       limit,
-      planType: planLimits.plan_type
+      planType: limits.plan_type
     };
   } catch (error) {
     console.error("❌ Error in document limit check:", error);
-    return { canUpload: false, message: "Error checking limits", currentCount: 0, limit: 2, planType: "free" };
+    return {
+      canUpload: false,
+      message: "Error checking limits",
+      currentCount: 0,
+      limit: 2,
+      planType: "free"
+    };
   }
 };
 
-/**
- * -----------------------------
- * INCREMENT FUNCTIONS
- * -----------------------------
- */
+export const checkDailyPostLimit = async (
+  userId: string,
+  planLimits?: any
+): Promise<DailyPostLimits> => {
+  try {
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const limits = planLimits || await getUserPlanLimits(userId);
+
+    const currentDaily = usageRecord.usage_data.daily_post_count || 0;
+    const dailyLimit = limits.daily_post_limit;
+
+    // 🔍 DEBUG LOG
+    console.log('🔍 Daily Limit Check:', {
+      userId,
+      currentDaily,
+      dailyLimit,
+      canPostToday: dailyLimit === 0 ? true : currentDaily < dailyLimit,
+      lastResetDate: usageRecord.usage_data.post_last_reset_date,
+      today: getTodayDate(),
+      planType: limits.plan_type
+    });
+
+    return {
+      canPostToday: dailyLimit === 0 ? true : currentDaily < dailyLimit,
+      message: dailyLimit !== 0 && currentDaily >= dailyLimit
+        ? `Daily post limit reached (${dailyLimit}). Reset at 00:00.`
+        : undefined,
+      currentDaily,
+      dailyLimit,
+      planType: limits.plan_type
+    };
+  } catch (error) {
+    console.error("❌ Error checking daily post limit:", error);
+    return {
+      canPostToday: false,
+      message: "Error checking limits",
+      currentDaily: 0,
+      dailyLimit: 1,
+      planType: "free"
+    };
+  }
+};
+
+export const checkWeeklyPostLimit = async (
+  userId: string,
+  planLimits?: any
+): Promise<WeeklyPostLimits> => {
+  try {
+    const usageRecord = await getOrCreateUsageRecord(userId);
+    const limits = planLimits || await getUserPlanLimits(userId);
+
+    const currentUsage = usageRecord.usage_data.weekly_posts_count || 0;
+    const limit = limits.weekly_post_limit;
+    const nextResetDate = usageRecord.usage_data.next_reset_date || new Date().toISOString();
+
+    // 🔍 DEBUG LOG
+    console.log('🔍 Weekly Limit Check:', {
+      userId,
+      currentUsage,
+      limit,
+      canPost: limit === 0 || currentUsage < limit,
+      planType: limits.plan_type,
+      nextResetDate
+    });
+
+    return {
+      canPost: limit === 0 || currentUsage < limit,
+      message: currentUsage >= limit
+        ? `Weekly post limit reached (${limit}). Next reset: ${new Date(nextResetDate).toLocaleDateString()}`
+        : undefined,
+      postsThisWeek: currentUsage,
+      limit,
+      planType: limits.plan_type,
+      nextResetDate: nextResetDate
+    };
+  } catch (error) {
+    console.error("❌ Error in weekly post limit check:", error);
+    return { 
+      canPost: false,
+      message: "Error checking limits",
+      postsThisWeek: 0,
+      limit: 2,
+      planType: "free",
+      nextResetDate: new Date().toISOString()
+    };
+  }
+};
 
 interface IncrementOptions {
   type: "ai" | "daily_post" | "weekly_post" | "published_post" | "document";
@@ -326,6 +396,11 @@ export const incrementUsage = async (options: IncrementOptions) => {
     const record = await getOrCreateUsageRecord(userId);
     const usage = record.usage_data || {};
     const updatedUsage = { ...usage };
+
+    console.log(`📊 Incrementing ${type} for user ${userId}`, {
+      currentDaily: usage.daily_post_count,
+      currentWeekly: usage.weekly_posts_count
+    });
 
     switch (type) {
       case "ai":
@@ -354,6 +429,7 @@ export const incrementUsage = async (options: IncrementOptions) => {
         updatedUsage.daily_post_count = (usage.daily_post_count || 0) + 1;
         updatedUsage.last_post_time = new Date().toISOString();
         updatedUsage.post_last_reset_date = usage.post_last_reset_date || getTodayDate();
+        console.log(`✅ Incremented: daily=${updatedUsage.daily_post_count}, weekly=${updatedUsage.weekly_posts_count}`);
         break;
 
       case "document":
@@ -413,12 +489,6 @@ export const incrementUsage = async (options: IncrementOptions) => {
   }
 };
 
-/**
- * -----------------------------
- * DECREMENT FUNCTIONS (NEW)
- * -----------------------------
- */
-
 interface DecrementOptions {
   type: "document";
   userId: string;
@@ -437,7 +507,6 @@ export const decrementUsage = async (options: DecrementOptions) => {
     const usage = record.usage_data || {};
     const updatedUsage = { ...usage };
 
-    // Ensure we don't go below zero
     if (usage.total_documents > 0) {
       updatedUsage.total_documents = (usage.total_documents || 0) - 1;
     } else {
@@ -454,11 +523,6 @@ export const decrementUsage = async (options: DecrementOptions) => {
   }
 };
 
-/**
- * -----------------------------
- * DATE HELPERS
- * -----------------------------
- */
 const getTodayDate = (): string => new Date().toISOString().split("T")[0];
 
 const getWeekStartDate = (): string => {

@@ -1,6 +1,12 @@
 import { Request, Response } from "express";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
+import { 
+  getUserPlanLimits, 
+  checkDailyPostLimit, 
+  checkWeeklyPostLimit, 
+  incrementUsage 
+} from "../utils/limitCheck";
 
 interface ScheduledPostResponse {
   id: string;
@@ -148,25 +154,36 @@ export class SchedulePostController {
   }
 
   async schedulePost(req: Request, res: Response): Promise<void> {
-    try {
-      const { workspaceId } = req.params;
-      const { postId, socialAccountId, scheduledTime, timezone } = req.body;
+  try {
+    const { workspaceId } = req.params;
+    const { postId, socialAccountId, scheduledTime, timezone } = req.body;
 
-      if (!postId || !socialAccountId || !scheduledTime) {
-        res.status(400).json({
-          success: false,
-          error:
-            "Missing required fields: postId, socialAccountId, scheduledTime",
-        });
-        return;
-      }
+    // ✅ FIX: Get userId from authenticated user (NOT from request body)
+    const userId = (req as any).user?.id || (req as any).user?.userId;
+    
+    console.log(">>>>> userId:", userId); // Debug log
 
+    if (!userId) {
+      res.status(401).json({
+        success: false,
+        error: "User not authenticated. Please log in.",
+      });
+      return;
+    }
+
+    // Validation: Required fields
+    if (!postId || !socialAccountId || !scheduledTime) {
+      res.status(400).json({
+        success: false,
+        error: "Missing required fields: postId, socialAccountId, scheduledTime",
+      });
+      return;
+    }
       // User's timezone (from frontend)
       const userTimezone = timezone || "UTC";
       logger.info(`📅 Scheduling post with timezone: ${userTimezone}`);
 
       // Parse the scheduled time - it's already in user's local time
-      // We need to convert it to UTC for storage
       const scheduledDate = new Date(scheduledTime);
       const now = new Date();
 
@@ -189,6 +206,73 @@ export class SchedulePostController {
         return;
       }
 
+      // ✅ NEW: Check if scheduled date is today
+      const todayStart = new Date(now);
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date(now);
+      todayEnd.setHours(23, 59, 59, 999);
+
+      const isScheduledToday = scheduledDate >= todayStart && scheduledDate <= todayEnd;
+
+      // ✅ NEW: Get user plan limits
+      const planLimits = await getUserPlanLimits(userId);
+      
+      // ✅ NEW: Check daily post limit if scheduling for today
+      if (isScheduledToday) {
+        const dailyLimit = await checkDailyPostLimit(userId, planLimits);
+        
+        logger.info(`🔍 Daily limit check for today's schedule:`, {
+          canPostToday: dailyLimit.canPostToday,
+          currentDaily: dailyLimit.currentDaily,
+          dailyLimit: dailyLimit.dailyLimit,
+          planType: dailyLimit.planType
+        });
+
+        if (!dailyLimit.canPostToday) {
+          const tomorrowDate = new Date(now);
+          tomorrowDate.setDate(tomorrowDate.getDate() + 1);
+          tomorrowDate.setHours(0, 0, 0, 0);
+
+          res.status(400).json({
+            success: false,
+            error: dailyLimit.message || "Daily post limit reached for today",
+            suggestion: `You've reached your daily posting limit (${dailyLimit.dailyLimit}). Please schedule this post for tomorrow (${tomorrowDate.toLocaleDateString()}) or later.`,
+            data: {
+              currentDaily: dailyLimit.currentDaily,
+              dailyLimit: dailyLimit.dailyLimit,
+              planType: dailyLimit.planType,
+              earliestAvailableDate: tomorrowDate.toISOString()
+            }
+          });
+          return;
+        }
+      }
+
+      // ✅ NEW: Check weekly post limit
+      const weeklyLimit = await checkWeeklyPostLimit(userId, planLimits);
+      
+      logger.info(`🔍 Weekly limit check:`, {
+        canPost: weeklyLimit.canPost,
+        postsThisWeek: weeklyLimit.postsThisWeek,
+        limit: weeklyLimit.limit,
+        planType: weeklyLimit.planType
+      });
+
+      if (!weeklyLimit.canPost) {
+        res.status(400).json({
+          success: false,
+          error: weeklyLimit.message || "Weekly post limit reached",
+          data: {
+            postsThisWeek: weeklyLimit.postsThisWeek,
+            weeklyLimit: weeklyLimit.limit,
+            planType: weeklyLimit.planType,
+            nextResetDate: weeklyLimit.nextResetDate
+          }
+        });
+        return;
+      }
+
+      // Verify post exists and belongs to workspace
       const { data: post, error: postError } = await supabaseAdmin
         .from("generated_posts")
         .select("id, workspace_id, content, platform")
@@ -213,6 +297,7 @@ export class SchedulePostController {
         is_active: boolean;
       }
 
+      // Verify social account exists and is active
       const { data: socialAccount, error: accountError } = await supabaseAdmin
         .from("social_accounts")
         .select("id, workspace_id, platform, account_name, is_active")
@@ -244,8 +329,10 @@ export class SchedulePostController {
         - User timezone: ${userTimezone}
         - User local time: ${scheduledTime}
         - UTC time (stored): ${scheduledTimeUTC}
+        - Scheduled for today: ${isScheduledToday}
       `);
 
+      // Create scheduled post
       const { data: scheduledPost, error: scheduleError } = await supabaseAdmin
         .from("scheduled_posts")
         .insert([
@@ -282,6 +369,24 @@ export class SchedulePostController {
           }`,
         });
         return;
+      }
+
+      // ✅ NEW: Increment usage counts after successful scheduling
+      await incrementUsage({
+        type: "weekly_post",
+        userId: userId,
+        platform: post.platform,
+        scheduledTimeISO: scheduledTimeUTC
+      });
+
+      // ✅ NEW: If scheduled for today, also increment daily count
+      if (isScheduledToday) {
+        await incrementUsage({
+          type: "daily_post",
+          userId: userId,
+          platform: post.platform,
+          scheduledTimeISO: scheduledTimeUTC
+        });
       }
 
       const responseData: ScheduledPostResponse = {
