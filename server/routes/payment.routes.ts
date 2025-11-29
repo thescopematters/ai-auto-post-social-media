@@ -10,7 +10,7 @@ const router = Router();
 
 router.post(
   "/createorder",
-  authenticate,               
+  authenticate,
   paymentController.createOrder);
 
 router.get(
@@ -25,5 +25,6 @@ router.post(
   paymentController.webhook
 );
 router.get("/checkstatus/:merchantTransactionId", paymentController.checkStatus);
+
 
 export default router;

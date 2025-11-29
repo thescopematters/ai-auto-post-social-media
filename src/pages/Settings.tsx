@@ -96,8 +96,9 @@ export function Settings() {
 
       if (response.success) {
         toast.success("Profile updated successfully!");
-        if (response.data?.profile && updateUserProfile) {
-          updateUserProfile(response.data.profile);
+        // Fixed TypeScript error: Proper type checking and casting
+        if (response.data && typeof response.data === 'object' && 'profile' in response.data && updateUserProfile) {
+          updateUserProfile(response.data.profile as any);
         }
       } else {
         throw new Error(response.message || "Failed to update profile");
@@ -152,7 +153,14 @@ export function Settings() {
       const response = await socialAccountsApi.disconnectAccount(platform);
 
       if (response.success) {
+        // Fetch updated accounts list
         fetchSocialAccounts();
+        
+        // ============================================
+        // CRITICAL: Dispatch custom event to notify AppLayout
+        // ============================================
+        window.dispatchEvent(new CustomEvent('socialAccountDisconnected'));
+        
         toast.success(
           `${
             platform.charAt(0).toUpperCase() + platform.slice(1)
@@ -189,7 +197,8 @@ export function Settings() {
       );
 
       if (response.success && response.data) {
-        setSocialAccounts(response.data);
+        // Fixed TypeScript error: Ensure response.data is treated as SocialAccount[]
+        setSocialAccounts(response.data as SocialAccount[]);
       }
     } catch (error: any) {
       console.error("Error fetching social accounts:", error);

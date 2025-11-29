@@ -455,7 +455,6 @@ const handlePublishNow = async () => {
         return;
     }
 
-    // ✅ FIX 1: Check Weekly Limit First (Hard Stop)
     if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPost) {
         toast.error("Weekly Post Limit Reached", {
             description: workspaceLimits.weeklyPosting.message ||
@@ -465,13 +464,17 @@ const handlePublishNow = async () => {
         return;
     }
 
-    // ✅ FIX 2: NEW - Check Daily Limit (1 post per day for free plan)
-    // This check was missing - it's critical for free plan users
     if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow) {
-        toast.error("Daily Post Limit Reached", {
-            description: "You can only post once per day on the free plan. " +
+        toast.error("Daily Post Limit Has Been Reached", {
+            description: "You can only post or schedule a post once per day on the free plan. " +
                 (workspaceLimits.weeklyPosting.nextAvailableTime 
-                    ? `Next available: ${new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleString()}`
+                    ?`Next available: ${new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleString('en-GB', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}`
                     : "Try again tomorrow."),
             duration: 5000,
         });
@@ -519,7 +522,6 @@ const handlePublishNow = async () => {
         
         const errorMsg = error?.response?.data?.error || error?.message || "Error publishing post";
         
-        // Handle server-side daily limit errors as well
         if (errorMsg.includes("Daily post limit reached") || 
             errorMsg.includes("Daily posting limit exceeded") ||
             errorMsg.includes("24-hour")) {
@@ -536,89 +538,145 @@ const handlePublishNow = async () => {
         setScheduling(null);
     }
 };
-  const handleSchedulePost = async () => {
-    if (
-      !currentWorkspace ||
-      !selectedPost?.id ||
-      !selectedAccount ||
-      !scheduledTime
-    ) {
-      toast.error("Please fill all required fields");
-      return;
+
+const handleSchedulePost = async () => {
+  if (
+    !currentWorkspace ||
+    !selectedPost?.id ||
+    !selectedAccount ||
+    !scheduledTime
+  ) {
+    toast.error("Please fill all required fields");
+    return;
+  }
+
+  if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPost) {
+    toast.error("Weekly Post Limit Reached", {
+      description:
+        workspaceLimits.weeklyPosting.message ||
+        "You've reached your weekly posting limit. Upgrade to Pro for unlimited posts.",
+      duration: 5000,
+    });
+    return;
+  }
+
+  const selectedDate = new Date(scheduledTime);
+  const now = new Date();
+
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date(now);
+  todayEnd.setHours(23, 59, 59, 999);
+  
+  const isScheduledForToday = selectedDate >= todayStart && selectedDate <= todayEnd;
+
+  if (isScheduledForToday && workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    tomorrow.setHours(0, 0, 0, 0);
+    
+    toast.error("Daily Post Limit Reached", {
+      description: "You can only post once per day on the free plan. " +
+        (workspaceLimits.weeklyPosting.nextAvailableTime 
+          ? `Next available: ${new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleString('en-GB', { 
+                        day: '2-digit', 
+                        month: 'short', 
+                        year: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}`
+          : `Please schedule for ${tomorrow.toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric'
+            })} or later.`),
+      duration: 5000,
+    });
+    return;
+  }
+
+  if (selectedDate <= now) {
+    toast.error("Scheduled time must be in the future");
+    return;
+  }
+
+  const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
+  if (selectedDate < minScheduleTime) {
+    toast.error("Scheduled time must be at least 5 minutes in the future");
+    return;
+  }
+
+  setScheduling(selectedPost.id);
+
+  try {
+    if (editedContent !== selectedPost.content) {
+      const updateResponse = await contentApi.updatePost(
+        currentWorkspace.id,
+        selectedPost.id,
+        { content: editedContent }
+      );
+
+      if (!updateResponse.success) {
+        throw new Error("Failed to update content");
+      }
     }
 
-    if (
-      workspaceLimits?.weeklyPosting &&
-      !workspaceLimits.weeklyPosting.canPost
-    ) {
+    if (modalImages.length > 0) {
+      const uploadSuccess = await uploadPostImages();
+      if (!uploadSuccess) {
+        throw new Error("Failed to upload images");
+      }
+    }
+
+    const response = await contentApi.schedulePost(currentWorkspace.id, {
+      postId: selectedPost.id,
+      socialAccountId: selectedAccount,
+      scheduledTime: new Date(scheduledTime).toISOString(),
+    });
+
+    if (response.success) {
+      toast.success("Post scheduled successfully!", {
+        description: isScheduledForToday 
+          ? "Your post will be published today at the scheduled time."
+          : `Your post will be published on ${selectedDate.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'long',
+                year: 'numeric'
+              })}.`
+      });
+      await loadWorkspaceLimits();
+      closeScheduleModal();
+    } else {
+      toast.error("Failed to schedule post", {
+        description: response.error,
+      });
+    }
+  } catch (error: any) {
+    console.error("Error scheduling post:", error);
+    
+    const errorMsg = error?.response?.data?.error || error?.message || "Error scheduling post";
+    
+    if (errorMsg.includes("Daily post limit reached") || 
+        errorMsg.includes("Daily posting limit exceeded") ||
+        errorMsg.includes("schedule this post for tomorrow")) {
+      toast.error("Daily Post Limit Reached", {
+        description: errorMsg,
+        duration: 5000,
+      });
+    } else if (errorMsg.includes("Weekly post limit")) {
       toast.error("Weekly Post Limit Reached", {
-        description:
-          workspaceLimits.weeklyPosting.message ||
-          "You've reached your weekly posting limit",
+        description: errorMsg,
+        duration: 5000,
       });
-      return;
-    }
-
-    const selectedDate = new Date(scheduledTime);
-    const now = new Date();
-    const minScheduleTime = new Date(now.getTime() + 5 * 60 * 1000);
-
-    if (selectedDate <= now) {
-      toast.error("Scheduled time must be in the future");
-      return;
-    }
-
-    if (selectedDate < minScheduleTime) {
-      toast.error("Scheduled time must be at least 5 minutes in the future");
-      return;
-    }
-
-    setScheduling(selectedPost.id);
-
-    try {
-      if (editedContent !== selectedPost.content) {
-        const updateResponse = await contentApi.updatePost(
-          currentWorkspace.id,
-          selectedPost.id,
-          { content: editedContent }
-        );
-
-        if (!updateResponse.success) {
-          throw new Error("Failed to update content");
-        }
-      }
-
-      if (modalImages.length > 0) {
-        const uploadSuccess = await uploadPostImages();
-        if (!uploadSuccess) {
-          throw new Error("Failed to upload images");
-        }
-      }
-
-      const response = await contentApi.schedulePost(currentWorkspace.id, {
-        postId: selectedPost.id,
-        socialAccountId: selectedAccount,
-        scheduledTime: new Date(scheduledTime).toISOString(),
-      });
-
-      if (response.success) {
-        toast.success("Post scheduled successfully!");
-        await loadWorkspaceLimits();
-        closeScheduleModal();
-      } else {
-        toast.error("Failed to schedule post", {
-          description: response.error,
-        });
-      }
-    } catch (error: any) {
-      console.error("Error scheduling post:", error);
+    } else {
       toast.error("Error scheduling post", {
-        description: error.message,
+        description: errorMsg,
       });
-    } finally {
-      setScheduling(null);
     }
-  };
+  } finally {
+    setScheduling(null);
+  }
+};
 
   const closeScheduleModal = () => {
     setShowScheduleModal(false);
@@ -1218,11 +1276,29 @@ const handlePublishNow = async () => {
                     </button>
                   </div>
 
-                  {isScheduleMode && (
+                    {isScheduleMode && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Date & Time
                       </label>
+                      
+                      {/* ✅ NEW: Show daily limit warning for today's schedule */}
+                      {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow && (
+                        <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <p className="text-xs font-medium text-orange-800">
+                              Daily limit has been reached for today
+                            </p>
+                            <p className="text-xs text-orange-700 mt-0.5">
+                              {workspaceLimits.weeklyPosting.nextAvailableTime 
+                                ? `Schedule for tomorrow or later. Next available: ${new Date(workspaceLimits.weeklyPosting.nextAvailableTime).toLocaleDateString()}`
+                                : "Please schedule or publish your post for tomorrow or later"}
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                      
                       <input
                         type="datetime-local"
                         value={scheduledTime}
@@ -1232,6 +1308,8 @@ const handlePublishNow = async () => {
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Min 5 minutes ahead
+                        {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow && 
+                          " • Schedule for tomorrow or later to avoid daily limit"}
                       </p>
                     </div>
                   )}
@@ -1465,3 +1543,4 @@ const handlePublishNow = async () => {
     </div>
   );
 }
+

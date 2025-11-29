@@ -14,9 +14,8 @@ import {
   Building2,
   Crown
 } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SocialConnectionModal } from '../pages/SocialConnectionModal';
-// Removed documentApi import as it wasn't the correct API for plan fetching
 import { socialAccountsApi, workspaceApi } from '../lib/apiClient';
 
 interface SocialAccount {
@@ -32,18 +31,11 @@ interface SocialAccount {
   last_sync: string;
 }
 
-// ------------------------------------------------------------------
-// CORRECTED INTERFACES START HERE (Replaced old PlanLimits/UploadLimitsResponse)
-// ------------------------------------------------------------------
-
 interface UsageLimitDetail {
-  planType: string; // The crucial property we need
-  [key: string]: any; // Allows for other properties like limit, remaining, etc.
+  planType: string;
+  [key: string]: any;
 }
 
-/**
- * Interface to represent the actual API response from workspaceApi.getLimits
- */
 interface UploadLimitsResponse {
   documentUpload: UsageLimitDetail;
   aiGeneration: UsageLimitDetail;
@@ -51,62 +43,11 @@ interface UploadLimitsResponse {
   linkedinRecommendation: { [key: string]: any; };
 }
 
-// ------------------------------------------------------------------
-// CORRECTED INTERFACES END HERE
-// ------------------------------------------------------------------
-
-
 export function AppLayout() {
   const { profile, currentWorkspace, workspaces, setCurrentWorkspace, signOut } = useAuth();
 
-  // ---------------------
-  // ADDED: State to track if the plan is still loading
-  // ---------------------
   const [planType, setPlanType] = useState<string>("Free");
   const [isLoadingPlan, setIsLoadingPlan] = useState<boolean>(true);
-
-
-useEffect(() => {
-  const fetchPlan = async () => {
-    if (!currentWorkspace) {
-      setIsLoadingPlan(false);
-      return;
-    }
-
-    setIsLoadingPlan(true); 
-    
-    try {
-      const res = await workspaceApi.getLimits(currentWorkspace.id);
-      
-      // Data is correctly cast to the new, accurate interface
-      const data = res.data as UploadLimitsResponse; 
-
-      console.log(">>>>>>>>>> FULL RESPONSE DATA:", data);
-
-      // ------------------------------------------------------------------
-      // FINAL FIX: Accessing the correct path data.aiGeneration.planType
-      // This path is now valid thanks to the updated UploadLimitsResponse interface.
-      // ------------------------------------------------------------------
-      const plan = data?.aiGeneration?.planType 
-                   || "Free"; 
-
-      console.log(">>>>> EXTRACTED PLAN:", plan);
-
-      setPlanType(plan);
-    } catch (err) {
-      console.error("Error loading plan", err);
-      setPlanType("Free");
-    } finally {
-        setIsLoadingPlan(false);
-    }
-  };
-
-  fetchPlan();
-}, [currentWorkspace]);
-
-
-
-  // SOCIAL CONNECTION LOGIC
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
   const [showSocialModal, setShowSocialModal] = useState(false);
@@ -115,7 +56,34 @@ useEffect(() => {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const checkSocialConnection = async () => {
+  // Fetch plan type
+  useEffect(() => {
+    const fetchPlan = async () => {
+      if (!currentWorkspace) {
+        setIsLoadingPlan(false);
+        return;
+      }
+
+      setIsLoadingPlan(true);
+      
+      try {
+        const res = await workspaceApi.getLimits(currentWorkspace.id);
+        const data = res.data as UploadLimitsResponse;
+        const plan = data?.aiGeneration?.planType || "Free";
+        setPlanType(plan);
+      } catch (err) {
+        console.error("Error loading plan", err);
+        setPlanType("Free");
+      } finally {
+        setIsLoadingPlan(false);
+      }
+    };
+
+    fetchPlan();
+  }, [currentWorkspace]);
+
+  // Check social connection - now using useCallback for reusability
+  const checkSocialConnection = useCallback(async () => {
     if (!currentWorkspace) {
       setIsCheckingConnection(false);
       return;
@@ -139,11 +107,35 @@ useEffect(() => {
     } finally {
       setIsCheckingConnection(false);
     }
-  };
+  }, [currentWorkspace]);
 
   useEffect(() => {
     checkSocialConnection();
-  }, [currentWorkspace]);
+  }, [checkSocialConnection]);
+
+  // ============================================
+  // NEW: Listen for custom event when account is disconnected
+  // ============================================
+  useEffect(() => {
+    const handleAccountDisconnected = () => {
+      console.log('Social account disconnected - refreshing connection status');
+      checkSocialConnection();
+      
+      // If user is on a restricted route, show the modal
+      const restrictedRoutes = ['/documents', '/generator', '/schedule'];
+      if (restrictedRoutes.includes(location.pathname)) {
+        setShowSocialModal(true);
+      }
+    };
+
+    // Listen for the custom event
+    window.addEventListener('socialAccountDisconnected', handleAccountDisconnected);
+
+    // Cleanup listener on unmount
+    return () => {
+      window.removeEventListener('socialAccountDisconnected', handleAccountDisconnected);
+    };
+  }, [checkSocialConnection, location.pathname]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -171,7 +163,6 @@ useEffect(() => {
     setSidebarOpen(false);
   };
 
-  // Helper to capitalize the first letter of the plan type
   const formatPlanType = (plan: string) => {
     if (!plan) return 'N/A';
     return plan.charAt(0).toUpperCase() + plan.slice(1);
@@ -201,8 +192,6 @@ useEffect(() => {
             border-r border-gray-200 transition-transform duration-300 ease-in-out`}
         >
           <div className="h-full flex flex-col">
-
-            {/* SIDEBAR HEADER */}
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
                 <div>
@@ -214,7 +203,6 @@ useEffect(() => {
                         ContentAI
                       </span>
                       
-                      {/* MODIFIED: Use isLoadingPlan and formatPlanType */}
                       <p className="text-xs text-gray-500 capitalize leading-none mt-1 ml-6"> 
                         {isLoadingPlan ? 'Loading...' : `${formatPlanType(planType)} Plan`}
                       </p>

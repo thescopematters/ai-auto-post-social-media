@@ -1,15 +1,15 @@
+import { Request, Response } from "express";
 import { AuthRequest } from "../middleware/auth";
 import { supabaseAdmin } from "../config/database";
 import { randomUUID } from "crypto";
 import { StandardCheckoutPayRequest } from "pg-sdk-node";
-import { Request, Response } from "express";
 import { Database } from "../types/database.types";
 import logger from "../config/logger";
 import { phonePayClient } from "../config/phonepe.client";
 import dotenv from "dotenv";
 import cron from "node-cron";
-
 import { addMonths } from "date-fns";
+
 
 dotenv.config();
 
@@ -17,8 +17,6 @@ type TransactionInsertBase = Database["public"]["Tables"]["payment_transactions"
 type PaymentTransaction = Database["public"]["Tables"]["payment_transactions"]["Row"];
 
 // 🐛 FIX: Custom type definition to resolve TypeScript error (Code 2353).
-// This explicitly adds 'recheck_count' and 'last_checked_at' to the insert
-// payload, as the generated Supabase 'Insert' type often omits columns with DB defaults.
 type PaymentInsertPayload = TransactionInsertBase & {
   recheck_count: number;
   last_checked_at: string;
@@ -38,32 +36,34 @@ const activatePlanForUser = async (userId: string, planId: string) => {
   const now = new Date();
   const oneMonthLater = addMonths(now, 1);
 
-  if (userPlan.subs_plan_id !== planId) {
-    // Update current plan
-    await supabaseAdmin
-      .from("users_plans")
-      .update({
-        subs_plan_id: planId,
-        status: "active",
-        start_date: now.toISOString(),
-        end_date: oneMonthLater.toISOString(),
-        updated_at: now.toISOString(),
-      })
-      .eq("user_id", userId);
+  // Note: We check if the existing plan is different before updating
+  // However, if a user buys the same plan, we should extend the subscription.
+  // For simplicity here, we assume re-buying replaces/extends the current period.
 
-    // Insert plan history
-    await supabaseAdmin
-      .from("users_plans_history")
-      .insert({
-        user_plan_id: userPlan.id,
-        plan_id: planId,
-        status: "active",
-        start_date: now.toISOString(),
-        end_date: oneMonthLater.toISOString(),
-        created_at: now.toISOString(),
-        updated_at: now.toISOString(),
-      });
-  }
+  // Update current plan
+  await supabaseAdmin
+    .from("users_plans")
+    .update({
+      subs_plan_id: planId,
+      status: "active",
+      start_date: now.toISOString(),
+      end_date: oneMonthLater.toISOString(),
+      updated_at: now.toISOString(),
+    })
+    .eq("user_id", userId);
+
+  // Insert plan history
+  await supabaseAdmin
+    .from("users_plans_history")
+    .insert({
+      user_plan_id: userPlan.id,
+      plan_id: planId,
+      status: "active",
+      start_date: now.toISOString(),
+      end_date: oneMonthLater.toISOString(),
+      created_at: now.toISOString(),
+      updated_at: now.toISOString(),
+    });
 };
 
 // ------------------- CREATE ORDER -------------------
@@ -108,15 +108,14 @@ export const createOrder = async (req: AuthRequest, res: Response) => {
 
     const phonePeOrderId = response.orderId;
 
-    // Type changed to resolve error 2353
     const insertPayload: PaymentInsertPayload = {
       user_id: userId,
       merchant_transaction_id: merchantTransactionId,
       phonepe_order_id: phonePeOrderId,
       amount,
       status: "PENDING", // Status is PENDING upon creation
-      recheck_count: 0, // This is now correctly included in the type
-      last_checked_at: new Date().toISOString(), // This is now correctly included in the type
+      recheck_count: 0,
+      last_checked_at: new Date().toISOString(),
       plan_id: planData.id,
     };
 
@@ -166,7 +165,7 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response) => {
       .from("users_plans")
       .select("end_date")
       .eq("user_id", req.user.id)
-      .maybeSingle(); // because one active plan per user
+      .maybeSingle();
 
     if (planError) throw new Error(planError.message);
 
@@ -242,7 +241,7 @@ export const checkStatus = async (req: Request, res: Response) => {
 
 // ------------------- WEBHOOK -------------------
 export const webhook = async (req: Request, res: Response) => {
-  
+
   try {
     const rawBodyString =
       req.body instanceof Buffer
@@ -329,14 +328,21 @@ const sleep = (ms: number) => new Promise(res => setTimeout(res, ms));
 
 const TWO_HOURS_MS = 2 * 60 * 60 * 1000; // 2 hours
 
+
+// 🔄 UPDATED: startScheduler now calls the new expiration processor.
 export const startScheduler = () => {
   // CRON job scheduled to run once every hour (at the 0 minute mark)
-  cron.schedule("0 * * * *", async () => { 
+  cron.schedule("0 * * * *", async () => {
     if (isSchedulerRunning) return;
     isSchedulerRunning = true;
 
     try {
+      // 1. Process pending transactions
       await processPendingTransactions();
+
+      // 2. Process expired subscriptions
+      await processExpiredSubscriptions();
+
     } catch (err) {
       logger.error("Scheduler error:", err);
     } finally {
@@ -349,9 +355,6 @@ export const startScheduler = () => {
 
 /**
  * Checks for and resolves transactions stuck in PENDING status.
- *
- * The DB update for recheck_count and status is now performed in a single,
- * atomic operation to prevent race conditions with the webhook handler.
  */
 export const processPendingTransactions = async () => {
   try {
@@ -385,7 +388,7 @@ export const processPendingTransactions = async () => {
           // 2. FETCH STATUS from PhonePe first
           const response = await phonePayClient.getOrderStatus(txn.merchant_transaction_id);
           const remoteState = response?.state?.toUpperCase?.() || "PENDING";
-          
+
           let finalStatus = txn.status;
           let planActivated = false;
 
@@ -450,5 +453,80 @@ export const processPendingTransactions = async () => {
       `${new Date().toISOString()} — ❌ Error in processPendingTransactions:`,
       err
     );
+  }
+};
+
+export const processExpiredSubscriptions = async () => {
+  try {
+    const now = new Date().toISOString();
+
+    // 1. Fetch the ID of the 'Free' plan (case-insensitive partial match)
+    const { data: freePlan, error: freePlanError } = await supabaseAdmin
+      .from("plans")
+      .select("id")
+      .ilike("plans_name", "%free%") // Matches "Free", "Free Plan", etc.
+      .single();
+
+
+    if (freePlanError || !freePlan) {
+      logger.error("Free plan ID not found in the 'plans' table.");
+      // It's critical to ensure a Free plan exists in the DB
+      return;
+    }
+    const freePlanId = freePlan.id;
+
+    // 2. Fetch all active subscriptions that have expired
+    const { data: expiredPlans, error: expiredError } = await supabaseAdmin
+      .from("users_plans")
+      .select("*")
+      .lt("end_date", now)
+      .neq("subs_plan_id", freePlanId); // Don't downgrade if already free
+
+    if (expiredError) {
+      logger.error("Error fetching expired plans:", expiredError);
+      return;
+    }
+
+    if (!expiredPlans || expiredPlans.length === 0) {
+      // No expired plans to process
+      return;
+    }
+
+    logger.info(`Found ${expiredPlans.length} expired plans. Processing...`);
+
+    // 3. Downgrade each user to Free
+    for (const plan of expiredPlans) {
+      try {
+        // Update users_plans table
+        await supabaseAdmin
+          .from("users_plans")
+          .update({
+            subs_plan_id: freePlanId,
+            status: "active", // or 'downgraded' if you prefer
+            updated_at: now,
+          })
+          .eq("user_id", plan.user_id);
+
+        // Insert into history
+        await supabaseAdmin
+          .from("users_plans_history")
+          .insert({
+            user_plan_id: plan.id,
+            plan_id: freePlanId,
+            status: "expired/reset",
+            start_date: now,
+            end_date: now,
+            created_at: now,
+            updated_at: now,
+          });
+
+        logger.info(`⭐ User ${plan.user_id} plan reset from ${plan.subs_plan_id} to Free.`);
+      } catch (planUpdateError) {
+        logger.error(`Failed to reset plan for user ${plan.user_id}:`, planUpdateError);
+      }
+    }
+
+  } catch (err) {
+    logger.error("Fatal error in processExpiredSubscriptions:", err);
   }
 };

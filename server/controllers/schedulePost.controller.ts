@@ -1,11 +1,11 @@
 import { Request, Response } from "express";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
-import { 
-  getUserPlanLimits, 
-  checkDailyPostLimit, 
-  checkWeeklyPostLimit, 
-  incrementUsage 
+import {
+  getUserPlanLimits,
+  checkDailyPostLimit,
+  checkWeeklyPostLimit,
+  incrementUsage
 } from "../utils/limitCheck";
 
 interface ScheduledPostResponse {
@@ -154,31 +154,31 @@ export class SchedulePostController {
   }
 
   async schedulePost(req: Request, res: Response): Promise<void> {
-  try {
-    const { workspaceId } = req.params;
-    const { postId, socialAccountId, scheduledTime, timezone } = req.body;
+    try {
+      const { workspaceId } = req.params;
+      const { postId, socialAccountId, scheduledTime, timezone } = req.body;
 
-    // ✅ FIX: Get userId from authenticated user (NOT from request body)
-    const userId = (req as any).user?.id || (req as any).user?.userId;
-    
-    console.log(">>>>> userId:", userId); // Debug log
+      // ✅ FIX: Get userId from authenticated user (NOT from request body)
+      const userId = (req as any).user?.id || (req as any).user?.userId;
 
-    if (!userId) {
-      res.status(401).json({
-        success: false,
-        error: "User not authenticated. Please log in.",
-      });
-      return;
-    }
+      console.log(">>>>> userId:", userId); // Debug log
 
-    // Validation: Required fields
-    if (!postId || !socialAccountId || !scheduledTime) {
-      res.status(400).json({
-        success: false,
-        error: "Missing required fields: postId, socialAccountId, scheduledTime",
-      });
-      return;
-    }
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: "User not authenticated. Please log in.",
+        });
+        return;
+      }
+
+      // Validation: Required fields
+      if (!postId || !socialAccountId || !scheduledTime) {
+        res.status(400).json({
+          success: false,
+          error: "Missing required fields: postId, socialAccountId, scheduledTime",
+        });
+        return;
+      }
       // User's timezone (from frontend)
       const userTimezone = timezone || "UTC";
       logger.info(`📅 Scheduling post with timezone: ${userTimezone}`);
@@ -216,11 +216,11 @@ export class SchedulePostController {
 
       // ✅ NEW: Get user plan limits
       const planLimits = await getUserPlanLimits(userId);
-      
+
       // ✅ NEW: Check daily post limit if scheduling for today
       if (isScheduledToday) {
         const dailyLimit = await checkDailyPostLimit(userId, planLimits);
-        
+
         logger.info(`🔍 Daily limit check for today's schedule:`, {
           canPostToday: dailyLimit.canPostToday,
           currentDaily: dailyLimit.currentDaily,
@@ -236,7 +236,11 @@ export class SchedulePostController {
           res.status(400).json({
             success: false,
             error: dailyLimit.message || "Daily post limit reached for today",
-            suggestion: `You've reached your daily posting limit (${dailyLimit.dailyLimit}). Please schedule this post for tomorrow (${tomorrowDate.toLocaleDateString()}) or later.`,
+            suggestion: `You've reached your daily posting limit (${dailyLimit.dailyLimit}). Please schedule this post for tomorrow (${(() => {
+              const d = new Date(tomorrowDate);
+              const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+              return `${d.getDate()}/${months[d.getMonth()]}/${d.getFullYear()}`;
+            })()}) or later.`,
             data: {
               currentDaily: dailyLimit.currentDaily,
               dailyLimit: dailyLimit.dailyLimit,
@@ -250,7 +254,7 @@ export class SchedulePostController {
 
       // ✅ NEW: Check weekly post limit
       const weeklyLimit = await checkWeeklyPostLimit(userId, planLimits);
-      
+
       logger.info(`🔍 Weekly limit check:`, {
         canPost: weeklyLimit.canPost,
         postsThisWeek: weeklyLimit.postsThisWeek,
@@ -364,9 +368,8 @@ export class SchedulePostController {
         logger.error("Schedule creation error:", scheduleError);
         res.status(500).json({
           success: false,
-          error: `Failed to schedule post: ${
-            scheduleError?.message || "Unknown error"
-          }`,
+          error: `Failed to schedule post: ${scheduleError?.message || "Unknown error"
+            }`,
         });
         return;
       }

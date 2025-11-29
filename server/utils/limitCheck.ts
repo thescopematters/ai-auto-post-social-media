@@ -52,7 +52,7 @@ export const getUserPlanLimits = async (userId: string) => {
     daily_post_limit: 0,
     weekly_post_limit: 100,
   };
-  
+
   try {
     const { data: userPlan, error: userPlanError } = await supabaseAdmin
       .from("users_plans")
@@ -362,7 +362,13 @@ export const checkWeeklyPostLimit = async (
     return {
       canPost: limit === 0 || currentUsage < limit,
       message: currentUsage >= limit
-        ? `Weekly post limit reached (${limit}). Next reset: ${new Date(nextResetDate).toLocaleDateString()}`
+        ? `Weekly post limit reached (${limit}). Next reset: ${(() => {
+          const d = new Date(nextResetDate);
+          const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+          const formattedDate = `${d.getDate()}/${months[d.getMonth()]}/${d.getFullYear()}`;
+          console.log('🔍 FORMATTED DATE:', formattedDate);
+          return formattedDate;
+        })()}`
         : undefined,
       postsThisWeek: currentUsage,
       limit,
@@ -371,7 +377,7 @@ export const checkWeeklyPostLimit = async (
     };
   } catch (error) {
     console.error("❌ Error in weekly post limit check:", error);
-    return { 
+    return {
       canPost: false,
       message: "Error checking limits",
       postsThisWeek: 0,
@@ -510,7 +516,7 @@ export const decrementUsage = async (options: DecrementOptions) => {
     if (usage.total_documents > 0) {
       updatedUsage.total_documents = (usage.total_documents || 0) - 1;
     } else {
-        console.warn(`User ${userId} attempted to decrement document count below zero.`);
+      console.warn(`User ${userId} attempted to decrement document count below zero.`);
     }
 
     await supabaseAdmin

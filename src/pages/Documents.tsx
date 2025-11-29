@@ -12,7 +12,9 @@ import {
   MoreVertical,
   Trash2,
   Eye,
- 
+  X,
+  Save,
+  Edit,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -35,6 +37,11 @@ export function Documents() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [workspaceLimits, setWorkspaceLimits] = useState<any>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    id: string;
+    title: string;
+  } | null>(null);
+  const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -128,12 +135,19 @@ export function Documents() {
     }
   };
 
-  const handleDeleteDocument = async (id: string) => {
+  const handleDeleteDocument = async (id: string, title: string) => {
     if (!currentWorkspace) return;
-    if (!confirm("Are you sure you want to delete this document?")) return;
+    setDeleteConfirmation({ id, title });
+  };
+
+  const confirmDelete = async () => {
+    if (!currentWorkspace || !deleteConfirmation) return;
 
     try {
-      const response = await documentApi.delete(currentWorkspace.id, id);
+      const response = await documentApi.delete(
+        currentWorkspace.id,
+        deleteConfirmation.id
+      );
       if (response.success) {
         toast.success("Document deleted successfully!");
         loadDocuments();
@@ -144,6 +158,35 @@ export function Documents() {
     } catch (error: any) {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
+    } finally {
+      setDeleteConfirmation(null);
+    }
+  };
+
+  const handleViewDocument = (document: Document) => {
+    setViewDocument(document);
+  };
+
+  const handleUpdateDocument = async (id: string, updatedContent: string) => {
+    if (!currentWorkspace) return;
+
+    try {
+      const response = await documentApi.update(currentWorkspace.id, id, {
+        contentText: updatedContent,
+      });
+      
+      if (response.success) {
+        toast.success("Document updated successfully!");
+        await loadDocuments();
+        
+        // Update the viewDocument state with the new content
+        setViewDocument(prev => prev ? {...prev, content_text: updatedContent} : null);
+      } else {
+        throw new Error(response.error || "Update failed");
+      }
+    } catch (error: any) {
+      console.error("Error updating document:", error);
+      toast.error("Failed to update document");
     }
   };
 
@@ -326,7 +369,8 @@ export function Documents() {
               <DocumentRow
                 key={doc.id}
                 document={doc}
-                onDelete={() => handleDeleteDocument(doc.id)}
+                onDelete={() => handleDeleteDocument(doc.id, doc.title)}
+                onView={() => handleViewDocument(doc)}
               />
             ))}
           </div>
@@ -349,6 +393,22 @@ export function Documents() {
           planType={workspaceLimits.documentUpload.planType}
         />
       )}
+
+      {deleteConfirmation && (
+        <DeleteConfirmationModal
+          title={deleteConfirmation.title}
+          onConfirm={confirmDelete}
+          onCancel={() => setDeleteConfirmation(null)}
+        />
+      )}
+
+      {viewDocument && (
+        <ViewDocumentModal
+          document={viewDocument}
+          onClose={() => setViewDocument(null)}
+          onUpdate={handleUpdateDocument}
+        />
+      )}
     </div>
   );
 }
@@ -356,9 +416,11 @@ export function Documents() {
 function DocumentRow({
   document,
   onDelete,
+  onView,
 }: {
   document: Document;
   onDelete: () => void;
+  onView: () => void;
 }) {
   const [showMenu, setShowMenu] = useState(false);
 
@@ -413,12 +475,21 @@ function DocumentRow({
           </button>
           {showMenu && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-              <button className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
+              <button 
+                onClick={() => {
+                  setShowMenu(false);
+                  onView();
+                }}
+                className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+              >
                 <Eye className="w-4 h-4" />
                 View
               </button>
               <button
-                onClick={onDelete}
+                onClick={() => {
+                  setShowMenu(false);
+                  onDelete();
+                }}
                 className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
               >
                 <Trash2 className="w-4 h-4" />
@@ -444,10 +515,10 @@ function UploadModal({
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (title && text) {
-      await onTextUpload(text, title);
+      onTextUpload(text, title);
       setText("");
       setTitle("");
     }
@@ -463,7 +534,7 @@ function UploadModal({
           </p>
         </div>
         <div className="p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Title
@@ -491,13 +562,13 @@ function UploadModal({
               />
             </div>
             <button
-              type="submit"
-              disabled={uploading}
+              onClick={handleSubmit}
+              disabled={uploading || !title || !text}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
               {uploading ? "Saving..." : "Save Content"}
             </button>
-          </form>
+          </div>
         </div>
         <div className="p-6 border-t border-gray-200 flex justify-end">
           <button
@@ -558,6 +629,198 @@ function UpgradeModal({
             className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition"
           >
             Upgrade Now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DeleteConfirmationModal({
+  title,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 bg-red-50 rounded-full">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">Delete Document?</h2>
+        </div>
+        
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete <span className="font-semibold text-gray-900">"{title}"</span>? This action cannot be undone.
+        </p>
+        
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ViewDocumentModal({
+  document,
+  onClose,
+  onUpdate,
+}: {
+  document: Document;
+  onClose: () => void;
+  onUpdate: (id: string, content: string) => Promise<void>;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedContent, setEditedContent] = useState(document.content_text || "");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes === 0) return "0 Bytes";
+    const k = 1024;
+    const sizes = ["Bytes", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    await onUpdate(document.id, editedContent);
+    setIsSaving(false);
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    setEditedContent(document.content_text || "");
+    setIsEditing(false);
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="p-3 bg-blue-50 rounded-lg">
+              <FileText className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">{document.title}</h2>
+              <div className="flex items-center gap-4 mt-1">
+                <span className="text-sm text-gray-500 capitalize">
+                  {document.file_type}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {formatFileSize(document.file_size)}
+                </span>
+                <span className="text-sm text-gray-500">
+                  {new Date(document.uploaded_at).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {!isEditing ? (
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                <Edit className="w-4 h-4" />
+                Edit
+              </button>
+            ) : (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleCancel}
+                  disabled={isSaving}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSave}
+                  disabled={isSaving}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition disabled:opacity-50"
+                >
+                  <Save className="w-4 h-4" />
+                  {isSaving ? "Saving..." : "Save"}
+                </button>
+              </div>
+            )}
+            <button
+              onClick={onClose}
+              disabled={isSaving}
+              className="p-2 hover:bg-gray-100 rounded-lg transition disabled:opacity-50"
+            >
+              <X className="w-6 h-6 text-gray-500" />
+            </button>
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {document.content_text || isEditing ? (
+            <div className="w-full h-full">
+              {isEditing ? (
+                <textarea
+                  value={editedContent}
+                  onChange={(e) => setEditedContent(e.target.value)}
+                  className="w-full h-full min-h-[400px] px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none font-sans text-gray-700 leading-relaxed"
+                  placeholder="Enter your document content here..."
+                />
+              ) : (
+                <div className="prose max-w-none">
+                  <pre className="whitespace-pre-wrap font-sans text-gray-700 leading-relaxed">
+                    {document.content_text}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                No content available
+              </h3>
+              <p className="text-gray-600 mb-4">
+                This document doesn't have any text content yet.
+              </p>
+              <button
+                onClick={() => setIsEditing(true)}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                <Edit className="w-4 h-4" />
+                Add Content
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-200 flex justify-end">
+          <button
+            onClick={onClose}
+            disabled={isSaving}
+            className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition disabled:opacity-50"
+          >
+            Close
           </button>
         </div>
       </div>

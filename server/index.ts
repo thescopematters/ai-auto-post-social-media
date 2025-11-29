@@ -31,8 +31,8 @@ const allowedOrigins = [
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 
-app.use("/api/v1/payment/webhook", 
-  bodyParser.raw({ type: "*/*" }), 
+app.use("/api/v1/payment/webhook",
+  bodyParser.raw({ type: "*/*" }),
   webhook
 );
 
@@ -52,7 +52,7 @@ app.use(
     //     );
     //   }
     // },
-    origin: '*',  
+    origin: '*',
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -66,8 +66,8 @@ app.use(
   })
 );
 
-app.use("/api/v1/payment/webhook", 
-  bodyParser.raw({ type: "*/*" }), 
+app.use("/api/v1/payment/webhook",
+  bodyParser.raw({ type: "*/*" }),
   webhook
 );
 

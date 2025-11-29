@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { body } from "express-validator";
 import * as authController from "../controllers/auth.controller";
+
 import { validate } from "../middleware/validation";
 import { authenticate } from "../middleware/auth";
+
 import { authLimiter, passwordResetLimiter } from "../middleware/rateLimiter";
 import { passwordResetAuth } from "../middleware/passwordResetAuth";
 import { query } from "express-validator";
@@ -62,6 +64,8 @@ router.put(
 );
 
 router.get("/me", authenticate, authController.getCurrentUser);
+
+
 
 router.post(
   "/forgot-password",
