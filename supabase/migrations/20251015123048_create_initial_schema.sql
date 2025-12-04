@@ -531,3 +531,24 @@ CREATE TABLE IF NOT EXISTS payment_transactions (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS users_plans{
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    created_at timestamptz DEFAULT now(),
+    user_id uuid REFERENCES profiles(id) ON DELETE CASCADE
+    subs_plan_id uuid REFERENCES plans(id) ON DELETE CASCADE    
+    updated_at timestamptz DEFAULT now()
+    status text DEFAULT "active"
+    start_date timestamptz DEFAULT now()
+    end_date timestamptz DEFAULT now()
+} 
+
+CREATE TABLE IF NOT EXISTS users_plans_history{
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  created_at timestamptz DEFAULT now()
+  updated_at timestamptz DEFAULT now()
+  users_plan_id REFERENCES users_plans(id) ON DELETE CASCADE
+  plan_id REFERENCES plans(id) ON DELETE CASCADE
+  status text DEFAULT "active"
+
+}
