@@ -25,6 +25,6 @@ router.post(
   paymentController.webhook
 );
 router.get("/checkstatus/:merchantTransactionId", paymentController.checkStatus);
-
+router.post("/test",paymentController.processExpiredSubscriptions)
 
 export default router;

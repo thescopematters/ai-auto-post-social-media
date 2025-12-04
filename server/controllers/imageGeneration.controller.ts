@@ -28,7 +28,7 @@ export class ImageGenerationController {
 
       // Call n8n webhook
       const n8nResponse = await axios.post(
-        "https://learnn8nwithritika.app.n8n.cloud/webhook/image-generation",
+        "http://localhost:5678/webhook/image-generation",
         { prompt: prompt.trim() },
         { responseType: 'arraybuffer', timeout: 120000 } // get image as binary
       );
@@ -55,7 +55,7 @@ export class ImageGenerationController {
 
       // Upload to S3 AI bucket
       const s3Url = await AWSS3Service.uploadAIImage(file, workspaceId);
-
+      console.log(">>>>>s3url", s3Url)
       return res.json({
         success: true,
         data: {

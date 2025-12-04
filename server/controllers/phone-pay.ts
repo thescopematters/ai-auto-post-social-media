@@ -474,6 +474,7 @@ export const processExpiredSubscriptions = async () => {
       return;
     }
     const freePlanId = freePlan.id;
+    console.log(">>>>>>>?id", freePlan.id)
 
     // 2. Fetch all active subscriptions that have expired
     const { data: expiredPlans, error: expiredError } = await supabaseAdmin
@@ -487,6 +488,7 @@ export const processExpiredSubscriptions = async () => {
       return;
     }
 
+    console.log(">>>>>>?", expiredPlans)
     if (!expiredPlans || expiredPlans.length === 0) {
       // No expired plans to process
       return;

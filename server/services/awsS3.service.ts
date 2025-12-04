@@ -74,6 +74,7 @@ class AWSS3Service {
       await this.s3Client.send(command);
 
       const url = `https://${bucket}.s3.${this.region}.amazonaws.com/${fileName}`;
+      console.log(">>>>>>>url", url)
 
       return url;
     } catch (error: unknown) {
