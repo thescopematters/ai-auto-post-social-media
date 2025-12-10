@@ -143,7 +143,7 @@ const startServer = () => {
   try {
     const HOST = process.env.HOST || "0.0.0.0";
     const BACKEND_URL =
-      process.env.BACKEND_URL || `http://localhost:${config.port}`;
+      process.env.BACKEND_URL || `https://api.zeroeffortposts.com`;
 
     app.listen(config.port, HOST, () => {
       logger.info(`🚀 Server running on port ${config.port}`);
