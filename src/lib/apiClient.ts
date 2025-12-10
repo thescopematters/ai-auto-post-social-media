@@ -2,7 +2,7 @@ import axios, { AxiosInstance, AxiosError, AxiosRequestConfig } from "axios";
 
 
 const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "https://23.21.27.204:3002/api/v1";
+  import.meta.env.VITE_API_BASE_URL || "https://api.zeroeffortposts.com/api/";
 
 interface ApiResponse<T = any> {
   redirectUrl: any;
