@@ -4,7 +4,8 @@ import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
 // 🌟 NEW: Import the built-in 'https' module for agent configuration
 import https from "https"; 
-
+import dotenv from "dotenv";
+dotenv.config();
 interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
@@ -21,7 +22,7 @@ export const initiateLinkedInAuth = async (
 
     if (!userId) {
       logger.error("No userId provided");
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
       return res.redirect(`${frontendUrl}/signin?error=user_id_required`);
     }
 
@@ -53,7 +54,7 @@ export const initiateLinkedInAuth = async (
     res.redirect(linkedInAuthUrl.toString());
   } catch (error: any) {
     logger.error("LinkedIn auth failed:", error);
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "http://locahost:3000";
     res.redirect(`${frontendUrl}/settings?error=auth_failed`);
   }
 };

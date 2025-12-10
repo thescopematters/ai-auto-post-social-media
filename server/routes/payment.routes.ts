@@ -15,7 +15,7 @@ router.post(
 
 router.get(
   "/history",
-  authenticate,
+  authenticate, 
   paymentController.getPaymentHistory
 );
 

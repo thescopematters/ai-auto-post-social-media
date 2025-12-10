@@ -13,8 +13,8 @@ import {
 } from "../utils/limitCheck";
 
 // Force IPv4 to avoid IPv6 connection issues with LinkedIn API
-const httpAgent = new http.Agent({ family: 4 });
-const httpsAgent = new https.Agent({ family: 4 });
+// const httpAgent = new http.Agent()
+  const httpsAgent = new https.Agent()
 
 const supabase = createClient(
   process.env.SUPABASE_URL!,
@@ -441,7 +441,7 @@ export class SchedulerController {
                 ],
               },
             }),
-            agent: httpsAgent,
+          agent: httpsAgent,
           }
         );
 
@@ -526,7 +526,7 @@ export class SchedulerController {
           "User-Agent": "ContentAI/1.0",
         },
         body: JSON.stringify(postData),
-        agent: httpsAgent,
+         agent: httpsAgent,
       });
 
       if (!response.ok) {

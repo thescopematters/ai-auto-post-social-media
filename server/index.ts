@@ -23,11 +23,14 @@ import imageGenerationRoutes from "./routes/imageGeneration.routes";
 import { webhook } from "./controllers/phone-pay";
 import * as paymentController from "./controllers/phone-pay";
 import bodyParser from "body-parser";
+import dotenv from "dotenv";
+dotenv.config();
 const app: Application = express();
 app.set("trust proxy", 1);
 
+
 const allowedOrigins = [
-  "http://localhost:5173", // dev
+  "http://localhost:3000", // dev
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 

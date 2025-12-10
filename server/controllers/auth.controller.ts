@@ -47,6 +47,7 @@ export const register = async (
       });
 
     if (authError || !authData.user) {
+      console.error("Supabase createUser failed with error:", authError);
       throw new AuthenticationError("Failed to create user account");
     }
 

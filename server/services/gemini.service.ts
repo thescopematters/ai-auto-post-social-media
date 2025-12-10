@@ -156,7 +156,7 @@ Use the chosen ${framework} to structure the internal logic of the post. Do not 
 - PAS (Problem → Agitate → Solution)
   Highlight a common problem → describe the consequences → provide a solution or insight.  
 
-- MRS (Mistake → Realization → Shift)
+- MRS (Mistake → Realization → Shift) 
   Describe a mistake → share a realization → end with the mindset or strategy shift.  
 
 - CMS (Chronological Micro-Story)

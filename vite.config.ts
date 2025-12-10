@@ -13,14 +13,16 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
+
 export default defineConfig({
+  base:"/",
   plugins: [react()],
   server: {
-    port: 5173,
+    port: 3000,
     host: true,
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:3002',
+        target: process.env.VITE_API_URL || 'http://23.21.27.204:3002',
         changeOrigin: true,
         secure: false,
       }
