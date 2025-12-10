@@ -12,8 +12,8 @@ RUN npm install
 # Copy all frontend source code
 COPY . .
 
-# Build the frontend for production
-RUN npm run build
+# Build the frontend for production:
+RUN npm run build:client
 
 # Stage 2: Serve with nginx
 FROM nginx:alpine
