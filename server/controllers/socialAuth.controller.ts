@@ -22,7 +22,7 @@ export const initiateLinkedInAuth = async (
 
     if (!userId) {
       logger.error("No userId provided");
-      const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+      const frontendUrl = process.env.FRONTEND_URL || "https://zeroeffortposts.com/";
       return res.redirect(`${frontendUrl}/signin?error=user_id_required`);
     }
 

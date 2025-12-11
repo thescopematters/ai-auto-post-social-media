@@ -57,7 +57,7 @@ export function Settings() {
   );
 
   const backendUrl =
-    import.meta.env.VITE_API_BASE_URL || "http://localhost:3002/api/v1";
+    import.meta.env.VITE_API_BASE_URL || "https://api.zeroeffortposts.com/api/v1";
 
   useEffect(() => {
     const tabParam = searchParams.get("tab");
@@ -65,7 +65,7 @@ export function Settings() {
       setActiveTab(tabParam);
     }
   }, [searchParams]);
-
+  
   useEffect(() => {
     if (!loading && !profile) {
       console.warn("User not authenticated, redirecting to signin");
