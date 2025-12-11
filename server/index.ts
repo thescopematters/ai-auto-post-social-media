@@ -22,40 +22,23 @@ import paymentRoutes from "./routes/payment.routes";
 import imageGenerationRoutes from "./routes/imageGeneration.routes";
 import { webhook } from "./controllers/phone-pay";
 import * as paymentController from "./controllers/phone-pay";
+
 import bodyParser from "body-parser";
 import dotenv from "dotenv";
 dotenv.config();
+
 const app: Application = express();
 app.set("trust proxy", 1);
 
-
 const allowedOrigins = [
-  "http://localhost:3000", // dev
+  "https://zeroeffortposts.com", // dev
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 
-app.use("/api/v1/payment/webhook",
-  bodyParser.raw({ type: "*/*" }),
-  webhook
-);
-
+// ------------------- CORS -------------------
 app.use(
   cors({
-    // origin: (origin, callback) => {
-    //   // Allow requests with no origin (like Postman, curl, or same-origin)
-    //   if (!origin) return callback(null, true);
-
-    //   if (allowedOrigins.includes(origin)) {
-    //     callback(null, true);
-    //   } else {
-    //     logger.warn(`CORS blocked origin: ${origin}`);
-    //     callback(
-    //       new Error(`CORS policy: The origin ${origin} is not allowed.`),
-    //       false
-    //     );
-    //   }
-    // },
-    origin: '*',
+    origin: "https://zeroeffortposts.com", // or dynamic logic with allowedOrigins
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -69,26 +52,25 @@ app.use(
   })
 );
 
-app.use("/api/v1/payment/webhook",
+// ------------------- Webhook -------------------
+app.use(
+  "/api/v1/payment/webhook",
   bodyParser.raw({ type: "*/*" }),
   webhook
 );
 
-// Apply helmet AFTER CORS
+// ------------------- Security -------------------
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
-// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
-// (add your webhook logic here if needed)
-
-// Parse URL-encoded & JSON (remove duplicate parsers)
+// ------------------- Parsers -------------------
 app.use(express.urlencoded({ extended: true, limit: "10mb" }));
 app.use(express.json({ limit: "10mb" }));
 
-// 🧾 LOGGING
+// ------------------- Logging -------------------
 if (config.nodeEnv === "development") {
   app.use(morgan("dev"));
 } else {
@@ -101,7 +83,7 @@ if (config.nodeEnv === "development") {
   );
 }
 
-// 💚 HEALTH CHECK
+// ------------------- Health -------------------
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -111,10 +93,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// 📁 STATIC FILES
+// ------------------- Static -------------------
 app.use("/uploads", express.static("uploads"));
 
-// 🧩 API ROUTES
+// ------------------- API Routes -------------------
 app.use(config.api.prefix, apiLimiter);
 app.use(`${config.api.prefix}/auth`, authRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceRoutes);
@@ -129,16 +111,15 @@ app.use(`${config.api.prefix}/payment`, paymentRoutes);
 app.use(config.api.prefix, schedulePostRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceSocialAccountsRoutes);
 
-// ❌ ERROR HANDLERS
+// ------------------- Error Handlers -------------------
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// 🕒 SCHEDULER
+// ------------------- Scheduler -------------------
 schedulerController.startScheduler();
 paymentController.startScheduler();
 
-
-// 🚀 SERVER STARTUP
+// ------------------- Start Server -------------------
 const startServer = () => {
   try {
     const HOST = process.env.HOST || "0.0.0.0";
@@ -158,7 +139,7 @@ const startServer = () => {
   }
 };
 
-// 🧩 GLOBAL ERROR HANDLERS
+// ------------------- Global Errors -------------------
 process.on("unhandledRejection", (reason: any) => {
   logger.error("Unhandled Rejection:", reason);
   process.exit(1);
