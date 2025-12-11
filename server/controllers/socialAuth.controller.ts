@@ -167,7 +167,7 @@ export const handleLinkedInCallback = async (
 
     if (dbError) throw dbError;
 
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "https://zeroeffortposts.com";
     const successUrl = `${frontendUrl}/settings?tab=connections&success=linkedin_connected&account=${encodeURIComponent(
       fullName
     )}`;
@@ -175,7 +175,7 @@ export const handleLinkedInCallback = async (
     res.redirect(successUrl);
   } catch (error: any) {
     logger.error("LinkedIn callback error:", error);
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = process.env.FRONTEND_URL || "https://zeroeffortposts.com";
     res.redirect(
       `${frontendUrl}/settings?tab=connections&error=${encodeURIComponent(
         error.message
