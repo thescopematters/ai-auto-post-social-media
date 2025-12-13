@@ -82,6 +82,76 @@ export const register = async (
       console.log("users_plans entry created successfully");
     }
 
+    // Create a default workspace for the user (static brand color, no logo)
+    const workspaceName =
+      (fullName && fullName.trim()) || "My Workspace";
+
+    const { data: workspace, error: workspaceError } = await supabaseAdmin
+      .from("workspaces")
+      .insert({
+        name: workspaceName,
+        owner_id: authData.user.id,
+        brand_color: "#3B82F6",
+        logo_url: null,
+      } as any)
+      .select()
+      .single();
+
+    if (workspaceError || !workspace) {
+      logger.error("Workspace creation error during signup:", workspaceError);
+      throw new AuthenticationError("Failed to create default workspace");
+    }
+
+    const { error: memberError } = await supabaseAdmin
+      .from("workspace_members")
+      .insert({
+        workspace_id: workspace.id,
+        user_id: authData.user.id,
+        role: "admin",
+      });
+
+    if (memberError) {
+      logger.error("Workspace member creation error during signup:", memberError);
+      throw new AuthenticationError("Failed to add user to workspace");
+    }
+
+    const { error: subscriptionError } = await supabaseAdmin
+      .from("subscriptions")
+      .insert({
+        workspace_id: workspace.id,
+        tier: "free",
+        status: "active",
+        usage_limits: {
+          posts_per_month: 10,
+          ai_generations: 50,
+          workspaces: 1,
+        },
+      });
+
+    if (subscriptionError) {
+      logger.error("Subscription creation error during signup:", subscriptionError);
+      throw new AuthenticationError("Failed to create workspace subscription");
+    }
+
+    const { error: configError } = await supabaseAdmin
+      .from("ai_agent_configs")
+      .insert({
+        workspace_id: workspace.id,
+        name: "Default Agent",
+        tone: "professional",
+        style: {},
+        intent: "engagement",
+        hashtag_strategy: {},
+        posting_frequency: {},
+        platform_settings: {},
+        is_default: true,
+      });
+
+    if (configError) {
+      logger.error("AI config creation error during signup:", configError);
+      throw new AuthenticationError("Failed to create workspace AI config");
+    }
+
     const accessToken = generateAccessToken({
       userId: authData.user.id,
       email,
@@ -100,6 +170,7 @@ export const register = async (
           email,
           fullName,
         },
+        workspace,
         accessToken,
         refreshToken,
       },

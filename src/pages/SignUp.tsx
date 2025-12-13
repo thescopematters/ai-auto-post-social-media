@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Sparkles, Mail, Lock, User, AlertCircle, CheckCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
+import { Sparkles, Mail, Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
 
 // Custom password validation function
 const validatePassword = (password: string): string | null => {
@@ -89,7 +89,7 @@ export function SignUp() {
       setError(customErrorMessage);
       setLoading(false);
     } else {
-      navigate('/onboarding');
+      navigate('/dashboard');
     }
   };
 
@@ -183,16 +183,7 @@ export function SignUp() {
               </div>
             </div>
 
-            <div className="bg-blue-50 rounded-lg p-4 space-y-2">
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="w-4 h-4 text-blue-600" />
-                <span>No credit card required</span>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-gray-700">
-                <CheckCircle className="w-4 h-4 text-blue-600" />
-                <span>14-day free trial included</span>
-              </div>
-            </div>
+            
 
             <button
               type="submit"
