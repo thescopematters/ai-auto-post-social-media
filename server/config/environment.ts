@@ -36,6 +36,9 @@ export const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
   },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+  }
 };
 
 export default config;

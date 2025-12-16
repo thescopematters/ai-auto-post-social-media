@@ -23,6 +23,7 @@ export const generateContent = async (
   try {
     const { workspaceId } = req.params;
     const { documentId, platform, tone, framework, agentConfigId, variantCount = 1 } = req.body;
+    console.log(">>>>>>data>>>>", req)
 
     if (!req.user) throw new Error("User not authenticated");
     const userId = req.user.id;
@@ -367,11 +368,11 @@ export const schedulePost = async (req: AuthRequest, res: Response, next: NextFu
     await supabaseAdmin.from("generated_posts").update({ moderation_status: "scheduled" }).eq("id", postId);
 
     // ✅ FIX: Use incrementUsage with correct types
-    await incrementUsage({ 
-      type: "weekly_post", 
-      userId: req.user.id, 
+    await incrementUsage({
+      type: "weekly_post",
+      userId: req.user.id,
       platform: post.platform,
-      scheduledTimeISO: scheduledTime 
+      scheduledTimeISO: scheduledTime
     });
 
     successResponse(res, data, "Post scheduled successfully", 201);
