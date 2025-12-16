@@ -24,7 +24,7 @@ export const config = {
   },
 
   cors: {
-    origin: process.env.CORS_ORIGIN || 'https://zeroeffortposts.com',
+    origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
     // origin: process.env.CORS_ORIGIN?.split(",") || "http://localhost:5173",
   },
 
@@ -36,6 +36,9 @@ export const config = {
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
   },
+  groq: {
+    apiKey: process.env.GROQ_API_KEY || "",
+  }
 };
 
 export default config;
