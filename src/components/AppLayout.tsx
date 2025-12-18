@@ -65,7 +65,7 @@ export function AppLayout() {
       }
 
       setIsLoadingPlan(true);
-      
+
       try {
         const res = await workspaceApi.getLimits(currentWorkspace.id);
         const data = res.data as UploadLimitsResponse;
@@ -120,7 +120,7 @@ export function AppLayout() {
     const handleAccountDisconnected = () => {
       console.log('Social account disconnected - refreshing connection status');
       checkSocialConnection();
-      
+
       // If user is on a restricted route, show the modal
       const restrictedRoutes = ['/documents', '/generator', '/schedule'];
       if (restrictedRoutes.includes(location.pathname)) {
@@ -194,16 +194,12 @@ export function AppLayout() {
           <div className="h-full flex flex-col">
             <div className="p-6 border-b border-gray-200">
               <div className="flex items-center justify-between">
-                <div>
-                  <Link to="/dashboard" className="flex items-start space-x-2"> 
-                    <Sparkles className="w-8 h-8 text-blue-600 flex-shrink-0" />
-                    
-                    <div className="flex flex-col">
-                      <span className="text-xl font-bold text-gray-900 leading-none">
-                        ContentAI
-                      </span>
-                      
-                      <p className="text-xs text-gray-500 capitalize leading-none mt-1 ml-6"> 
+                <div className="w-full flex justify-center">
+                  <Link to="/dashboard" className="flex flex-col items-center gap-2">
+                    <img src="/logo.png" alt="ContentAI" className="h-20 w-auto" />
+
+                    <div className="flex flex-col items-center">
+                      <p className="text-xs text-gray-500 capitalize leading-none">
                         {isLoadingPlan ? 'Loading...' : `${formatPlanType(planType)} Plan`}
                       </p>
                     </div>
@@ -277,11 +273,10 @@ export function AppLayout() {
                     key={item.path}
                     to={item.path}
                     onClick={(e) => handleNavClick(e, item.path)}
-                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${
-                      isActive
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-gray-700 hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-lg transition ${isActive
+                      ? 'bg-blue-50 text-blue-700 font-medium'
+                      : 'text-gray-700 hover:bg-gray-50'
+                      }`}
                   >
                     <Icon className="w-5 h-5" />
                     <span>{item.label}</span>
@@ -324,8 +319,7 @@ export function AppLayout() {
                 <Menu className="w-6 h-6" />
               </button>
               <Link to="/dashboard" className="flex items-center space-x-2">
-                <Sparkles className="w-6 h-6 text-blue-600" />
-                <span className="text-lg font-bold text-gray-900">ContentAI</span>
+                <img src="/logo.png" alt="ContentAI" className="h-8 w-auto" />
               </Link>
               <div className="w-6"></div>
             </div>
