@@ -106,6 +106,7 @@ export interface Database {
           is_active: boolean;
           connected_at: string;
           last_sync: string | null;
+          photo?: string | null;
           updated_at?: string;
         };
         Insert: {
@@ -120,6 +121,7 @@ export interface Database {
           is_active?: boolean;
           connected_at?: string;
           last_sync?: string | null;
+          photo?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -134,6 +136,7 @@ export interface Database {
           is_active?: boolean;
           connected_at?: string;
           last_sync?: string | null;
+          photo?: string | null;
           updated_at?: string;
         };
       };
@@ -143,11 +146,11 @@ export interface Database {
           workspace_id: string;
           name: string;
           tone:
-            | "professional"
-            | "casual"
-            | "thought_leader"
-            | "educational"
-            | "promotional";
+          | "professional"
+          | "casual"
+          | "thought_leader"
+          | "educational"
+          | "promotional";
           style: Json;
           intent: "engagement" | "lead_gen" | "brand_awareness" | "education";
           hashtag_strategy: Json;
@@ -163,11 +166,11 @@ export interface Database {
           workspace_id: string;
           name: string;
           tone?:
-            | "professional"
-            | "casual"
-            | "thought_leader"
-            | "educational"
-            | "promotional";
+          | "professional"
+          | "casual"
+          | "thought_leader"
+          | "educational"
+          | "promotional";
           style?: Json;
           intent?: "engagement" | "lead_gen" | "brand_awareness" | "education";
           hashtag_strategy?: Json;
@@ -183,11 +186,11 @@ export interface Database {
           workspace_id?: string;
           name?: string;
           tone?:
-            | "professional"
-            | "casual"
-            | "thought_leader"
-            | "educational"
-            | "promotional";
+          | "professional"
+          | "casual"
+          | "thought_leader"
+          | "educational"
+          | "promotional";
           style?: Json;
           intent?: "engagement" | "lead_gen" | "brand_awareness" | "education";
           hashtag_strategy?: Json;
@@ -474,7 +477,7 @@ export interface Database {
           amount: number;
           status: string;
           plan_id: string;
-          phonepe_order_id:string,
+          phonepe_order_id: string,
           payment_method: string | null;
           phonepe_reference_id: string | null;
           created_at: string;
@@ -487,7 +490,7 @@ export interface Database {
           amount: number;
           status?: string;
           plan_id: string;
-          phonepe_order_id:string,
+          phonepe_order_id: string,
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
           created_at?: string;
@@ -499,7 +502,7 @@ export interface Database {
           merchant_transaction_id?: string;
           amount?: number;
           status?: string;
-          phonepe_order_id:string,
+          phonepe_order_id: string,
           plan_id: string;
           payment_method?: string | null;
           phonepe_reference_id?: string | null;
