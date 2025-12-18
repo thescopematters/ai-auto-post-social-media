@@ -12,9 +12,11 @@ import {
   X,
   ChevronDown,
   Building2,
-  Crown
+  Crown,
+  CreditCard,
+  Link as LinkIcon
 } from 'lucide-react';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { SocialConnectionModal } from '../pages/SocialConnectionModal';
 import { socialAccountsApi, workspaceApi } from '../lib/apiClient';
 
@@ -50,7 +52,9 @@ export function AppLayout() {
   const [isLoadingPlan, setIsLoadingPlan] = useState<boolean>(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [workspaceDropdownOpen, setWorkspaceDropdownOpen] = useState(false);
+  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
   const [showSocialModal, setShowSocialModal] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const [isSocialConnected, setIsSocialConnected] = useState(false);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const location = useLocation();
@@ -137,6 +141,20 @@ export function AppLayout() {
     };
   }, [checkSocialConnection, location.pathname]);
 
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setProfileDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
   const handleSignOut = async () => {
     await signOut();
     navigate('/');
@@ -192,11 +210,11 @@ export function AppLayout() {
             border-r border-gray-200 transition-transform duration-300 ease-in-out`}
         >
           <div className="h-full flex flex-col">
-            <div className="p-6 border-b border-gray-200">
-              <div className="flex items-center justify-between">
+            <div className="h-[72px] flex items-center px-4 border-b border-gray-200">
+              <div className="flex items-center justify-between w-full">
                 <div className="w-full flex justify-center">
-                  <Link to="/dashboard" className="flex flex-col items-center gap-2">
-                    <img src="/logo.png" alt="ContentAI" className="h-20 w-auto" />
+                  <Link to="/dashboard" className="flex flex-col items-center">
+                    <img src="/logo.png" alt="ContentAI" className="h-12 w-auto" />
 
                     <div className="flex flex-col items-center">
                       <p className="text-xs text-gray-500 capitalize leading-none">
@@ -286,42 +304,97 @@ export function AppLayout() {
             </nav>
 
             <div className="p-4 border-t border-gray-200">
-              <div className="flex items-center gap-3 mb-4 px-2">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold">
-                  {profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || 'U'}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">
-                    {profile?.full_name || 'User'}
-                  </p>
-                  <p className="text-xs text-gray-500 truncate">{profile?.email}</p>
-                </div>
-              </div>
-
-              <button
-                onClick={handleSignOut}
-                className="w-full flex items-center gap-3 px-4 py-3 text-gray-700 hover:bg-gray-50 rounded-lg transition"
-              >
-                <LogOut className="w-5 h-5" />
-                <span>Sign out</span>
-              </button>
+              {/* Profile section removed from here */}
             </div>
           </div>
         </aside>
 
         <div className="flex-1 flex flex-col min-w-0">
-          <header className="lg:hidden bg-white border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <Menu className="w-6 h-6" />
-              </button>
-              <Link to="/dashboard" className="flex items-center space-x-2">
-                <img src="/logo.png" alt="ContentAI" className="h-8 w-auto" />
-              </Link>
-              <div className="w-6"></div>
+          <header className="h-[72px] bg-white border-b border-gray-200 px-6 flex items-center">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => setSidebarOpen(true)}
+                  className="lg:hidden text-gray-500 hover:text-gray-700"
+                >
+                  <Menu className="w-6 h-6" />
+                </button>
+                <Link to="/dashboard" className="lg:hidden flex items-center space-x-2">
+                  <img src="/logo.png" alt="ContentAI" className="h-8 w-auto" />
+                </Link>
+              </div>
+
+              <div className="flex items-center gap-4">
+                <div className="relative" ref={dropdownRef}>
+                  <button
+                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
+                    className="flex items-center hover:bg-gray-50 p-1 rounded-full transition"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm overflow-hidden">
+                      {profile?.avatar_url ? (
+                        <img
+                          src={profile.avatar_url}
+                          alt={profile.full_name || 'User'}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || 'U'
+                      )}
+                    </div>
+                  </button>
+
+                  {profileDropdownOpen && (
+                    <div className="absolute right-0 mt-2 w-64 bg-white rounded-xl shadow-lg border border-gray-100 py-2 z-50">
+                      <div className="px-4 py-3 border-b border-gray-100">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {profile?.full_name || 'User'}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{profile?.email}</p>
+                      </div>
+
+                      <Link
+                        to="/settings"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        <Settings className="w-4 h-4" />
+                        Settings
+                      </Link>
+
+                      <Link
+                        to="/settings?tab=connections"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        <LinkIcon className="w-4 h-4" />
+                        Connect Accounts
+                      </Link>
+
+                      <Link
+                        to="/subscription"
+                        onClick={() => setProfileDropdownOpen(false)}
+                        className="flex items-center gap-3 px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        <CreditCard className="w-4 h-4" />
+                        Billing
+                      </Link>
+
+                      <div className="border-t border-gray-100 my-1"></div>
+
+                      <button
+                        onClick={() => {
+                          setProfileDropdownOpen(false);
+                          handleSignOut();
+                        }}
+                        className="w-full flex items-center gap-3 px-4 py-1.5 text-sm text-red-600 hover:bg-red-50 transition text-left"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        Sign out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </header>
 
