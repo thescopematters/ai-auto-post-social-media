@@ -27,6 +27,7 @@ import {
   Send,
   TrendingUp,
   AlertCircle,
+  Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -416,6 +417,11 @@ export function Generator() {
     setShowPreviewModal(true);
   };
 
+  const handleCopyPost = (content: string) => {
+    navigator.clipboard.writeText(content);
+    toast.success("Post copied to clipboard!");
+  };
+
   const uploadPostImages = async () => {
     if (!selectedPost || !currentWorkspace || modalImages.length === 0)
       return true;
@@ -520,12 +526,12 @@ export function Generator() {
       }
     } catch (error: any) {
       console.error("Error publishing post:", error);
-      
+
       const errorMsg = error?.response?.data?.error || error?.message || "Error publishing post";
-      
-      if (errorMsg.includes("Daily post limit reached") || 
-          errorMsg.includes("Daily posting limit exceeded") ||
-          errorMsg.includes("24-hour")) {
+
+      if (errorMsg.includes("Daily post limit reached") ||
+        errorMsg.includes("Daily posting limit exceeded") ||
+        errorMsg.includes("24-hour")) {
         toast.error("Daily Post Limit Reached", {
           description: errorMsg,
           duration: 5000,
@@ -570,7 +576,7 @@ export function Generator() {
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(now);
     todayEnd.setHours(23, 59, 59, 999);
-    
+
     const isScheduledForToday = selectedDate >= todayStart && selectedDate <= todayEnd;
 
     // If scheduling for today, check daily limit
@@ -578,7 +584,7 @@ export function Generator() {
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
       tomorrow.setHours(0, 0, 0, 0);
-      
+
       toast.error("Daily Post Limit Reached", {
         description: `You can only post once per day on the free plan. Please schedule for ${tomorrow.toLocaleDateString('en-GB', {
           day: '2-digit',
@@ -632,13 +638,13 @@ export function Generator() {
 
       if (response.success) {
         toast.success("Post scheduled successfully!", {
-          description: isScheduledForToday 
+          description: isScheduledForToday
             ? "Your post will be published today at the scheduled time."
             : `Your post will be published on ${selectedDate.toLocaleDateString('en-GB', {
-                day: '2-digit',
-                month: 'long',
-                year: 'numeric'
-              })}.`
+              day: '2-digit',
+              month: 'long',
+              year: 'numeric'
+            })}.`
         });
         await loadWorkspaceLimits();
         closeScheduleModal();
@@ -649,12 +655,12 @@ export function Generator() {
       }
     } catch (error: any) {
       console.error("Error scheduling post:", error);
-      
+
       const errorMsg = error?.response?.data?.error || error?.message || "Error scheduling post";
-      
-      if (errorMsg.includes("Daily post limit reached") || 
-          errorMsg.includes("Daily posting limit exceeded") ||
-          errorMsg.includes("schedule this post for tomorrow")) {
+
+      if (errorMsg.includes("Daily post limit reached") ||
+        errorMsg.includes("Daily posting limit exceeded") ||
+        errorMsg.includes("schedule this post for tomorrow")) {
         toast.error("Daily Post Limit Reached", {
           description: errorMsg,
           duration: 5000,
@@ -695,7 +701,7 @@ export function Generator() {
   // Format date for display (DD/MMM/YYYY)
   const formatResetDate = (dateString: string | undefined) => {
     if (!dateString) return "Not available";
-    
+
     const date = new Date(dateString);
     const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
     return `${date.getDate()}/${months[date.getMonth()]}/${date.getFullYear()}`;
@@ -801,18 +807,16 @@ export function Generator() {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => setPlatform("linkedin")}
-                    className={`p-4 rounded-lg border-2 transition ${
-                      platform === "linkedin"
-                        ? "border-blue-600 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
+                    className={`p-4 rounded-lg border-2 transition ${platform === "linkedin"
+                      ? "border-blue-600 bg-blue-50"
+                      : "border-gray-200 hover:border-gray-300"
+                      }`}
                   >
                     <Linkedin
-                      className={`w-6 h-6 mx-auto mb-2 ${
-                        platform === "linkedin"
-                          ? "text-blue-600"
-                          : "text-gray-400"
-                      }`}
+                      className={`w-6 h-6 mx-auto mb-2 ${platform === "linkedin"
+                        ? "text-blue-600"
+                        : "text-gray-400"
+                        }`}
                     />
                     <span className="block text-sm font-medium">LinkedIn</span>
                   </button>
@@ -919,11 +923,10 @@ export function Generator() {
                           <div
                             className="bg-blue-600 h-1.5 rounded-full transition-all"
                             style={{
-                              width: `${
-                                ((workspaceLimits.aiGeneration.limit - workspaceLimits.aiGeneration.remaining) /
-                                  workspaceLimits.aiGeneration.limit) *
+                              width: `${((workspaceLimits.aiGeneration.limit - workspaceLimits.aiGeneration.remaining) /
+                                workspaceLimits.aiGeneration.limit) *
                                 100
-                              }%`,
+                                }%`,
                             }}
                           />
                         </div>
@@ -948,11 +951,10 @@ export function Generator() {
                           <div
                             className="bg-green-600 h-1.5 rounded-full transition-all"
                             style={{
-                              width: `${
-                                ((workspaceLimits.documentUpload.limit - workspaceLimits.documentUpload.remaining) /
-                                  workspaceLimits.documentUpload.limit) *
+                              width: `${((workspaceLimits.documentUpload.limit - workspaceLimits.documentUpload.remaining) /
+                                workspaceLimits.documentUpload.limit) *
                                 100
-                              }%`,
+                                }%`,
                             }}
                           />
                         </div>
@@ -970,13 +972,12 @@ export function Generator() {
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
                         <div
-                          className={`h-1.5 rounded-full transition-all ${
-                            workspaceLimits.weeklyPosting.remaining <= 0
-                              ? "bg-red-400"
-                              : workspaceLimits.weeklyPosting.remaining <= 1
+                          className={`h-1.5 rounded-full transition-all ${workspaceLimits.weeklyPosting.remaining <= 0
+                            ? "bg-red-400"
+                            : workspaceLimits.weeklyPosting.remaining <= 1
                               ? "bg-orange-500"
                               : "bg-orange-600"
-                          }`}
+                            }`}
                           style={{
                             width: `${Math.min(
                               100,
@@ -987,7 +988,7 @@ export function Generator() {
                           }}
                         />
                       </div>
-                      
+
                       {/* Daily limit warning */}
                       {!workspaceLimits.weeklyPosting.canPostNow && (
                         <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
@@ -995,14 +996,14 @@ export function Generator() {
                           Daily limit reached - try tomorrow
                         </p>
                       )}
-                      
+
                       {/* Weekly reset date */}
                       {workspaceLimits.weeklyPosting.nextResetDate && (
                         <p className="text-xs text-gray-500 mt-1">
                           Resets on: {formatResetDate(workspaceLimits.weeklyPosting.nextResetDate)}
                         </p>
                       )}
-                      
+
                       {/* Weekly limit reached */}
                       {!workspaceLimits.weeklyPosting.canPost && (
                         <p className="text-xs text-red-500 mt-1 font-medium">
@@ -1072,7 +1073,7 @@ export function Generator() {
                       </span>
                       {post.framework &&
                         FRAMEWORKS[
-                          post.framework as keyof typeof FRAMEWORKS
+                        post.framework as keyof typeof FRAMEWORKS
                         ] && (
                           <span className="px-3 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-purple-200">
                             {getFrameworkIcon(
@@ -1087,6 +1088,13 @@ export function Generator() {
                         )}
                     </div>
                     <div className="flex gap-2">
+                      <button
+                        onClick={() => handleCopyPost(post.content)}
+                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+
                       <button
                         onClick={() => handlePreviewClick(post)}
                         className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
@@ -1269,21 +1277,19 @@ export function Generator() {
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => setIsScheduleMode(false)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${
-                        !isScheduleMode
-                          ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`flex-1 py-2 rounded text-sm font-medium transition ${!isScheduleMode
+                        ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
+                        : "bg-gray-100 text-gray-600"
+                        }`}
                     >
                       Now
                     </button>
                     <button
                       onClick={() => setIsScheduleMode(true)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${
-                        isScheduleMode
-                          ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
-                          : "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`flex-1 py-2 rounded text-sm font-medium transition ${isScheduleMode
+                        ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
+                        : "bg-gray-100 text-gray-600"
+                        }`}
                     >
                       Schedule
                     </button>
@@ -1294,7 +1300,7 @@ export function Generator() {
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Date & Time
                       </label>
-                      
+
                       {/* Daily limit warning for today's schedule */}
                       {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow && (
                         <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded flex items-start gap-2">
@@ -1309,7 +1315,7 @@ export function Generator() {
                           </div>
                         </div>
                       )}
-                      
+
                       <input
                         type="datetime-local"
                         value={scheduledTime}
@@ -1319,7 +1325,7 @@ export function Generator() {
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Min 5 minutes ahead
-                        {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow && 
+                        {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow &&
                           " • Schedule for tomorrow to avoid daily limit"}
                       </p>
                     </div>
@@ -1415,11 +1421,10 @@ export function Generator() {
 
                   {modalImagePreviews.length > 0 && (
                     <div
-                      className={`grid gap-1 ${
-                        modalImagePreviews.length === 1
-                          ? "grid-cols-1"
-                          : "grid-cols-2"
-                      }`}
+                      className={`grid gap-1 ${modalImagePreviews.length === 1
+                        ? "grid-cols-1"
+                        : "grid-cols-2"
+                        }`}
                     >
                       {modalImagePreviews.slice(0, 4).map((preview, index) => (
                         <div
@@ -1459,7 +1464,7 @@ export function Generator() {
       {showPreviewModal && selectedPost && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
           <div className="flex items-center justify-center w-full max-h-screen">
-            <div className="bg-white rounded-xl shadow-lg w-full max-w-xl max-h-screen flex flex-col">
+            <div className="bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-screen flex flex-col">
               <div className="p-6 border-b border-gray-200 flex-shrink-0">
                 <h2 className="text-2xl font-bold text-gray-900">
                   Preview Post
@@ -1531,7 +1536,7 @@ export function Generator() {
       )}
 
       {showImagePreview && previewImageUrl && (
-        <div 
+        <div
           className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
           onClick={() => setShowImagePreview(false)}
         >
