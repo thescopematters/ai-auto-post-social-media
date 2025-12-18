@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
+import Together from "together-ai";
 import axios from 'axios';
 import AWSS3Service from '../services/awsS3.service';
 import logger from '../config/logger';
+import dotenv from 'dotenv';
+dotenv.config();
 
 interface MediaFile {
   buffer: Buffer;
@@ -13,7 +16,6 @@ interface MediaFile {
 export class ImageGenerationController {
 
   async generateImage(req: Request, res: Response) {
-    console.log(">>>>>", "step 1")
     try {
       const { workspaceId } = req.params;
       const { prompt } = req.body;
@@ -26,15 +28,26 @@ export class ImageGenerationController {
         return res.status(400).json({ success: false, error: "Workspace ID is required" });
       }
 
-      // Call n8n webhook
-      const n8nResponse = await axios.post(
-        "http://localhost:5678/webhook/image-generation",
-        { prompt: prompt.trim() },
-        { responseType: 'arraybuffer', timeout: 120000 } // get image as binary
-      );
+      // Call Together AI
+      const client = new Together({
+        apiKey: process.env.TOGETHER_API_KEY,
+      });
+      console.log("TOGETHER_API_KEY", process.env.TOGETHER_API_KEY);
+      const response = await client.images.generate({
+        model: "black-forest-labs/FLUX.1-schnell",
+        prompt: prompt.trim(),
+      });
 
-      const imageBuffer = Buffer.from(n8nResponse.data);
-      const contentType = n8nResponse.headers['content-type'] || 'image/jpeg';
+      const imageUrl = response.data[0].url;
+
+      if (!imageUrl) {
+        throw new Error("No image URL returned from Together AI");
+      }
+
+      // Download image from URL
+      const imageResponse = await axios.get(imageUrl, { responseType: 'arraybuffer' });
+      const imageBuffer = Buffer.from(imageResponse.data);
+      const contentType = imageResponse.headers['content-type'] || 'image/jpeg';
 
       // Prepare file for S3
       let ext = 'jpg';
@@ -101,4 +114,4 @@ export class ImageGenerationController {
 }
 
 export default new ImageGenerationController();
-  
+
