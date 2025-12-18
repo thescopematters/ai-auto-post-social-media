@@ -3,7 +3,7 @@ import axios from "axios";
 import supabaseAdmin from "../config/database";
 import logger from "../config/logger";
 // 🌟 NEW: Import the built-in 'https' module for agent configuration
-import https from "https"; 
+import https from "https";
 
 interface AuthenticatedRequest extends Request {
   user?: {
@@ -124,8 +124,7 @@ export const handleLinkedInCallback = async (
         httpsAgent: new https.Agent({ family: 4 }),
       }
     );
-
-    const { sub: linkedinUserId, name: fullName } = profileResponse.data;
+    const { sub: linkedinUserId, name: fullName, picture: photo } = profileResponse.data;
 
     // Get workspace
     const { data: workspaces, error: workspacesError } = await supabaseAdmin
@@ -158,6 +157,7 @@ export const handleLinkedInCallback = async (
           is_active: true,
           connected_at: new Date().toISOString(),
           last_sync: new Date().toISOString(),
+          photo: photo,
         }] as any,
         {
           onConflict: "workspace_id,platform",
@@ -166,9 +166,24 @@ export const handleLinkedInCallback = async (
 
     if (dbError) throw dbError;
 
+    // 🌟 NEW: Update user's profile avatar if they don't have one
+    const { data: profileData } = await supabaseAdmin
+      .from("profiles")
+      .select("avatar_url")
+      .eq("id", userId)
+      .single();
+
+    if (profileData && !profileData.avatar_url && photo) {
+      await supabaseAdmin
+        .from("profiles")
+        .update({ avatar_url: photo })
+        .eq("id", userId);
+    }
+
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
     const successUrl = `${frontendUrl}/settings?tab=connections&success=linkedin_connected&account=${encodeURIComponent(
       fullName
+
     )}`;
 
     res.redirect(successUrl);
@@ -343,7 +358,7 @@ export const disconnectSocialAccount = async (
         is_active: false,
         access_token: null,
         refresh_token: null,
-      }) 
+      })
       .eq("platform", (platform || "").toLowerCase())
       .in("workspace_id", workspaceIds);
 

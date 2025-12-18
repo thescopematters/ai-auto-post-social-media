@@ -28,6 +28,7 @@ interface SocialAccount {
   is_active: boolean;
   connected_at: string;
   last_sync: string;
+  photo?: string;
 }
 
 interface DisconnectConfirm {
@@ -155,15 +156,14 @@ export function Settings() {
       if (response.success) {
         // Fetch updated accounts list
         fetchSocialAccounts();
-        
+
         // ============================================
         // CRITICAL: Dispatch custom event to notify AppLayout
         // ============================================
         window.dispatchEvent(new CustomEvent('socialAccountDisconnected'));
-        
+
         toast.success(
-          `${
-            platform.charAt(0).toUpperCase() + platform.slice(1)
+          `${platform.charAt(0).toUpperCase() + platform.slice(1)
           } account disconnected successfully`
         );
       } else {
@@ -173,8 +173,8 @@ export function Settings() {
       console.error("Error disconnecting account:", error);
       toast.error(
         error.response?.data?.message ||
-          error.message ||
-          "Error disconnecting account. Please try again."
+        error.message ||
+        "Error disconnecting account. Please try again."
       );
     } finally {
       setDisconnectConfirm({ show: false, platform: "", accountName: "" });
@@ -291,11 +291,10 @@ export function Settings() {
                     <button
                       key={tab.id}
                       onClick={() => handleTabClick(tab.id)}
-                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${
-                        activeTab === tab.id
-                          ? "bg-blue-50 text-blue-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
+                      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition ${activeTab === tab.id
+                        ? "bg-blue-50 text-blue-700"
+                        : "text-gray-700 hover:bg-gray-50"
+                        }`}
                     >
                       <Icon className="w-5 h-5" />
                       <span className="font-medium">{tab.label}</span>
@@ -370,8 +369,17 @@ export function Settings() {
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
                       <div className="flex items-center gap-3">
-                        <div className="p-3 bg-blue-100 rounded-lg">
-                          <Linkedin className="w-6 h-6 text-blue-600" />
+                        <div className="relative">
+                          <div className="p-3 bg-blue-100 rounded-lg">
+                            <Linkedin className="w-6 h-6 text-blue-600" />
+                          </div>
+                          {isLinkedInConnected && (getLinkedInAccount()?.photo || profile?.avatar_url) && (
+                            <img
+                              src={getLinkedInAccount()?.photo || profile?.avatar_url || ""}
+                              alt="Profile"
+                              className="absolute -top-1 -right-1 w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover"
+                            />
+                          )}
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">LinkedIn</p>

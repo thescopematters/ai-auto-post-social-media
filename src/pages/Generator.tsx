@@ -43,6 +43,7 @@ type SocialAccount = {
   account_name: string;
   platform: string;
   is_active: boolean;
+  photo?: string | null;
 };
 
 type GeneratedPost = {
@@ -1398,12 +1399,20 @@ export function Generator() {
               <div className="p-4 overflow-y-auto flex-1">
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <div className="p-3 flex items-center gap-2">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
-                      {filteredAccounts
-                        .find((a) => a.id === selectedAccount)
-                        ?.account_name?.charAt(0)
-                        ?.toUpperCase() || "U"}
-                    </div>
+                    {filteredAccounts.find((a) => a.id === selectedAccount)?.photo ? (
+                      <img
+                        src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo!}
+                        alt={filteredAccounts.find((a) => a.id === selectedAccount)?.account_name}
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                        {filteredAccounts
+                          .find((a) => a.id === selectedAccount)
+                          ?.account_name?.charAt(0)
+                          ?.toUpperCase() || "U"}
+                      </div>
+                    )}
                     <div className="min-w-0">
                       <p className="font-medium text-gray-900 text-sm truncate">
                         {filteredAccounts.find((a) => a.id === selectedAccount)

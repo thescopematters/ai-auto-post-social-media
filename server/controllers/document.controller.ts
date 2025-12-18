@@ -9,13 +9,11 @@ import {
   checkDocumentUploadLimit,
   incrementUsage,
   // 1. IMPORT the new function
-  decrementUsage 
+  decrementUsage
 } from "../utils/limitCheck";
 
 
-// ====================================================================================
 // GET ALL DOCUMENTS
-// ====================================================================================
 export const getAllDocuments = async (
   req: AuthRequest,
   res: Response,
@@ -216,13 +214,13 @@ export const deleteDocument = async (
     if (error) {
       throw new NotFoundError("Document not found");
     }
-    
+
     // 2. CALL the new decrement function
     if (req.user) {
-        await decrementUsage({
-            type: "document",
-            userId: req.user.id,
-        });
+      await decrementUsage({
+        type: "document",
+        userId: req.user.id,
+      });
     }
 
     successResponse(res, null, "Document deleted successfully");
@@ -280,8 +278,7 @@ export const checkDocumentUploadLimits = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await 
-    (req.user.id);
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
 
     const remaining =
       limitCheck.limit === 0
