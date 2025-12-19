@@ -28,6 +28,10 @@ import {
   TrendingUp,
   AlertCircle,
   Copy,
+  FileText,
+  ThumbsUp,
+  MessageSquare,
+  Repeat2,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -155,6 +159,20 @@ export function Generator() {
   const [generatingAIImage, setGeneratingAIImage] = useState(false);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  const LOADING_MESSAGES = [
+    "Warming up the AI's creative neurons...",
+    "Brewing a fresh post. Almost there.",
+    "Teaching the AI to be witty. One second.",
+    "Generating scroll-stopping content...",
+    "Turning ideas into engagement...",
+    "Convincing the AI this post needs to go viral.",
+    "Asking the AI for its best social voice.",
+    "Polishing words. Removing cringe.",
+    "Aligning hashtags with the universe.",
+    "Creativity in progress. Please stand by.",
+  ];
 
   useEffect(() => {
     console.log('Generator Component Mounted');
@@ -263,6 +281,11 @@ export function Generator() {
 
     setGenerating(true);
     setGeneratedPosts([]);
+    setLoadingMessageIndex(0);
+
+    const messageInterval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 2000);
 
     try {
       const response = await contentApi.generate(currentWorkspace.id, {
@@ -288,7 +311,6 @@ export function Generator() {
           }));
 
           setGeneratedPosts(postsWithFramework);
-          setGenerating(false);
           await loadWorkspaceLimits();
 
           toast.success("Posts generated!", {
@@ -296,32 +318,19 @@ export function Generator() {
           });
         } else {
           console.log("❌ No posts in response:", postsArray);
-          setGenerating(false);
           toast.error("No posts were generated");
         }
       } else {
         console.log("❌ API response not successful:", response);
-        setGenerating(false);
         toast.error("Failed to generate posts");
       }
     } catch (error: any) {
       console.error("Error generating content:", error);
-
-      const errorMsg = error?.response?.data?.error || error?.message || "";
-
-      if (errorMsg.includes("limit") || errorMsg.includes("exceeded")) {
-        toast.error("AI Generation Limit Reached", {
-          description: errorMsg,
-          duration: 5000,
-        });
-        await loadWorkspaceLimits();
-      } else {
-        toast.error("Failed to generate posts", {
-          description: errorMsg,
-        });
-      }
+      const errorMsg = error?.response?.data?.error || error?.message || "Failed to generate posts";
+      toast.error(errorMsg);
     } finally {
       setGenerating(false);
+      clearInterval(messageInterval);
     }
   };
 
@@ -740,8 +749,8 @@ export function Generator() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
+    <div className="h-[calc(100vh-72px)] flex flex-col p-6 lg:p-8 max-w-[1600px] mx-auto overflow-hidden">
+      <div className="mb-6 flex-shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Content Generator
         </h1>
@@ -751,8 +760,8 @@ export function Generator() {
         </p>
       </div>
 
-      {!isPro && workspaceLimits && (
-        <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
+      {/* {!isPro && workspaceLimits && (
+        <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4 flex-shrink-0">
           <div className="flex items-start gap-3">
             <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
             <div className="flex-1">
@@ -772,146 +781,159 @@ export function Generator() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Configuration
-            </h2>
+      <div className="flex-1 min-h-0 grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 h-full flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex-shrink-0 bg-gray-50/50">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-blue-600" />
+                Configuration
+              </h2>
+            </div>
 
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Source Document
-                </label>
-                <select
-                  value={selectedDocument}
-                  onChange={(e) => setSelectedDocument(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select a document</option>
-                  {documents.map((doc) => (
-                    <option key={doc.id} value={doc.id}>
-                      {doc.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Platform
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPlatform("linkedin")}
-                    className={`p-4 rounded-lg border-2 transition ${platform === "linkedin"
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
-                      }`}
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Source Document
+                  </label>
+                  <select
+                    value={selectedDocument}
+                    onChange={(e) => setSelectedDocument(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   >
-                    <Linkedin
-                      className={`w-6 h-6 mx-auto mb-2 ${platform === "linkedin"
-                        ? "text-blue-600"
-                        : "text-gray-400"
-                        }`}
-                    />
-                    <span className="block text-sm font-medium">LinkedIn</span>
-                  </button>
+                    <option value="">Select a document</option>
+                    {documents.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setShowTooltip(true)}
-                    onMouseLeave={() => setShowTooltip(false)}
-                  >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Platform
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
                     <button
-                      disabled
-                      className="w-full p-4 rounded-lg border-2 border-gray-200 opacity-50 cursor-not-allowed"
+                      onClick={() => setPlatform("linkedin")}
+                      className={`p-3 rounded-xl border-2 transition-all duration-200 ${platform === "linkedin"
+                        ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100"
+                        : "border-gray-100 bg-gray-50 hover:border-gray-300"
+                        }`}
                     >
-                      <svg
-                        className="w-6 h-6 mx-auto mb-2 text-gray-400"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                      </svg>
-                      <span className="block text-sm font-medium">Twitter</span>
+                      <Linkedin
+                        className={`w-5 h-5 mx-auto mb-1.5 ${platform === "linkedin"
+                          ? "text-blue-600"
+                          : "text-gray-400"
+                          }`}
+                      />
+                      <span className={`block text-xs font-semibold ${platform === "linkedin" ? "text-blue-700" : "text-gray-600"}`}>LinkedIn</span>
                     </button>
 
-                    {showTooltip && (
-                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none">
-                        Coming Soon
-                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                      </div>
-                    )}
+                    <div
+                      className="relative"
+                      onMouseEnter={() => setShowTooltip(true)}
+                      onMouseLeave={() => setShowTooltip(false)}
+                    >
+                      <button
+                        disabled
+                        className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                      >
+                        <svg
+                          className="w-5 h-5 mx-auto mb-1.5 text-gray-400"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                        <span className="block text-xs font-semibold text-gray-400">Twitter</span>
+                      </button>
+
+                      {showTooltip && (
+                        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 pointer-events-none shadow-xl">
+                          Coming Soon
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Content Framework
-                </label>
-                <select
-                  value={framework}
-                  onChange={(e) =>
-                    setFramework(e.target.value as keyof typeof FRAMEWORKS)
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content Framework
+                  </label>
+                  <select
+                    value={framework}
+                    onChange={(e) =>
+                      setFramework(e.target.value as keyof typeof FRAMEWORKS)
+                    }
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    {Object.entries(FRAMEWORKS).map(([key, config]) => (
+                      <option key={key} value={key}>
+                        {config.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tone
+                  </label>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="casual">Casual</option>
+                    <option value="thought_leader">Thought Leader</option>
+                    <option value="educational">Educational</option>
+                    <option value="promotional">Promotional</option>
+                  </select>
+                </div>
+
+              </div>
+            </div>
+
+            {workspaceLimits && (
+              <div className="p-5 border-t border-gray-100 bg-white space-y-3 flex-shrink-0">
+                <button
+                  onClick={handleGenerate}
+                  disabled={!selectedDocument || generating}
+                  className={`w-full flex flex-col items-center justify-center gap-1 px-4 py-2.5 rounded-xl transition-all duration-300 font-bold shadow-lg relative overflow-hidden group ${generating
+                    ? "bg-gray-50 text-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5"
+                    }`}
                 >
-                  {Object.entries(FRAMEWORKS).map(([key, config]) => (
-                    <option key={key} value={key}>
-                      {config.name} - {config.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  {generating ? (
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Generating...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        <span className="text-sm">Generate Posts</span>
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-shimmer" />
+                    </>
+                  )}
+                </button>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tone
-                </label>
-                <select
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="professional">Professional</option>
-                  <option value="casual">Casual</option>
-                  <option value="thought_leader">Thought Leader</option>
-                  <option value="educational">Educational</option>
-                  <option value="promotional">Promotional</option>
-                </select>
-              </div>
-
-              <button
-                onClick={handleGenerate}
-                disabled={!selectedDocument || generating}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generating ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    Generate Posts
-                  </>
-                )}
-              </button>
-
-              {workspaceLimits && (
-                <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                <div className="space-y-3 pt-1">
                   {workspaceLimits.aiGeneration && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">AI Generations Today:</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">AI Generations Today:</span>
+                        <span className="font-bold text-gray-900">
                           {isPro ? (
                             <span className="text-purple-600">Unlimited ∞</span>
                           ) : (
@@ -920,9 +942,9 @@ export function Generator() {
                         </span>
                       </div>
                       {!isPro && (
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div className="w-full bg-gray-100 rounded-full h-1">
                           <div
-                            className="bg-blue-600 h-1.5 rounded-full transition-all"
+                            className="bg-blue-600 h-1 rounded-full transition-all duration-500"
                             style={{
                               width: `${((workspaceLimits.aiGeneration.limit - workspaceLimits.aiGeneration.remaining) /
                                 workspaceLimits.aiGeneration.limit) *
@@ -937,9 +959,9 @@ export function Generator() {
 
                   {workspaceLimits.documentUpload && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">Documents:</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">Documents:</span>
+                        <span className="font-bold text-gray-900">
                           {isPro ? (
                             <span className="text-purple-600">Unlimited ∞</span>
                           ) : (
@@ -948,9 +970,9 @@ export function Generator() {
                         </span>
                       </div>
                       {!isPro && (
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div className="w-full bg-gray-100 rounded-full h-1">
                           <div
-                            className="bg-green-600 h-1.5 rounded-full transition-all"
+                            className="bg-green-500 h-1 rounded-full transition-all duration-500"
                             style={{
                               width: `${((workspaceLimits.documentUpload.limit - workspaceLimits.documentUpload.remaining) /
                                 workspaceLimits.documentUpload.limit) *
@@ -965,19 +987,19 @@ export function Generator() {
 
                   {workspaceLimits.weeklyPosting && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">Posts (Rolling 7 Days):</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">Posts (Rolling 7 Days):</span>
+                        <span className="font-bold text-gray-900">
                           {`${Math.max(0, workspaceLimits.weeklyPosting.remaining)}/${workspaceLimits.weeklyPosting.limit}`}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                      <div className="w-full bg-gray-100 rounded-full h-1">
                         <div
-                          className={`h-1.5 rounded-full transition-all ${workspaceLimits.weeklyPosting.remaining <= 0
+                          className={`h-1 rounded-full transition-all duration-500 ${workspaceLimits.weeklyPosting.remaining <= 0
                             ? "bg-red-400"
                             : workspaceLimits.weeklyPosting.remaining <= 1
-                              ? "bg-orange-500"
-                              : "bg-orange-600"
+                              ? "bg-orange-400"
+                              : "bg-orange-500"
                             }`}
                           style={{
                             width: `${Math.min(
@@ -989,145 +1011,145 @@ export function Generator() {
                           }}
                         />
                       </div>
-
-                      {/* Daily limit warning */}
-                      {!workspaceLimits.weeklyPosting.canPostNow && (
-                        <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Daily limit reached - try tomorrow
-                        </p>
-                      )}
-
-                      {/* Weekly reset date */}
                       {workspaceLimits.weeklyPosting.nextResetDate && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-[9px] text-gray-400 mt-1">
                           Resets on: {formatResetDate(workspaceLimits.weeklyPosting.nextResetDate)}
                         </p>
                       )}
+                    </div>
+                  )}
+                </div>
 
-                      {/* Weekly limit reached */}
-                      {!workspaceLimits.weeklyPosting.canPost && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">
-                          ⚠️ Weekly limit reached
+                {!isPro && (
+                  <button
+                    onClick={() => (window.location.href = "/subscription")}
+                    className="w-full text-xs py-2 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-md shadow-purple-100 mt-2"
+                  >
+                    ✨ Upgrade to Pro
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 h-full flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between flex-shrink-0 bg-gray-50/50">
+              <h2 className="text-xl font-bold text-gray-900">
+                Generated Variants
+              </h2>
+              {generatedPosts.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
+                    {getFrameworkIcon(framework)}
+                    {FRAMEWORKS[framework].name}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-gray-50/30">
+              {generating ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12">
+                  <div className="relative mb-8">
+                    <div className="w-24 h-24 bg-blue-50 rounded-full animate-ping absolute inset-0 opacity-20" />
+                    <div className="w-24 h-24 bg-white rounded-3xl shadow-lg border border-blue-100 flex items-center justify-center relative z-10">
+                      <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3 animate-pulse">
+                    Crafting your content...
+                  </h3>
+                  <p className="text-blue-600 font-medium text-sm max-w-sm leading-relaxed bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
+                    {LOADING_MESSAGES[loadingMessageIndex]}
+                  </p>
+                </div>
+              ) : generatedPosts.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12">
+                  <div className="w-20 h-20 bg-white rounded-3xl shadow-sm border border-gray-100 flex items-center justify-center mb-6">
+                    <Sparkles className="w-10 h-10 text-gray-200" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                    Ready to create?
+                  </h3>
+                  <p className="text-gray-500 mb-8 max-w-sm text-sm leading-relaxed">
+                    Select a document and click generate to create AI-powered
+                    content using the {FRAMEWORKS[framework].name} framework.
+                  </p>
+                  {documents.length === 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
+                      <AlertCircle className="w-4 h-4" />
+                      Please upload documents first
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {generatedPosts.map((post, index) => (
+                    <div
+                      key={post.id}
+                      className="group relative"
+                    >
+                      <div className="flex items-start justify-between mb-6">
+                        <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => handleCopyPost(post.content)}
+                            className="flex items-center gap-2 px-2.5 py-1 bg-indigo-50 text-indigo-600 rounded-lg hover:bg-indigo-100 transition-all text-[11px] font-bold"
+                            title="Copy to clipboard"
+                          >
+                            <Copy className="w-6 h-6" />
+                            <span>Copy</span>
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handlePreviewClick(post)}
+                            className="flex items-center gap-2 px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[11px] font-bold"
+                          >
+                            <Eye className="w-6 h-6" />
+                            Preview
+                          </button>
+
+                          <button
+                            onClick={() => handleScheduleClick(post)}
+                            className="flex items-center gap-2 px-2.5 py-1 bg-green-50 text-green-600 rounded-lg hover:bg-green-100 transition-all text-[11px] font-bold"
+                          >
+                            <Calendar className="w-6 h-6" />
+                            Schedule
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="bg-white rounded-xl p-6 border border-gray-100 hover:border-blue-200 transition-all duration-300">
+                        <p className="text-gray-800 whitespace-pre-wrap leading-relaxed text-[15px]">
+                          {post.content}
                         </p>
+                      </div>
+
+                      <div className="flex items-center justify-between mt-4 px-2">
+                        <div className="flex items-center gap-4">
+                          <span className="text-[11px] font-bold text-gray-400 flex items-center gap-1.5">
+                            <FileText className="w-3 h-3" />
+                            {post.content.length} characters
+                          </span>
+                          <span className="text-[11px] font-bold text-gray-400 flex items-center gap-1.5 capitalize">
+                            <Linkedin className="w-3 h-3" />
+                            {post.platform}
+                          </span>
+                        </div>
+                      </div>
+
+                      {index < generatedPosts.length - 1 && (
+                        <div className="mt-12 border-b border-gray-100" />
                       )}
                     </div>
-                  )}
-
-                  {!isPro && (
-                    <div className="pt-2 border-t border-gray-200">
-                      <button
-                        onClick={() => (window.location.href = "/subscription")}
-                        className="w-full text-xs py-2 px-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition font-medium"
-                      >
-                        ✨ Upgrade to Pro
-                      </button>
-                    </div>
-                  )}
+                  ))}
                 </div>
               )}
             </div>
           </div>
-        </div>
-
-        <div className="lg:col-span-2">
-          {generatedPosts.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-              <Sparkles className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No posts generated yet
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Select a document and click generate to create AI-powered
-                content using {FRAMEWORKS[framework].name} framework
-              </p>
-              {documents.length === 0 && (
-                <p className="text-sm text-yellow-600">
-                  You need to upload documents first
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Generated Variants
-                </h2>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="flex items-center gap-1">
-                    {getFrameworkIcon(framework)}
-                    {FRAMEWORKS[framework].name}
-                  </span>
-                  <span>•</span>
-                  <span>{generatedPosts.length} variants</span>
-                </div>
-              </div>
-              {generatedPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                        Variant
-                      </span>
-                      {post.framework &&
-                        FRAMEWORKS[
-                        post.framework as keyof typeof FRAMEWORKS
-                        ] && (
-                          <span className="px-3 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-purple-200">
-                            {getFrameworkIcon(
-                              post.framework as keyof typeof FRAMEWORKS
-                            )}
-                            {
-                              FRAMEWORKS[
-                                post.framework as keyof typeof FRAMEWORKS
-                              ].name
-                            }
-                          </span>
-                        )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleCopyPost(post.content)}
-                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        onClick={() => handlePreviewClick(post)}
-                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Preview
-                      </button>
-
-                      <button
-                        onClick={() => handleScheduleClick(post)}
-                        className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        Schedule
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-gray-800 whitespace-pre-wrap mb-4">
-                    {post.content}
-                  </p>
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                    <span className="text-sm text-gray-500">
-                      {post.content.length} characters
-                    </span>
-                    <span className="text-sm text-gray-500 capitalize">
-                      {post.platform}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
 
@@ -1144,15 +1166,10 @@ export function Generator() {
                     Edit, add images & publish
                   </p>
                 </div>
-                <button
-                  onClick={closeScheduleModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <XIcon className="w-5 h-5" />
-                </button>
+
               </div>
 
-              <div className="p-4 space-y-3 overflow-y-auto flex-1 text-sm">
+              <div className="p-4 space-y-3 overflow-y-auto flex-1 text-sm flex flex-col">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Account
@@ -1174,15 +1191,14 @@ export function Generator() {
                   </select>
                 </div>
 
-                <div>
+                <div className="flex-1 flex flex-col">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Content
                   </label>
                   <textarea
                     value={editedContent}
                     onChange={(e) => setEditedContent(e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
+                    className="w-full flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-y min-h-[300px] text-sm"
                     placeholder="Edit your post..."
                   />
                   <p className="text-xs text-gray-500 mt-1">
@@ -1278,7 +1294,7 @@ export function Generator() {
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => setIsScheduleMode(false)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${!isScheduleMode
+                      className={`flex-1 py-1.5 rounded text-xs font-medium transition ${!isScheduleMode
                         ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                         : "bg-gray-100 text-gray-600"
                         }`}
@@ -1287,7 +1303,7 @@ export function Generator() {
                     </button>
                     <button
                       onClick={() => setIsScheduleMode(true)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${isScheduleMode
+                      className={`flex-1 py-1.5 rounded text-xs font-medium transition ${isScheduleMode
                         ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                         : "bg-gray-100 text-gray-600"
                         }`}
@@ -1321,8 +1337,9 @@ export function Generator() {
                         type="datetime-local"
                         value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}
+                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                         min={minDateTimeString}
-                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-xs cursor-pointer"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Min 5 minutes ahead
@@ -1334,12 +1351,12 @@ export function Generator() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-gray-200 flex gap-2 bg-gray-50 flex-shrink-0">
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2 bg-gray-50 flex-shrink-0">
                 <button
                   onClick={closeScheduleModal}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-sm"
+                  className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-xs"
                 >
-                  Cancel
+                  Close
                 </button>
 
                 {!isScheduleMode ? (
@@ -1348,7 +1365,7 @@ export function Generator() {
                     disabled={
                       !selectedAccount || scheduling !== null || uploading
                     }
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
@@ -1371,7 +1388,7 @@ export function Generator() {
                       scheduling !== null ||
                       uploading
                     }
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
@@ -1390,10 +1407,19 @@ export function Generator() {
             </div>
 
             <div className="w-1/2 flex flex-col bg-gray-50 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 bg-white">
-                <h3 className="text-sm font-semibold text-gray-900">
+              <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0 relative">
+                <h3 className="text-lg font-bold text-gray-900">
                   LinkedIn Preview
                 </h3>
+                <p className="text-xs text-gray-500">
+                  Visual representation of your post
+                </p>
+                <button
+                  onClick={closeScheduleModal}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                  <XIcon className="w-5 h-5" />
+                </button>
               </div>
 
               <div className="p-4 overflow-y-auto flex-1">
@@ -1456,6 +1482,27 @@ export function Generator() {
                       ))}
                     </div>
                   )}
+
+                  <div className="border-t border-gray-100 mt-2">
+                    <div className="flex items-center justify-around py-1">
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <ThumbsUp className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Like</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <MessageSquare className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Comment</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Repeat2 className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Repost</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Send className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Send</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-4 p-3 bg-white border border-gray-200 rounded-lg">
@@ -1478,49 +1525,94 @@ export function Generator() {
                 <h2 className="text-2xl font-bold text-gray-900">
                   Preview Post
                 </h2>
-                <div className="flex items-center gap-4 mt-2">
-                  <p className="text-gray-600">
-                    Platform: {selectedPost.platform || "LinkedIn"}
-                  </p>
-                  {selectedPost.framework && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                      {FRAMEWORKS[
-                        selectedPost.framework as keyof typeof FRAMEWORKS
-                      ]?.name || selectedPost.framework}
-                    </span>
-                  )}
-                </div>
-                <div>
-                  <p className="text-gray-600 font-medium">Character Count</p>
-                  <p className="text-gray-900">
-                    {selectedPost.content.length}
-                  </p>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-4">
+                    <p className="text-gray-600">
+                      Platform: {selectedPost.platform || "LinkedIn"}
+                    </p>
+                    {selectedPost.framework && (
+                      <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                        {FRAMEWORKS[
+                          selectedPost.framework as keyof typeof FRAMEWORKS
+                        ]?.name || selectedPost.framework}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-gray-600 text-sm font-medium">
+                      Characters: <span className="text-gray-900">{selectedPost.content.length}</span>
+                    </p>
+                  </div>
                 </div>
               </div>
 
-              <div className="p-6 overflow-y-auto flex-1">
-                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                  <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
-                    {selectedPost.content}
-                  </p>
+              <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+                <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                  <div className="p-3 flex items-center gap-2">
+                    {filteredAccounts.find((a) => a.id === selectedAccount)?.photo ? (
+                      <img
+                        src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo!}
+                        alt={filteredAccounts.find((a) => a.id === selectedAccount)?.account_name}
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                      />
+                    ) : (
+                      <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                        {filteredAccounts
+                          .find((a) => a.id === selectedAccount)
+                          ?.account_name?.charAt(0)
+                          ?.toUpperCase() || "U"}
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 text-sm truncate">
+                        {filteredAccounts.find((a) => a.id === selectedAccount)
+                          ?.account_name || "User"}
+                      </p>
+                      <p className="text-xs text-gray-500">Now</p>
+                    </div>
+                  </div>
+
+                  <div className="px-3 pb-3">
+                    <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap break-words">
+                      {selectedPost.content}
+                    </p>
+                  </div>
+
+                  <div className="border-t border-gray-100 mt-2">
+                    <div className="flex items-center justify-around py-1">
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <ThumbsUp className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Like</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <MessageSquare className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Comment</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Repeat2 className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Repost</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Send className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Send</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
               </div>
-            </div>
 
-            <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
-              <button
-                onClick={() => setShowPreviewModal(false)}
-                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-              >
-                Close
-              </button>
+              <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
+                <button
+                  onClick={() => setShowPreviewModal(false)}
+                  className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
-
-      )
-      }
+      )}
 
       {
         showImagePreview && previewImageUrl && (
