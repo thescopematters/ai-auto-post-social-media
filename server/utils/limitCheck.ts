@@ -133,21 +133,21 @@ const getTodayDate = (): string => new Date().toISOString().split("T")[0];
 
 const getOrCreateUsageRecord = async (userId: string) => {
   try {
+    // 1. Try to fetch existing record
     const { data: existingRecord, error } = await supabaseAdmin
       .from("user_usage_limits")
       .select("*")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle(); // Use maybeSingle to avoid error if not found
 
-    if (!error && existingRecord) {
+    if (existingRecord) {
       let record = existingRecord;
       record = await checkAndResetWeeklyCounts(record);
       record = await checkAndResetDailyCounts(record);
       return record;
     }
 
-    // For new users, don't set week_start_date yet
-    // It will be set when they make their first post
+    // 2. Prepare initial usage data
     const initialUsage = {
       total_ai_generations: 0,
       ai_daily_count: 0,
@@ -155,12 +155,13 @@ const getOrCreateUsageRecord = async (userId: string) => {
       daily_post_count: 0,
       post_last_reset_date: getTodayDate(),
       weekly_posts_count: 0,
-      week_start_date: null, // Changed: null until first post
-      next_reset_date: null, // Changed: null until first post
+      week_start_date: null,
+      next_reset_date: null,
       total_documents: 0,
       last_post_time: null
     };
 
+    // 3. Try to insert new record
     const { data: newRecord, error: createError } = await supabaseAdmin
       .from("user_usage_limits")
       .insert({ user_id: userId, usage_data: initialUsage })
@@ -168,6 +169,22 @@ const getOrCreateUsageRecord = async (userId: string) => {
       .single();
 
     if (createError) {
+      // 4. Handle race condition: if record was created by another process, fetch it
+      if (createError.code === '23505') {
+        const { data: retryRecord, error: retryError } = await supabaseAdmin
+          .from("user_usage_limits")
+          .select("*")
+          .eq("user_id", userId)
+          .single();
+
+        if (retryRecord) {
+          let record = retryRecord;
+          record = await checkAndResetWeeklyCounts(record);
+          record = await checkAndResetDailyCounts(record);
+          return record;
+        }
+        if (retryError) throw retryError;
+      }
       throw new Error(`Failed to create usage record: ${createError.message}`);
     }
 
