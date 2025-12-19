@@ -115,6 +115,7 @@ export const register = async (
       throw new AuthenticationError("Failed to add user to workspace");
     }
 
+    logger.info(`Creating subscription for workspace: ${workspace.id}`);
     const { error: subscriptionError } = await supabaseAdmin
       .from("subscriptions")
       .insert({
@@ -129,7 +130,11 @@ export const register = async (
       });
 
     if (subscriptionError) {
-      logger.error("Subscription creation error during signup:", subscriptionError);
+      logger.error("Subscription creation error during signup:", {
+        error: subscriptionError,
+        workspaceId: workspace.id,
+        userId: authData.user.id
+      });
       throw new AuthenticationError("Failed to create workspace subscription");
     }
 

@@ -1490,6 +1490,12 @@ export function Generator() {
                     </span>
                   )}
                 </div>
+                <div>
+                  <p className="text-gray-600 font-medium">Character Count</p>
+                  <p className="text-gray-900">
+                    {selectedPost.content.length}
+                  </p>
+                </div>
               </div>
 
               <div className="p-6 overflow-y-auto flex-1">
@@ -1499,72 +1505,46 @@ export function Generator() {
                   </p>
                 </div>
 
-                <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600 font-medium">Platform</p>
-                    <p className="text-gray-900 capitalize">
-                      {selectedPost.platform}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Variant</p>
-                    <p className="text-gray-900">
-                      {selectedPost.variant_number}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Character Count</p>
-                    <p className="text-gray-900">
-                      {selectedPost.content.length}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Framework</p>
-                    <p className="text-gray-900">
-                      {FRAMEWORKS[
-                        selectedPost.framework as keyof typeof FRAMEWORKS
-                      ]?.name ||
-                        selectedPost.framework ||
-                        "Auto"}
-                    </p>
-                  </div>
-                </div>
               </div>
+            </div>
 
-              <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
-                <button
-                  onClick={() => setShowPreviewModal(false)}
-                  className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-                >
-                  Close
-                </button>
-              </div>
+            <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
+              <button
+                onClick={() => setShowPreviewModal(false)}
+                className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>
-      )}
 
-      {showImagePreview && previewImageUrl && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
-          onClick={() => setShowImagePreview(false)}
-        >
-          <div className="relative max-w-4xl max-h-screen">
-            <button
-              onClick={() => setShowImagePreview(false)}
-              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition"
-            >
-              <XIcon className="w-8 h-8" />
-            </button>
-            <img
-              src={previewImageUrl}
-              alt="Preview"
-              className="max-w-full max-h-screen object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
+      )
+      }
+
+      {
+        showImagePreview && previewImageUrl && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
+            onClick={() => setShowImagePreview(false)}
+          >
+            <div className="relative max-w-4xl max-h-screen">
+              <button
+                onClick={() => setShowImagePreview(false)}
+                className="absolute -top-10 right-0 text-white hover:text-gray-300 transition"
+              >
+                <XIcon className="w-8 h-8" />
+              </button>
+              <img
+                src={previewImageUrl}
+                alt="Preview"
+                className="max-w-full max-h-screen object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
