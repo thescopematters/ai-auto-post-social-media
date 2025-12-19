@@ -157,6 +157,32 @@ export const register = async (
       throw new AuthenticationError("Failed to create workspace AI config");
     }
 
+    // Create initial usage limits record to prevent race conditions during first limit check
+    const initialUsage = {
+      total_ai_generations: 0,
+      ai_daily_count: 0,
+      ai_last_reset_date: new Date().toISOString().split("T")[0],
+      daily_post_count: 0,
+      post_last_reset_date: new Date().toISOString().split("T")[0],
+      weekly_posts_count: 0,
+      week_start_date: null,
+      next_reset_date: null,
+      total_documents: 0,
+      last_post_time: null
+    };
+
+    const { error: usageError } = await supabaseAdmin
+      .from("user_usage_limits")
+      .insert({
+        user_id: authData.user.id,
+        usage_data: initialUsage
+      });
+
+    if (usageError) {
+      logger.error("Usage limits creation error during signup:", usageError);
+      // Not throwing here as getOrCreateUsageRecord fallback still exists
+    }
+
     const accessToken = generateAccessToken({
       userId: authData.user.id,
       email,
