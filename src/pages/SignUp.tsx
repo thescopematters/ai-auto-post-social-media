@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, Mail, Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
+import { toast } from 'sonner';
 
 // Custom password validation function
 const validatePassword = (password: string): string | null => {
@@ -30,6 +31,15 @@ const validatePassword = (password: string): string | null => {
   return null; // Password is valid
 };
 
+// Custom email validation function
+const validateEmail = (email: string): string | null => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !emailRegex.test(email)) {
+    return 'Please provide a valid email address.';
+  }
+  return null;
+};
+
 export function SignUp() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -37,8 +47,8 @@ export function SignUp() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   // --- NEW STATE: to toggle password visibility ---
-  const [showPassword, setShowPassword] = useState(false); 
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   const { signUp } = useAuth();
   const navigate = useNavigate();
 
@@ -46,13 +56,22 @@ export function SignUp() {
   const togglePasswordVisibility = () => {
     setShowPassword(!showPassword);
   };
-  
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    // Only clear error if we are starting a fresh attempt and it's not already loading
+    if (!loading) setError('');
     setLoading(true);
+    const startTime = Date.now();
 
-    // --- 1. NEW CLIENT-SIDE PASSWORD VALIDATION ---
+    // --- 1. NEW CLIENT-SIDE VALIDATION ---
+    const emailError = validateEmail(email);
+    if (emailError) {
+      setError(emailError);
+      setLoading(false);
+      return;
+    }
+
     const passwordError = validatePassword(password);
     if (passwordError) {
       setError(passwordError);
@@ -62,6 +81,12 @@ export function SignUp() {
 
     // --- 2. SIGN UP CALL ---
     const { error: signUpError } = await signUp(email, password, fullName);
+
+    // Ensure loading state lasts at least 800ms to prevent flickering
+    const duration = Date.now() - startTime;
+    if (duration < 800) {
+      await new Promise(resolve => setTimeout(resolve, 800 - duration));
+    }
 
     if (signUpError) {
       // --- 3. CUSTOM ERROR MESSAGE HANDLING ---
@@ -87,6 +112,7 @@ export function SignUp() {
       }
 
       setError(customErrorMessage);
+      toast.error(customErrorMessage);
       setLoading(false);
     } else {
       navigate('/dashboard');
@@ -183,7 +209,7 @@ export function SignUp() {
               </div>
             </div>
 
-            
+
 
             <button
               type="submit"

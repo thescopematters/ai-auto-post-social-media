@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
+import { toast } from 'sonner';
 
 export function SignIn() {
   const [email, setEmail] = useState('');
@@ -9,8 +10,8 @@ export function SignIn() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   // --- NEW STATE: to toggle password visibility ---
-  const [showPassword, setShowPassword] = useState(false); 
-  
+  const [showPassword, setShowPassword] = useState(false);
+
   const { signIn } = useAuth();
   const navigate = useNavigate();
 
@@ -21,10 +22,18 @@ export function SignIn() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    // Only clear error if we are starting a fresh attempt and it's not already loading
+    if (!loading) setError('');
     setLoading(true);
+    const startTime = Date.now();
 
     const { error: signInError } = await signIn(email, password);
+
+    // Ensure loading state lasts at least 800ms to prevent flickering
+    const duration = Date.now() - startTime;
+    if (duration < 800) {
+      await new Promise(resolve => setTimeout(resolve, 800 - duration));
+    }
 
     if (signInError) {
       let errorMessage = 'Invalid email or password'; // Default error message
@@ -32,19 +41,20 @@ export function SignIn() {
       // **Specific Error Check for "User not found"**
       // NOTE: This check depends on the error structure returned by your useAuth().signIn implementation.
       const errorString = signInError.message ? signInError.message.toLowerCase() : '';
-      
+
       // If the underlying authentication service (e.g., Firebase, custom API) indicates the user 
       // doesn't exist, we show a specific message.
       if (errorString.includes('user-not-found') || errorString.includes('no user found') || errorString.includes('auth/user-not-found')) {
-         errorMessage = 'User profile not found. Please check your email or sign up.';
+        errorMessage = 'User profile not found. Please check your email or sign up.';
       } else if (errorString.includes('wrong-password') || errorString.includes('invalid-credential')) {
-         // Keep the generic message for wrong passwords to avoid leaking info about valid emails
-         errorMessage = 'Invalid email or password';
+        // Keep the generic message for wrong passwords to avoid leaking info about valid emails
+        errorMessage = 'Invalid email or password';
       }
-      
+
       // Otherwise, we default to the generic 'Invalid email or password' message 
       // for security (e.g., if the password was wrong).
       setError(errorMessage);
+      toast.error(errorMessage);
       setLoading(false);
     } else {
       navigate('/dashboard');

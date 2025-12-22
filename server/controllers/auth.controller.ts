@@ -29,6 +29,41 @@ export const register = async (
   try {
     const { email, password, fullName } = req.body;
 
+    // Email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      throw new ValidationError("Please provide a valid email address");
+    }
+
+    // Password validation
+    if (!password || password.length < 8) {
+      throw new ValidationError("Password must be at least 8 characters long");
+    }
+
+    const hasUpperCase = /[A-Z]/.test(password);
+    const hasLowerCase = /[a-z]/.test(password);
+    const hasNumber = /[0-9]/.test(password);
+    const hasSpecialChar = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(password);
+
+    if (!hasUpperCase) {
+      throw new ValidationError(
+        "Password must contain at least one uppercase letter"
+      );
+    }
+    if (!hasLowerCase) {
+      throw new ValidationError(
+        "Password must contain at least one lowercase letter"
+      );
+    }
+    if (!hasNumber) {
+      throw new ValidationError("Password must contain at least one number");
+    }
+    if (!hasSpecialChar) {
+      throw new ValidationError(
+        "Password must contain at least one special character"
+      );
+    }
+
     const { data: existingUser } = await supabaseAdmin
       .from("profiles")
       .select("id")
