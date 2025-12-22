@@ -71,6 +71,12 @@ const activatePlanForUser = async (userId: string, planId: string) => {
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     });
+
+  // Return the period dates for storing in payment transaction
+  return {
+    startDate: startDate.toISOString(),
+    endDate: endDate.toISOString(),
+  };
 };
 
 // ------------------- CREATE ORDER -------------------
@@ -159,7 +165,7 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response) => {
     // 1️⃣ Get all transactions
     const { data: transactions, error: txError } = await supabaseAdmin
       .from("payment_transactions")
-      .select("id, merchant_transaction_id, amount, status, created_at, plan_id")
+      .select("id, merchant_transaction_id, amount, status, created_at, plan_id, period_start, period_end")
       .eq("user_id", req.user.id)
       .in("status", ["SUCCESS", "FAILED"])
       .order("created_at", { ascending: false })
@@ -176,16 +182,17 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response) => {
 
     if (planError) throw new Error(planError.message);
 
-    // 3️⃣ Merge end_date into each transaction
+    // 3️⃣ Return transaction data with period dates
     const finalData = transactions.map((tx) => {
-      // Calculate end date based on transaction creation date (assuming 1 month duration)
-      // This ensures historical transactions show their correct period
-      const startDate = new Date(tx.created_at);
-      const endDate = addMonths(startDate, 1);
+      // Use stored period dates if available (new transactions)
+      // Otherwise calculate them for backwards compatibility (old transactions)
+      const startDate = tx.period_start ? new Date(tx.period_start) : new Date(tx.created_at);
+      const endDate = tx.period_end ? new Date(tx.period_end) : addMonths(startDate, 1);
 
       return {
         ...tx,
-        end_date: tx.status === "SUCCESS" ? endDate.toISOString() : null,
+        period_start: tx.status === "SUCCESS" ? startDate.toISOString() : null,
+        period_end: tx.status === "SUCCESS" ? endDate.toISOString() : null,
       };
     });
 
@@ -224,19 +231,32 @@ export const checkStatus = async (req: Request, res: Response) => {
 
       // 2. Update DB only if a final status is confirmed
       if (finalStatus !== "PENDING") {
+        // If successful, get the period dates before updating
+        let periodDates = null;
+        if (finalStatus === "SUCCESS") {
+          periodDates = await activatePlanForUser(transaction.user_id, transaction.plan_id);
+        }
+
+        const updateData: any = {
+          status: finalStatus,
+          updated_at: new Date().toISOString()
+        };
+
+        // Add period dates if available
+        if (periodDates) {
+          updateData.period_start = periodDates.startDate;
+          updateData.period_end = periodDates.endDate;
+        }
+
         const { error: updateError } = await supabaseAdmin
           .from("payment_transactions")
-          .update({ status: finalStatus, updated_at: new Date().toISOString() })
+          .update(updateData)
           .eq("merchant_transaction_id", merchantTransactionId);
 
         if (updateError) throw new Error(updateError.message);
 
-        // 3. Update local copy and fulfill
+        // 3. Update local copy
         transaction.status = finalStatus;
-
-        if (finalStatus === "SUCCESS") {
-          await activatePlanForUser(transaction.user_id, transaction.plan_id);
-        }
       }
     }
 
@@ -309,16 +329,29 @@ export const webhook = async (req: Request, res: Response) => {
       else if (newStatus === "PENDING") finalStatus = "PENDING"; // Keep PENDING if webhook says PENDING
 
       if (finalStatus !== "PENDING") {
+        // If successful, get the period dates before updating
+        let periodDates = null;
+        if (finalStatus === "SUCCESS") {
+          periodDates = await activatePlanForUser(txn.user_id, txn.plan_id);
+        }
+
+        const updateData: any = {
+          status: finalStatus,
+          updated_at: new Date().toISOString()
+        };
+
+        // Add period dates if available
+        if (periodDates) {
+          updateData.period_start = periodDates.startDate;
+          updateData.period_end = periodDates.endDate;
+        }
+
         const { error: updateError } = await supabaseAdmin
           .from("payment_transactions")
-          .update({ status: finalStatus, updated_at: new Date().toISOString() })
+          .update(updateData)
           .eq("phonepe_order_id", phonePeOrderId);
 
         if (updateError) throw new Error(updateError.message);
-
-        if (finalStatus === "SUCCESS") {
-          await activatePlanForUser(txn.user_id, txn.plan_id);
-        }
       }
     }
 

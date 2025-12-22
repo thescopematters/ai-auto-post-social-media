@@ -1,6 +1,7 @@
 import { X, Linkedin, Twitter, ArrowRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useState } from "react";
+import { useAuth } from "../contexts/AuthContext";
+import { toast } from "sonner";
 
 interface SocialConnectionModalProps {
   isOpen: boolean;
@@ -11,14 +12,34 @@ export function SocialConnectionModal({
   isOpen,
   onClose,
 }: SocialConnectionModalProps) {
-  const navigate = useNavigate();
+  const { profile } = useAuth();
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+
+  const backendUrl =
+    import.meta.env.VITE_API_BASE_URL || "https://api.zeroeffortposts.com/api/v1";
 
   if (!isOpen) return null;
 
-  const handleConnect = () => {
-    navigate("/settings?tab=connections", { replace: true });
-    onClose();
+  const handleConnect = async () => {
+    if (selectedPlatform === "linkedin") {
+      setConnecting(true);
+      try {
+        if (!profile?.id) {
+          toast.error("Please log in first");
+          setConnecting(false);
+          return;
+        }
+
+        const authUrl = new URL(`${backendUrl}/auth/linkedin`);
+        authUrl.searchParams.append("userId", profile.id);
+        window.location.href = authUrl.toString();
+      } catch (error: any) {
+        console.error("Error:", error);
+        toast.error("Error connecting to LinkedIn");
+        setConnecting(false);
+      }
+    }
   };
 
   return (
@@ -49,11 +70,10 @@ export function SocialConnectionModal({
             {/* LinkedIn Option */}
             <div
               onClick={() => setSelectedPlatform("linkedin")}
-              className={`flex items-center gap-2 p-3 border-2 rounded-lg transition cursor-pointer ${
-                selectedPlatform === "linkedin"
-                  ? "border-blue-500 bg-blue-50"
-                  : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"
-              }`}
+              className={`flex items-center gap-2 p-3 border-2 rounded-lg transition cursor-pointer ${selectedPlatform === "linkedin"
+                ? "border-blue-500 bg-blue-50"
+                : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"
+                }`}
             >
               <div className="bg-blue-100 p-2 rounded-lg flex-shrink-0">
                 <Linkedin className="w-4 h-4 text-blue-600" />
@@ -109,15 +129,14 @@ export function SocialConnectionModal({
             </button>
             <button
               onClick={handleConnect}
-              disabled={selectedPlatform !== "linkedin"}
-              className={`flex-1 px-3 py-2 rounded-lg transition font-medium text-sm flex items-center justify-center gap-1 ${
-                selectedPlatform === "linkedin"
-                  ? "bg-blue-600 text-white hover:bg-blue-700"
-                  : "bg-gray-200 text-gray-500 cursor-not-allowed"
-              }`}
+              disabled={selectedPlatform !== "linkedin" || connecting}
+              className={`flex-1 px-3 py-2 rounded-lg transition font-medium text-sm flex items-center justify-center gap-1 ${selectedPlatform === "linkedin" && !connecting
+                ? "bg-blue-600 text-white hover:bg-blue-700"
+                : "bg-gray-200 text-gray-500 cursor-not-allowed"
+                }`}
             >
-              Connect
-              <ArrowRight className="w-3 h-3" />
+              {connecting ? "Connecting..." : "Connect"}
+              {!connecting && <ArrowRight className="w-3 h-3" />}
             </button>
           </div>
         </div>

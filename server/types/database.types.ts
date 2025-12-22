@@ -482,6 +482,8 @@ export interface Database {
           phonepe_reference_id: string | null;
           created_at: string;
           updated_at: string;
+          period_start: string | null;
+          period_end: string | null;
         };
         Insert: {
           id?: string;
@@ -495,6 +497,8 @@ export interface Database {
           phonepe_reference_id?: string | null;
           created_at?: string;
           updated_at?: string;
+          period_start?: string | null;
+          period_end?: string | null;
         };
         Update: {
           id?: string;
@@ -508,6 +512,8 @@ export interface Database {
           phonepe_reference_id?: string | null;
           created_at?: string;
           updated_at?: string;
+          period_start?: string | null;
+          period_end?: string | null;
         };
       };
       post_media: {
