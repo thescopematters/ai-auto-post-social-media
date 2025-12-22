@@ -41,6 +41,7 @@ export function Documents() {
     id: string;
     title: string;
   } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
   useEffect(() => {
@@ -136,13 +137,14 @@ export function Documents() {
   };
 
   const handleDeleteDocument = async (id: string, title: string) => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace || deleting) return;
     setDeleteConfirmation({ id, title });
   };
 
   const confirmDelete = async () => {
-    if (!currentWorkspace || !deleteConfirmation) return;
+    if (!currentWorkspace || !deleteConfirmation || deleting) return;
 
+    setDeleting(true);
     try {
       const response = await documentApi.delete(
         currentWorkspace.id,
@@ -159,6 +161,7 @@ export function Documents() {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
     } finally {
+      setDeleting(false);
       setDeleteConfirmation(null);
     }
   };
@@ -174,13 +177,13 @@ export function Documents() {
       const response = await documentApi.update(currentWorkspace.id, id, {
         contentText: updatedContent,
       });
-      
+
       if (response.success) {
         toast.success("Document updated successfully!");
         await loadDocuments();
-        
+
         // Update the viewDocument state with the new content
-        setViewDocument(prev => prev ? {...prev, content_text: updatedContent} : null);
+        setViewDocument(prev => prev ? { ...prev, content_text: updatedContent } : null);
       } else {
         throw new Error(response.error || "Update failed");
       }
@@ -226,27 +229,24 @@ export function Documents() {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div
-                  className={`p-3 rounded-lg ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "bg-yellow-50"
-                      : "bg-red-50"
-                  }`}
+                  className={`p-3 rounded-lg ${workspaceLimits.documentUpload.canUpload
+                    ? "bg-yellow-50"
+                    : "bg-red-50"
+                    }`}
                 >
                   <AlertCircle
-                    className={`w-6 h-6 ${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-600"
-                        : "text-red-600"
-                    }`}
+                    className={`w-6 h-6 ${workspaceLimits.documentUpload.canUpload
+                      ? "text-yellow-600"
+                      : "text-red-600"
+                      }`}
                   />
                 </div>
                 <div>
                   <h3
-                    className={`text-lg font-semibold ${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-900"
-                        : "text-red-900"
-                    }`}
+                    className={`text-lg font-semibold ${workspaceLimits.documentUpload.canUpload
+                      ? "text-yellow-900"
+                      : "text-red-900"
+                      }`}
                   >
                     {workspaceLimits.documentUpload.canUpload
                       ? "Document Limit Warning"
@@ -254,25 +254,23 @@ export function Documents() {
                   </h3>
                   <div className="flex items-center gap-2 mt-1">
                     <p
-                      className={`text-sm ${
-                        workspaceLimits.documentUpload.canUpload
-                          ? "text-yellow-700"
-                          : "text-red-700"
-                      }`}
+                      className={`text-sm ${workspaceLimits.documentUpload.canUpload
+                        ? "text-yellow-700"
+                        : "text-red-700"
+                        }`}
                     >
                       {workspaceLimits.documentUpload.canUpload
                         ? `Only ${workspaceLimits.documentUpload.limit === 0
-                            ? "Unlimited"
-                            : workspaceLimits.documentUpload.remaining
-                          } document${
-                            workspaceLimits.documentUpload.remaining === 1
-                              ? ""
-                              : "s"
-                          } left`
+                          ? "Unlimited"
+                          : workspaceLimits.documentUpload.remaining
+                        } document${workspaceLimits.documentUpload.remaining === 1
+                          ? ""
+                          : "s"
+                        } left`
                         : `You've used all ${workspaceLimits.documentUpload.limit === 0
-                            ? "Unlimited"
-                            : workspaceLimits.documentUpload.limit
-                          } document slots`}
+                          ? "Unlimited"
+                          : workspaceLimits.documentUpload.limit
+                        } document slots`}
                     </p>
                   </div>
                 </div>
@@ -280,42 +278,37 @@ export function Documents() {
             </div>
 
             <div
-              className={`mt-4 p-3 rounded-lg border ${
-                workspaceLimits.documentUpload.canUpload
-                  ? "bg-yellow-50 border-yellow-200"
-                  : "bg-red-50 border-red-200"
-              }`}
+              className={`mt-4 p-3 rounded-lg border ${workspaceLimits.documentUpload.canUpload
+                ? "bg-yellow-50 border-yellow-200"
+                : "bg-red-50 border-red-200"
+                }`}
             >
               <div className="flex items-center gap-2">
                 <AlertCircle
-                  className={`w-4 h-4 ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                  } flex-shrink-0`}
+                  className={`w-4 h-4 ${workspaceLimits.documentUpload.canUpload
+                    ? "text-yellow-600"
+                    : "text-red-600"
+                    } flex-shrink-0`}
                 />
                 <p
-                  className={`text-sm ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-800"
-                      : "text-red-800"
-                  }`}
+                  className={`text-sm ${workspaceLimits.documentUpload.canUpload
+                    ? "text-yellow-800"
+                    : "text-red-800"
+                    }`}
                 >
                   {workspaceLimits.documentUpload.canUpload
                     ? `Only ${workspaceLimits.documentUpload.limit === 0
-                        ? "Unlimited"
-                        : workspaceLimits.documentUpload.remaining
-                      } document${
-                        workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
-                      } left. `
+                      ? "Unlimited"
+                      : workspaceLimits.documentUpload.remaining
+                    } document${workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
+                    } left. `
                     : "You've reached your document limit. "}
                   <button
                     onClick={() => (window.location.href = "/subscription")}
-                    className={`font-semibold underline hover:${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-900"
-                        : "text-red-900"
-                    } transition`}
+                    className={`font-semibold underline hover:${workspaceLimits.documentUpload.canUpload
+                      ? "text-yellow-900"
+                      : "text-red-900"
+                      } transition`}
                   >
                     Upgrade to Pro
                   </button>{" "}
@@ -399,6 +392,7 @@ export function Documents() {
           title={deleteConfirmation.title}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirmation(null)}
+          deleting={deleting}
         />
       )}
 
@@ -475,7 +469,7 @@ function DocumentRow({
           </button>
           {showMenu && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-              <button 
+              <button
                 onClick={() => {
                   setShowMenu(false);
                   onView();
@@ -640,10 +634,12 @@ function DeleteConfirmationModal({
   title,
   onConfirm,
   onCancel,
+  deleting = false,
 }: {
   title: string;
   onConfirm: () => void;
   onCancel: () => void;
+  deleting?: boolean;
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -654,24 +650,26 @@ function DeleteConfirmationModal({
           </div>
           <h2 className="text-xl font-bold text-gray-900">Delete Document?</h2>
         </div>
-        
+
         <p className="text-gray-600 mb-6">
           Are you sure you want to delete <span className="font-semibold text-gray-900">"{title}"</span>? This action cannot be undone.
         </p>
-        
+
         <div className="flex justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2"
+            disabled={deleting}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Trash2 className="w-4 h-4" />
-            Delete
+            {deleting ? "Deleting..." : "Delete"}
           </button>
         </div>
       </div>

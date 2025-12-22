@@ -9,7 +9,7 @@ import {
   checkDocumentUploadLimit,
   incrementUsage,
   // 1. IMPORT the new function
-  decrementUsage 
+  decrementUsage
 } from "../utils/limitCheck";
 
 
@@ -207,6 +207,19 @@ export const deleteDocument = async (
   try {
     const { workspaceId, documentId } = req.params;
 
+    // First check if document exists
+    const { data: existingDoc, error: fetchError } = await supabaseAdmin
+      .from("documents")
+      .select("id")
+      .eq("id", documentId)
+      .eq("workspace_id", workspaceId)
+      .single();
+
+    if (fetchError || !existingDoc) {
+      throw new NotFoundError("Document not found");
+    }
+
+    // Delete the document
     const { error } = await supabaseAdmin
       .from("documents")
       .delete()
@@ -214,15 +227,15 @@ export const deleteDocument = async (
       .eq("workspace_id", workspaceId);
 
     if (error) {
-      throw new NotFoundError("Document not found");
+      throw new NotFoundError("Failed to delete document");
     }
-    
-    // 2. CALL the new decrement function
+
+    // Only decrement usage if the document was actually deleted
     if (req.user) {
-        await decrementUsage({
-            type: "document",
-            userId: req.user.id,
-        });
+      await decrementUsage({
+        type: "document",
+        userId: req.user.id,
+      });
     }
 
     successResponse(res, null, "Document deleted successfully");
@@ -280,8 +293,8 @@ export const checkDocumentUploadLimits = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await 
-    (req.user.id);
+    const limitCheck = await
+      (req.user.id);
 
     const remaining =
       limitCheck.limit === 0
