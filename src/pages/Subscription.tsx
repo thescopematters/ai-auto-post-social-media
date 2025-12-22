@@ -316,7 +316,7 @@ export function Subscription() {
 
                       return (
                         <tr key={t.id} className="border-t border-gray-100">
-                          <td className="py-2 pr-4 w-1/5">{getFormattedDate(t.created_at)}</td>
+                          <td className="py-2 pr-4 w-1/5">{getFormattedDate(t.period_start)}</td>
                           <td className="py-2 pr-4 w-1/5">{getFormattedDate(t.period_end)}</td>
                           <td className="py-2 pr-4 w-1/5">₹{Number(t.amount).toFixed(2)}</td>
                           <td className="py-2 pr-4 w-1/5">
