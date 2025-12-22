@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, Mail, Lock, User, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
-import { toast } from 'sonner';
+
 
 // Custom password validation function
 const validatePassword = (password: string): string | null => {
@@ -64,6 +64,8 @@ export function SignUp() {
     setLoading(true);
     const startTime = Date.now();
 
+
+
     // --- 1. NEW CLIENT-SIDE VALIDATION ---
     const emailError = validateEmail(email);
     if (emailError) {
@@ -112,7 +114,6 @@ export function SignUp() {
       }
 
       setError(customErrorMessage);
-      toast.error(customErrorMessage);
       setLoading(false);
     } else {
       navigate('/dashboard');

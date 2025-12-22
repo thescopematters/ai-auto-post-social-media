@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Sparkles, Mail, Lock, AlertCircle, Eye, EyeOff } from 'lucide-react'; // Import Eye and EyeOff
-import { toast } from 'sonner';
+
 
 export function SignIn() {
   const [email, setEmail] = useState('');
@@ -54,7 +54,7 @@ export function SignIn() {
       // Otherwise, we default to the generic 'Invalid email or password' message 
       // for security (e.g., if the password was wrong).
       setError(errorMessage);
-      toast.error(errorMessage);
+
       setLoading(false);
     } else {
       navigate('/dashboard');

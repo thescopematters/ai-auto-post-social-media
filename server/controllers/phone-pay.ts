@@ -34,11 +34,18 @@ const activatePlanForUser = async (userId: string, planId: string) => {
   if (!userPlan) throw new Error("User plan record not found");
 
   const now = new Date();
-  const oneMonthLater = addMonths(now, 1);
+  let startDate = now;
 
-  // Note: We check if the existing plan is different before updating
-  // However, if a user buys the same plan, we should extend the subscription.
-  // For simplicity here, we assume re-buying replaces/extends the current period.
+  // If user has an active paid plan that hasn't expired yet, extend it
+  // We check if end_date exists and is in the future
+  if (userPlan.end_date && new Date(userPlan.end_date) > now) {
+    startDate = new Date(userPlan.end_date);
+    logger.info(`Extending subscription for user ${userId} from existing end date: ${userPlan.end_date}`);
+  } else {
+    logger.info(`Starting new subscription period for user ${userId} from now.`);
+  }
+
+  const endDate = addMonths(startDate, 1);
 
   // Update current plan
   await supabaseAdmin
@@ -46,8 +53,8 @@ const activatePlanForUser = async (userId: string, planId: string) => {
     .update({
       subs_plan_id: planId,
       status: "active",
-      start_date: now.toISOString(),
-      end_date: oneMonthLater.toISOString(),
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
       updated_at: now.toISOString(),
     })
     .eq("user_id", userId);
@@ -59,8 +66,8 @@ const activatePlanForUser = async (userId: string, planId: string) => {
       user_plan_id: userPlan.id,
       plan_id: planId,
       status: "active",
-      start_date: now.toISOString(),
-      end_date: oneMonthLater.toISOString(),
+      start_date: startDate.toISOString(),
+      end_date: endDate.toISOString(),
       created_at: now.toISOString(),
       updated_at: now.toISOString(),
     });
@@ -170,10 +177,17 @@ export const getPaymentHistory = async (req: AuthRequest, res: Response) => {
     if (planError) throw new Error(planError.message);
 
     // 3️⃣ Merge end_date into each transaction
-    const finalData = transactions.map((tx) => ({
-      ...tx,
-      end_date: plan?.end_date || null,
-    }));
+    const finalData = transactions.map((tx) => {
+      // Calculate end date based on transaction creation date (assuming 1 month duration)
+      // This ensures historical transactions show their correct period
+      const startDate = new Date(tx.created_at);
+      const endDate = addMonths(startDate, 1);
+
+      return {
+        ...tx,
+        end_date: tx.status === "SUCCESS" ? endDate.toISOString() : null,
+      };
+    });
 
     return res.status(200).json({ success: true, data: finalData });
   } catch (err: any) {
