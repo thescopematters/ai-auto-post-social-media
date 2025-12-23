@@ -35,29 +35,46 @@ const activatePlanForUser = async (userId: string, planId: string) => {
 
   const now = new Date();
   let startDate = now;
+  let isQueued = false;
 
-  // If user has an active paid plan that hasn't expired yet, extend it
-  // We check if end_date exists and is in the future
+  // If user has an active paid plan that hasn't expired yet, queue the new plan
   if (userPlan.end_date && new Date(userPlan.end_date) > now) {
     startDate = new Date(userPlan.end_date);
-    logger.info(`Extending subscription for user ${userId} from existing end date: ${userPlan.end_date}`);
+    isQueued = true;
+    logger.info(`Queuing subscription for user ${userId}. Starts after: ${userPlan.end_date}`);
   } else {
     logger.info(`Starting new subscription period for user ${userId} from now.`);
   }
 
   const endDate = addMonths(startDate, 1);
 
-  // Update current plan
-  await supabaseAdmin
-    .from("users_plans")
-    .update({
-      subs_plan_id: planId,
-      status: "active",
-      start_date: startDate.toISOString(),
-      end_date: endDate.toISOString(),
-      updated_at: now.toISOString(),
-    })
-    .eq("user_id", userId);
+  if (isQueued) {
+    // Update queued fields
+    await supabaseAdmin
+      .from("users_plans")
+      .update({
+        queued_plan_id: planId,
+        queued_start_date: startDate.toISOString(),
+        queued_end_date: endDate.toISOString(),
+        updated_at: now.toISOString(),
+      })
+      .eq("user_id", userId);
+  } else {
+    // Activate immediately
+    await supabaseAdmin
+      .from("users_plans")
+      .update({
+        subs_plan_id: planId,
+        status: "active",
+        start_date: startDate.toISOString(),
+        end_date: endDate.toISOString(),
+        queued_plan_id: null, // Clear queue if activating immediately
+        queued_start_date: null,
+        queued_end_date: null,
+        updated_at: now.toISOString(),
+      })
+      .eq("user_id", userId);
+  }
 
   // Insert plan history
   await supabaseAdmin
@@ -65,7 +82,7 @@ const activatePlanForUser = async (userId: string, planId: string) => {
     .insert({
       user_plan_id: userPlan.id,
       plan_id: planId,
-      status: "active",
+      status: isQueued ? "queued" : "active",
       start_date: startDate.toISOString(),
       end_date: endDate.toISOString(),
       created_at: now.toISOString(),
@@ -543,35 +560,69 @@ export const processExpiredSubscriptions = async () => {
 
     logger.info(`Found ${expiredPlans.length} expired plans. Processing...`);
 
-    // 3. Downgrade each user to Free
+    // 3. Process each expired plan
     for (const plan of expiredPlans) {
       try {
-        // Update users_plans table
-        await supabaseAdmin
-          .from("users_plans")
-          .update({
-            subs_plan_id: freePlanId,
-            status: "active", // or 'downgraded' if you prefer
-            updated_at: now,
-          })
-          .eq("user_id", plan.user_id);
+        // CHECK FOR QUEUED PLAN
+        if (plan.queued_plan_id && plan.queued_start_date && plan.queued_end_date) {
+          // Promote queued plan to active
+          await supabaseAdmin
+            .from("users_plans")
+            .update({
+              subs_plan_id: plan.queued_plan_id,
+              status: "active",
+              start_date: plan.queued_start_date,
+              end_date: plan.queued_end_date,
+              queued_plan_id: null,
+              queued_start_date: null,
+              queued_end_date: null,
+              updated_at: now,
+            })
+            .eq("user_id", plan.user_id);
 
-        // Insert into history
-        await supabaseAdmin
-          .from("users_plans_history")
-          .insert({
-            user_plan_id: plan.id,
-            plan_id: freePlanId,
-            status: "expired/reset",
-            start_date: now,
-            end_date: now,
-            created_at: now,
-            updated_at: now,
-          });
+          // Insert into history
+          await supabaseAdmin
+            .from("users_plans_history")
+            .insert({
+              user_plan_id: plan.id,
+              plan_id: plan.queued_plan_id,
+              status: "active (promoted)",
+              start_date: plan.queued_start_date,
+              end_date: plan.queued_end_date,
+              created_at: now,
+              updated_at: now,
+            });
 
-        logger.info(`⭐ User ${plan.user_id} plan reset from ${plan.subs_plan_id} to Free.`);
+          logger.info(`⭐ User ${plan.user_id} plan promoted to queued plan ${plan.queued_plan_id}.`);
+
+        } else {
+          // Downgrade to Free
+          await supabaseAdmin
+            .from("users_plans")
+            .update({
+              subs_plan_id: freePlanId,
+              status: "active", // or 'downgraded' if you prefer
+              updated_at: now,
+            })
+            .eq("user_id", plan.user_id);
+
+          // Insert into history
+          await supabaseAdmin
+            .from("users_plans_history")
+            .insert({
+              user_plan_id: plan.id,
+              plan_id: freePlanId,
+              status: "expired/reset",
+              start_date: now,
+              end_date: now,
+              created_at: now,
+              updated_at: now,
+            });
+
+          logger.info(`⭐ User ${plan.user_id} plan reset from ${plan.subs_plan_id} to Free.`);
+        }
       } catch (planUpdateError) {
-        logger.error(`Failed to reset plan for user ${plan.user_id}:`, planUpdateError);
+        logger.error(`Failed to process expired plan for user ${plan.user_id}:`, planUpdateError);
       }
     }
 
