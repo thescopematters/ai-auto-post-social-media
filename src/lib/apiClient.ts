@@ -258,6 +258,9 @@ export const documentApi = {
 
   getUploadLimits: (workspaceId: string) =>
     apiClient.get(`/workspaces/${workspaceId}/documents/upload-limits`),
+
+  upload: (workspaceId: string, formData: FormData) =>
+    apiClient.uploadFile(`/workspaces/${workspaceId}/documents/upload`, formData),
 };
 
 export const contentApi = {

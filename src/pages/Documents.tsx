@@ -83,7 +83,11 @@ export function Documents() {
     }
   };
 
-  const handleTextUpload = async (text: string, title: string) => {
+  const handleUpload = async (data: {
+    title?: string;
+    content?: string;
+    file?: File;
+  }) => {
     if (!currentWorkspace) return;
 
     if (
@@ -93,44 +97,33 @@ export function Documents() {
       setShowUploadModal(false);
       setShowUpgradeModal(true);
       toast.error("Document Limit Reached", {
-        description: workspaceLimits.documentUpload.limit === 0
-          ? "You have unlimited documents in your plan."
-          : `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
+        description:
+          workspaceLimits.documentUpload.limit === 0
+            ? "You have unlimited documents in your plan."
+            : `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
         duration: 5000,
       });
       return;
     }
 
     setUploading(true);
-
     try {
-      const response = await documentApi.create(currentWorkspace.id, {
-        title: title || "Manual Text Input",
-        fileType: "manual",
-        contentText: text,
-      });
+      const formData = new FormData();
+      if (data.title) formData.append("title", data.title);
+      if (data.content) formData.append("contentText", data.content);
+      if (data.file) formData.append("file", data.file);
+
+      const response = await documentApi.upload(currentWorkspace.id, formData);
 
       if (response.success) {
-        await loadDocuments();
-        await loadWorkspaceLimits();
+        toast.success("Document uploaded successfully");
         setShowUploadModal(false);
-        toast.success("Document uploaded successfully!");
-      } else {
-        throw new Error(response.error || "Upload failed");
+        loadDocuments();
+        loadWorkspaceLimits(); // Refresh limits
       }
-    } catch (error: any) {
-      console.error("Error uploading text:", error);
-      const errorMsg = error?.response?.data?.error || error?.message || "";
-      if (
-        errorMsg.includes("limit reached") ||
-        errorMsg.includes("Document limit")
-      ) {
-        setShowUploadModal(false);
-        setShowUpgradeModal(true);
-        toast.error("Document Limit Reached", { description: errorMsg });
-      } else {
-        toast.error("Upload failed", { description: errorMsg });
-      }
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      toast.error("Failed to upload document");
     } finally {
       setUploading(false);
     }
@@ -373,7 +366,7 @@ export function Documents() {
       {showUploadModal && (
         <UploadModal
           onClose={() => setShowUploadModal(false)}
-          onTextUpload={handleTextUpload}
+          onUpload={handleUpload}
           uploading={uploading}
         />
       )}
@@ -499,22 +492,73 @@ function DocumentRow({
 
 function UploadModal({
   onClose,
-  onTextUpload,
+  onUpload,
   uploading,
 }: {
   onClose: () => void;
-  onTextUpload: (text: string, title: string) => Promise<void>;
+  onUpload: (data: {
+    title?: string;
+    content?: string;
+    file?: File;
+  }) => Promise<void>;
   uploading: boolean;
 }) {
+  const [activeTab, setActiveTab] = useState<"text" | "file">("text");
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  const [dragActive, setDragActive] = useState(false);
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFileSelect(e.dataTransfer.files[0]);
+    }
+  };
+
+  const handleFileSelect = (selectedFile: File) => {
+    // Check file type
+    const validTypes = [
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "text/plain",
+    ];
+    if (!validTypes.includes(selectedFile.type)) {
+      toast.error("Invalid file type. Please upload PDF, DOCX, or TXT.");
+      return;
+    }
+
+    // Check file size (50MB)
+    if (selectedFile.size > 50 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 50MB.");
+      return;
+    }
+
+    setFile(selectedFile);
+    // Auto-set title from filename if empty
+    if (!title) {
+      setTitle(selectedFile.name.split(".")[0]);
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (title && text) {
-      onTextUpload(text, title);
-      setText("");
-      setTitle("");
+    if (activeTab === "text" && title && text) {
+      onUpload({ title, content: text });
+    } else if (activeTab === "file" && file) {
+      onUpload({ title: title || file.name, file });
     }
   };
 
@@ -524,40 +568,135 @@ function UploadModal({
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Upload Document</h2>
           <p className="text-gray-600 mt-1">
-            Add content by pasting or typing text
+            Add content by pasting text or uploading a file
           </p>
         </div>
+
+        <div className="border-b border-gray-200">
+          <div className="flex">
+            <button
+              onClick={() => setActiveTab("text")}
+              className={`flex-1 py-3 text-sm font-medium text-center border-b-2 transition ${activeTab === "text"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              Paste Text
+            </button>
+            <button
+              onClick={() => setActiveTab("file")}
+              className={`flex-1 py-3 text-sm font-medium text-center border-b-2 transition ${activeTab === "file"
+                ? "border-blue-600 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700"
+                }`}
+            >
+              Upload File
+            </button>
+          </div>
+        </div>
+
         <div className="p-6">
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Title
+                Title {activeTab === "file" && "(Optional)"}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter a title"
-                required
+                placeholder={
+                  activeTab === "file"
+                    ? "Leave empty to use filename"
+                    : "Enter a title"
+                }
+                required={activeTab === "text"}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Content
-              </label>
-              <textarea
-                required
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Paste or type your content here..."
-              />
-            </div>
+
+            {activeTab === "text" ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Content
+                </label>
+                <textarea
+                  required
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={8}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Paste or type your content here..."
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  File Upload
+                </label>
+                <div
+                  onDragEnter={handleDrag}
+                  onDragLeave={handleDrag}
+                  onDragOver={handleDrag}
+                  onDrop={handleDrop}
+                  className={`border-2 border-dashed rounded-lg p-8 text-center transition ${dragActive
+                    ? "border-blue-500 bg-blue-50"
+                    : "border-gray-300 hover:border-gray-400"
+                    }`}
+                >
+                  {file ? (
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="p-3 bg-blue-100 rounded-full">
+                        <FileText className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-medium text-gray-900">{file.name}</p>
+                        <p className="text-sm text-gray-500">
+                          {(file.size / 1024 / 1024).toFixed(2)} MB
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => setFile(null)}
+                        className="p-1 hover:bg-gray-200 rounded-full"
+                      >
+                        <X className="w-5 h-5 text-gray-500" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                      <p className="text-gray-600 mb-2">
+                        Drag and drop your file here, or{" "}
+                        <label className="text-blue-600 hover:text-blue-700 cursor-pointer font-medium">
+                          browse
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.docx,.txt"
+                            onChange={(e) =>
+                              e.target.files &&
+                              e.target.files[0] &&
+                              handleFileSelect(e.target.files[0])
+                            }
+                          />
+                        </label>
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Supports PDF, DOCX, TXT (Max 50MB)
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleSubmit}
-              disabled={uploading || !title || !text}
+              disabled={
+                uploading ||
+                (activeTab === "text" && (!title || !text)) ||
+                (activeTab === "file" && !file)
+              }
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
               {uploading ? "Saving..." : "Save Content"}

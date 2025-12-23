@@ -158,6 +158,112 @@ export const createDocument = async (
   }
 };
 
+// ====================================================================================
+// UPLOAD DOCUMENT (FILE)
+// ====================================================================================
+export const uploadDocument = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const { workspaceId } = req.params;
+    const { title } = req.body;
+    const file = req.file;
+
+    if (!req.user) {
+      throw new AuthorizationError("User not authenticated");
+    }
+
+    if (!file) {
+      throw new Error("No file uploaded");
+    }
+
+    // 1. Check Limits
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
+    if (!limitCheck.canUpload) {
+      return next(new Error(limitCheck.message || "Document upload limit exceeded"));
+    }
+
+    // 2. Extract Text
+    let extractedText = "";
+    try {
+      extractedText = await extractTextFromFile(file);
+    } catch (err: any) {
+      logger.error("Text extraction failed:", err);
+      // We might still want to save the file even if text extraction fails,
+      // but for this app, text is crucial.
+      throw new Error(`Failed to extract text from document: ${err.message}`);
+    }
+
+    // 3. Upload to Supabase Storage (Optional but good for archival)
+    let publicUrl = null;
+    try {
+      const fileExt = file.originalname.split('.').pop();
+      const fileName = `${workspaceId}/${randomUUID()}.${fileExt}`;
+
+      const { data: uploadData, error: uploadError } = await supabaseAdmin
+        .storage
+        .from('documents')
+        .upload(fileName, file.buffer, {
+          contentType: file.mimetype,
+          upsert: false
+        });
+
+      if (uploadError) {
+        logger.error("Supabase Storage upload failed:", uploadError);
+        // Continue without storage URL if it fails, as we have the text
+      } else {
+        const { data: urlData } = supabaseAdmin
+          .storage
+          .from('documents')
+          .getPublicUrl(fileName);
+        publicUrl = urlData.publicUrl;
+      }
+    } catch (storageErr) {
+      logger.error("Storage operation failed:", storageErr);
+    }
+
+    // 4. Determine File Type
+    let fileType = 'manual';
+    if (file.mimetype === 'application/pdf') fileType = 'pdf';
+    else if (file.mimetype.includes('wordprocessingml')) fileType = 'docx';
+    else if (file.mimetype === 'text/plain') fileType = 'txt';
+
+    // 5. Create DB Record
+    const { data, error } = await supabaseAdmin
+      .from("documents")
+      .insert({
+        workspace_id: workspaceId,
+        uploaded_by: req.user.id,
+        title: title || file.originalname,
+        file_type: fileType,
+        file_url: publicUrl,
+        content_text: extractedText,
+        file_size: file.size,
+        metadata: { originalName: file.originalname },
+        processing_status: "completed",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      logger.error("Document DB insert failed:", error);
+      throw new Error("Failed to save document record");
+    }
+
+    // 6. Increment Usage
+    await incrementUsage({
+      type: "document",
+      userId: req.user.id,
+    });
+
+    successResponse(res, data, "Document uploaded and processed successfully", 201);
+
+  } catch (error) {
+    next(error);
+  }
+};
 
 // ====================================================================================
 // UPDATE DOCUMENT
