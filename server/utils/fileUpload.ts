@@ -4,10 +4,17 @@ import path from 'path';
 const storage = multer.memoryStorage();
 
 const fileFilter = (req: any, file: Express.Multer.File, cb: any) => {
-  if (file.mimetype.startsWith('image/')) {
+  const allowedMimeTypes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // docx
+    'text/plain'
+  ];
+
+  if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed'), false);
+    cb(new Error('Invalid file type. Only Images, PDF, DOCX, and TXT are allowed'), false);
   }
 };
 
@@ -26,11 +33,16 @@ export const getFileExtension = (filename: string): string => {
 };
 
 // Validate file type
-export const validateImageFile = (file: Express.Multer.File): void => {
-  const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  
+export const validateFile = (file: Express.Multer.File): void => {
+  const allowedTypes = [
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
+
   if (!allowedTypes.includes(file.mimetype)) {
-    throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
+    throw new Error('Invalid file type. Only Images, PDF, DOCX, and TXT are allowed.');
   }
 
   if (file.size > 5 * 1024 * 1024) {

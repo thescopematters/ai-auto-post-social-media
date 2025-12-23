@@ -82,7 +82,7 @@ export function Documents() {
     }
   };
 
-  const handleTextUpload = async (text: string, title: string) => {
+  const handleUpload = async (data: { type: 'text' | 'file'; content?: string; title?: string; file?: File }) => {
     if (!currentWorkspace) return;
 
     if (
@@ -103,11 +103,23 @@ export function Documents() {
     setUploading(true);
 
     try {
-      const response = await documentApi.create(currentWorkspace.id, {
-        title: title || "Manual Text Input",
-        fileType: "manual",
-        contentText: text,
-      });
+      let response;
+      if (data.type === 'text' && data.content) {
+        response = await documentApi.create(currentWorkspace.id, {
+          title: data.title || "Manual Text Input",
+          fileType: "manual",
+          contentText: data.content,
+        });
+      } else if (data.type === 'file' && data.file) {
+        const formData = new FormData();
+        formData.append('file', data.file);
+        if (data.title) {
+          formData.append('title', data.title);
+        }
+        response = await documentApi.upload(currentWorkspace.id, formData);
+      } else {
+        throw new Error("Invalid upload data");
+      }
 
       if (response.success) {
         await loadDocuments();
@@ -118,7 +130,7 @@ export function Documents() {
         throw new Error(response.error || "Upload failed");
       }
     } catch (error: any) {
-      console.error("Error uploading text:", error);
+      console.error("Error uploading document:", error);
       const errorMsg = error?.response?.data?.error || error?.message || "";
       if (
         errorMsg.includes("limit reached") ||
@@ -174,13 +186,13 @@ export function Documents() {
       const response = await documentApi.update(currentWorkspace.id, id, {
         contentText: updatedContent,
       });
-      
+
       if (response.success) {
         toast.success("Document updated successfully!");
         await loadDocuments();
-        
+
         // Update the viewDocument state with the new content
-        setViewDocument(prev => prev ? {...prev, content_text: updatedContent} : null);
+        setViewDocument(prev => prev ? { ...prev, content_text: updatedContent } : null);
       } else {
         throw new Error(response.error || "Update failed");
       }
@@ -220,111 +232,125 @@ export function Documents() {
         </button>
       </div>
 
-      {workspaceLimits?.documentUpload &&
-        workspaceLimits.documentUpload.remaining <= 2 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`p-3 rounded-lg ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "bg-yellow-50"
-                      : "bg-red-50"
+      {workspaceLimits?.documentUpload && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div
+                className={`p-3 rounded-lg ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-50"
+                  : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                    ? "bg-yellow-50"
+                    : "bg-blue-50"
                   }`}
-                >
-                  <AlertCircle
-                    className={`w-6 h-6 ${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-600"
-                        : "text-red-600"
-                    }`}
-                  />
-                </div>
-                <div>
-                  <h3
-                    className={`text-lg font-semibold ${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-900"
-                        : "text-red-900"
-                    }`}
-                  >
-                    {workspaceLimits.documentUpload.canUpload
-                      ? "Document Limit Warning"
-                      : "Document Limit Reached"}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p
-                      className={`text-sm ${
-                        workspaceLimits.documentUpload.canUpload
-                          ? "text-yellow-700"
-                          : "text-red-700"
-                      }`}
-                    >
-                      {workspaceLimits.documentUpload.canUpload
-                        ? `Only ${workspaceLimits.documentUpload.limit === 0
-                            ? "Unlimited"
-                            : workspaceLimits.documentUpload.remaining
-                          } document${
-                            workspaceLimits.documentUpload.remaining === 1
-                              ? ""
-                              : "s"
-                          } left`
-                        : `You've used all ${workspaceLimits.documentUpload.limit === 0
-                            ? "Unlimited"
-                            : workspaceLimits.documentUpload.limit
-                          } document slots`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={`mt-4 p-3 rounded-lg border ${
-                workspaceLimits.documentUpload.canUpload
-                  ? "bg-yellow-50 border-yellow-200"
-                  : "bg-red-50 border-red-200"
-              }`}
-            >
-              <div className="flex items-center gap-2">
+              >
                 <AlertCircle
-                  className={`w-4 h-4 ${
-                    workspaceLimits.documentUpload.canUpload
+                  className={`w-6 h-6 ${!workspaceLimits.documentUpload.canUpload
+                    ? "text-red-600"
+                    : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
                       ? "text-yellow-600"
-                      : "text-red-600"
-                  } flex-shrink-0`}
+                      : "text-blue-600"
+                    }`}
                 />
-                <p
-                  className={`text-sm ${
-                    workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-800"
-                      : "text-red-800"
-                  }`}
+              </div>
+              <div>
+                <h3
+                  className={`text-lg font-semibold ${!workspaceLimits.documentUpload.canUpload
+                    ? "text-red-900"
+                    : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                      ? "text-yellow-900"
+                      : "text-blue-900"
+                    }`}
                 >
-                  {workspaceLimits.documentUpload.canUpload
-                    ? `Only ${workspaceLimits.documentUpload.limit === 0
-                        ? "Unlimited"
-                        : workspaceLimits.documentUpload.remaining
-                      } document${
-                        workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
-                      } left. `
-                    : "You've reached your document limit. "}
-                  <button
-                    onClick={() => (window.location.href = "/subscription")}
-                    className={`font-semibold underline hover:${
-                      workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-900"
-                        : "text-red-900"
-                    } transition`}
+                  {!workspaceLimits.documentUpload.canUpload
+                    ? "Document Limit Reached"
+                    : workspaceLimits.documentUpload.limit === 0
+                      ? "Unlimited Documents"
+                      : workspaceLimits.documentUpload.remaining <= 2
+                        ? "Document Limit Warning"
+                        : "Document Usage"}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <p
+                    className={`text-sm ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-700"
+                      : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                        ? "text-yellow-700"
+                        : "text-blue-700"
+                      }`}
                   >
-                    Upgrade to Pro
-                  </button>{" "}
-                  for unlimited documents.
-                </p>
+                    {workspaceLimits.documentUpload.limit === 0
+                      ? `You have unlimited document uploads on the ${workspaceLimits.documentUpload.planType} plan.`
+                      : `You have used ${workspaceLimits.documentUpload.currentCount} of ${workspaceLimits.documentUpload.limit} document slots.`}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        )}
+
+          {workspaceLimits.documentUpload.limit !== 0 && (
+            <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-600"
+                  : workspaceLimits.documentUpload.remaining <= 2
+                    ? "bg-yellow-500"
+                    : "bg-blue-600"
+                  }`}
+                style={{
+                  width: `${Math.min(
+                    (workspaceLimits.documentUpload.currentCount /
+                      workspaceLimits.documentUpload.limit) *
+                    100,
+                    100
+                  )}%`,
+                }}
+              ></div>
+            </div>
+          )}
+
+          {(!workspaceLimits.documentUpload.canUpload ||
+            (workspaceLimits.documentUpload.remaining <= 2 &&
+              workspaceLimits.documentUpload.limit !== 0)) && (
+              <div
+                className={`mt-4 p-3 rounded-lg border ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-50 border-red-200"
+                  : "bg-yellow-50 border-yellow-200"
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle
+                    className={`w-4 h-4 ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-600"
+                      : "text-yellow-600"
+                      } flex-shrink-0`}
+                  />
+                  <p
+                    className={`text-sm ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-800"
+                      : "text-yellow-800"
+                      }`}
+                  >
+                    {!workspaceLimits.documentUpload.canUpload
+                      ? "You've reached your document limit. "
+                      : `Only ${workspaceLimits.documentUpload.remaining} document${workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
+                      } left. `}
+                    <button
+                      onClick={() => (window.location.href = "/subscription")}
+                      className={`font-semibold underline hover:${!workspaceLimits.documentUpload.canUpload
+                        ? "text-red-900"
+                        : "text-yellow-900"
+                        } transition`}
+                    >
+                      Upgrade to Pro
+                    </button>{" "}
+                    for unlimited documents.
+                  </p>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="p-4 border-b border-gray-200">
@@ -380,7 +406,7 @@ export function Documents() {
       {showUploadModal && (
         <UploadModal
           onClose={() => setShowUploadModal(false)}
-          onTextUpload={handleTextUpload}
+          onUpload={handleUpload}
           uploading={uploading}
         />
       )}
@@ -475,7 +501,7 @@ function DocumentRow({
           </button>
           {showMenu && (
             <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-10">
-              <button 
+              <button
                 onClick={() => {
                   setShowMenu(false);
                   onView();
@@ -505,22 +531,33 @@ function DocumentRow({
 
 function UploadModal({
   onClose,
-  onTextUpload,
+  onUpload,
   uploading,
 }: {
   onClose: () => void;
-  onTextUpload: (text: string, title: string) => Promise<void>;
+  onUpload: (data: { type: 'text' | 'file'; content?: string; title?: string; file?: File }) => Promise<void>;
   uploading: boolean;
 }) {
+  const [activeTab, setActiveTab] = useState<'text' | 'file'>('text');
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (title && text) {
-      onTextUpload(text, title);
-      setText("");
-      setTitle("");
+    if (activeTab === 'text' && title && text) {
+      onUpload({ type: 'text', content: text, title });
+    } else if (activeTab === 'file' && file) {
+      onUpload({ type: 'file', file, title: title || file.name });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      if (!title) {
+        setTitle(e.target.files[0].name);
+      }
     }
   };
 
@@ -530,40 +567,105 @@ function UploadModal({
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Upload Document</h2>
           <p className="text-gray-600 mt-1">
-            Add content by pasting or typing text
+            Add content by uploading a file or pasting text
           </p>
         </div>
+
+        <div className="px-6 pt-6">
+          <div className="flex border-b border-gray-200">
+            <button
+              className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'text'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
+              onClick={() => setActiveTab('text')}
+            >
+              Paste Text
+            </button>
+            <button
+              className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'file'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
+                }`}
+              onClick={() => setActiveTab('file')}
+            >
+              Upload File
+            </button>
+          </div>
+        </div>
+
         <div className="p-6">
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Title
+                Title {activeTab === 'file' && '(Optional)'}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Enter a title"
-                required
+                placeholder={activeTab === 'file' ? "Defaults to filename" : "Enter a title"}
+                required={activeTab === 'text'}
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Content
-              </label>
-              <textarea
-                required
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={8}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="Paste or type your content here..."
-              />
-            </div>
+
+            {activeTab === 'text' ? (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Content
+                </label>
+                <textarea
+                  required
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={8}
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Paste or type your content here..."
+                />
+              </div>
+            ) : (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  File (PDF, DOCX, TXT)
+                </label>
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition cursor-pointer relative">
+                  <div className="space-y-1 text-center">
+                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="flex text-sm text-gray-600 justify-center">
+                      <label
+                        htmlFor="file-upload"
+                        className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                      >
+                        <span>Upload a file</span>
+                        <input
+                          id="file-upload"
+                          name="file-upload"
+                          type="file"
+                          className="sr-only"
+                          accept=".pdf,.docx,.txt"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      PDF, DOCX, TXT up to 50MB
+                    </p>
+                    {file && (
+                      <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 font-medium bg-blue-50 py-2 px-4 rounded-full">
+                        <FileText className="w-4 h-4" />
+                        {file.name}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <button
               onClick={handleSubmit}
-              disabled={uploading || !title || !text}
+              disabled={uploading || (activeTab === 'text' && (!title || !text)) || (activeTab === 'file' && !file)}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
               {uploading ? "Saving..." : "Save Content"}
@@ -654,11 +756,11 @@ function DeleteConfirmationModal({
           </div>
           <h2 className="text-xl font-bold text-gray-900">Delete Document?</h2>
         </div>
-        
+
         <p className="text-gray-600 mb-6">
           Are you sure you want to delete <span className="font-semibold text-gray-900">"{title}"</span>? This action cannot be undone.
         </p>
-        
+
         <div className="flex justify-end gap-3">
           <button
             onClick={onCancel}

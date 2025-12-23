@@ -246,6 +246,9 @@ export const documentApi = {
     }
   ) => apiClient.post(`/workspaces/${workspaceId}/documents`, data),
 
+  upload: (workspaceId: string, formData: FormData) =>
+    apiClient.uploadFile(`/workspaces/${workspaceId}/documents/upload`, formData),
+
   update: (workspaceId: string, documentId: string, data: any) =>
     apiClient.put(`/workspaces/${workspaceId}/documents/${documentId}`, data),
 

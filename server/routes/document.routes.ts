@@ -4,6 +4,7 @@ import * as documentController from '../controllers/document.controller';
 import { validate } from '../middleware/validation';
 import { authenticate, requireWorkspace, requireRole } from '../middleware/auth';
 import { uploadLimiter } from '../middleware/rateLimiter';
+import { upload } from '../utils/fileUpload';
 
 const router = Router();
 
@@ -42,6 +43,19 @@ router.get(
   ]),
   requireWorkspace,
   documentController.getDocumentById
+);
+
+router.post(
+  '/:workspaceId/documents/upload',
+  uploadLimiter,
+  upload.single('file'),
+  validate([
+    param('workspaceId').isUUID().withMessage('Invalid workspace ID'),
+    body('title').optional().trim(),
+  ]),
+  requireWorkspace,
+  requireRole(['admin', 'editor']),
+  documentController.uploadDocument
 );
 
 router.post(
