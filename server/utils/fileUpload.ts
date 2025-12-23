@@ -4,10 +4,20 @@ import path from 'path';
 const storage = multer.memoryStorage();
 
 const fileFilter = (req: any, file: Express.Multer.File, cb: any) => {
-  if (file.mimetype.startsWith('image/')) {
+  const allowedMimes = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'application/pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'text/plain'
+  ];
+
+  if (allowedMimes.includes(file.mimetype)) {
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed'), false);
+    cb(new Error('Invalid file type. Only images, PDF, DOCX, and TXT files are allowed'), false);
   }
 };
 
@@ -16,7 +26,7 @@ export const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5M limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit per file
   },
 });
 
@@ -33,7 +43,7 @@ export const validateImageFile = (file: Express.Multer.File): void => {
     throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
   }
 
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('File size exceeds 5MB limit');
+  if (file.size > 50 * 1024 * 1024) {
+    throw new Error('File size exceeds 50MB limit');
   }
 };
