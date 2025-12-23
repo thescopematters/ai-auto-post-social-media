@@ -16,7 +16,7 @@ export const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit per file
   },
 });
 
@@ -28,12 +28,12 @@ export const getFileExtension = (filename: string): string => {
 // Validate file type
 export const validateImageFile = (file: Express.Multer.File): void => {
   const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
-  
+
   if (!allowedTypes.includes(file.mimetype)) {
     throw new Error('Invalid file type. Only JPEG, PNG, GIF, and WebP are allowed.');
   }
 
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error('File size exceeds 5MB limit');
+  if (file.size > 50 * 1024 * 1024) {
+    throw new Error('File size exceeds 50MB limit');
   }
 };
