@@ -11,6 +11,8 @@ import {
   // 1. IMPORT the new function
   decrementUsage
 } from "../utils/limitCheck";
+import { extractTextFromFile } from "../utils/textExtractor";
+import { randomUUID } from "crypto";
 
 
 // ====================================================================================
@@ -399,8 +401,7 @@ export const checkDocumentUploadLimits = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await
-      (req.user.id);
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
 
     const remaining =
       limitCheck.limit === 0
