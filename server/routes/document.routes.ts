@@ -46,6 +46,19 @@ router.get(
 );
 
 router.post(
+  '/:workspaceId/documents/upload',
+  uploadLimiter,
+  upload.single('file'),
+  validate([
+    param('workspaceId').isUUID().withMessage('Invalid workspace ID'),
+    body('title').optional().trim(),
+  ]),
+  requireWorkspace,
+  requireRole(['admin', 'editor']),
+  documentController.uploadDocument
+);
+
+router.post(
   '/:workspaceId/documents',
   uploadLimiter,
   validate([
@@ -58,16 +71,6 @@ router.post(
   requireWorkspace,
   requireRole(['admin', 'editor']),
   documentController.createDocument
-);
-
-router.post(
-  '/:workspaceId/documents/upload',
-  uploadLimiter,
-  validate([param('workspaceId').isUUID().withMessage('Invalid workspace ID')]),
-  requireWorkspace,
-  requireRole(['admin', 'editor']),
-  upload.single('file'),
-  documentController.uploadDocument
 );
 
 router.put(

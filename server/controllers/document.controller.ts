@@ -8,14 +8,13 @@ import logger from "../config/logger";
 import {
   checkDocumentUploadLimit,
   incrementUsage,
-  // 1. IMPORT the new function
   decrementUsage
 } from "../utils/limitCheck";
+import { extractTextFromFile } from "../utils/textExtractor";
+import { randomUUID } from "crypto";
 
 
-// ====================================================================================
 // GET ALL DOCUMENTS
-// ====================================================================================
 export const getAllDocuments = async (
   req: AuthRequest,
   res: Response,
@@ -189,11 +188,11 @@ export const uploadDocument = async (
     let extractedText = "";
     try {
       extractedText = await extractTextFromFile(file);
-    } catch (err: any) {
+    } catch (err) {
       logger.error("Text extraction failed:", err);
       // We might still want to save the file even if text extraction fails,
       // but for this app, text is crucial.
-      throw new Error(`Failed to extract text from document: ${err.message}`);
+      throw new Error("Failed to extract text from document");
     }
 
     // 3. Upload to Supabase Storage (Optional but good for archival)
@@ -265,6 +264,7 @@ export const uploadDocument = async (
   }
 };
 
+
 // ====================================================================================
 // UPDATE DOCUMENT
 // ====================================================================================
@@ -313,19 +313,6 @@ export const deleteDocument = async (
   try {
     const { workspaceId, documentId } = req.params;
 
-    // First check if document exists
-    const { data: existingDoc, error: fetchError } = await supabaseAdmin
-      .from("documents")
-      .select("id")
-      .eq("id", documentId)
-      .eq("workspace_id", workspaceId)
-      .single();
-
-    if (fetchError || !existingDoc) {
-      throw new NotFoundError("Document not found");
-    }
-
-    // Delete the document
     const { error } = await supabaseAdmin
       .from("documents")
       .delete()
@@ -333,10 +320,10 @@ export const deleteDocument = async (
       .eq("workspace_id", workspaceId);
 
     if (error) {
-      throw new NotFoundError("Failed to delete document");
+      throw new NotFoundError("Document not found");
     }
 
-    // Only decrement usage if the document was actually deleted
+    // 2. CALL the new decrement function
     if (req.user) {
       await decrementUsage({
         type: "document",
@@ -399,8 +386,7 @@ export const checkDocumentUploadLimits = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const limitCheck = await
-      (req.user.id);
+    const limitCheck = await checkDocumentUploadLimit(req.user.id);
 
     const remaining =
       limitCheck.limit === 0
