@@ -107,6 +107,12 @@ export function Schedule() {
     return finalTmp.textContent?.trim() || "";
   };
 
+  useEffect(() => {
+    if (currentWorkspace) {
+      loadScheduledPosts();
+    }
+  }, [currentWorkspace]);
+
   const loadScheduledPosts = async () => {
     if (!currentWorkspace) return;
 
@@ -128,12 +134,6 @@ export function Schedule() {
       setRefreshing(false);
     }
   };
-
-  useEffect(() => {
-    if (currentWorkspace) {
-      loadScheduledPosts();
-    }
-  }, [currentWorkspace]);
 
   const handleRefresh = () => {
     setRefreshing(true);
@@ -189,14 +189,14 @@ export function Schedule() {
     setIsSaving(true);
     try {
       const socialContent = prepareContentForSocial(editedContent);
-      const response = await contentApi.updatePost(
+      const response = await contentApi.updateScheduledPost(
         currentWorkspace.id,
         selectedPost.id,
         { content: socialContent }
       );
 
       if (response.success) {
-        setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, content: editedContent } : p));
+        setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, content: socialContent } : p));
         toast.success("Post updated successfully!");
         setShowEditModal(false);
       } else {
