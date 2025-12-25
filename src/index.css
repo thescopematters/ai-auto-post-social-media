@@ -1,3 +1,92 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Quill Editor Styles */
+.quill-editor-container .ql-container {
+    border: none !important;
+    font-size: 14px;
+    font-family: inherit;
+    line-height: 1.6;
+}
+
+.quill-editor-container .ql-toolbar {
+    border: none !important;
+    border-bottom: 1px solid #e5e7eb !important;
+    padding: 8px;
+    background: #f9fafb;
+    border-radius: 8px 8px 0 0;
+}
+
+.quill-editor-container .ql-editor {
+    min-height: 150px;
+    max-height: 250px;
+    padding: 12px 14px;
+    line-height: 1.8;
+}
+
+.quill-editor-container .ql-editor p {
+    margin-bottom: 0.75rem;
+    line-height: 1.8;
+}
+
+.quill-editor-container .ql-editor p:last-child {
+    margin-bottom: 0;
+}
+
+@keyframes shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
+.animate-shimmer {
+    animation: shimmer 2s infinite;
+}
+
+/* LinkedIn Preview Styling */
+.linkedin-preview-content {
+    line-height: 1.6;
+    white-space: pre-wrap;
+}
+
+.linkedin-preview-content p {
+    margin-bottom: 12px;
+    line-height: 1.6;
+}
+
+.linkedin-preview-content p:last-child {
+    margin-bottom: 0;
+}
+
+.linkedin-preview-content strong {
+    font-weight: 600;
+}
+
+.linkedin-preview-content em {
+    font-style: italic;
+}
+
+.linkedin-preview-content ul,
+.linkedin-preview-content ol {
+    padding-left: 20px;
+    margin-bottom: 12px;
+}
+
+.linkedin-preview-content li {
+    margin-bottom: 6px;
+    line-height: 1.6;
+}
+
+.linkedin-preview-content a {
+    color: #0a66c2;
+    text-decoration: none;
+}
+
+.linkedin-preview-content a:hover {
+    text-decoration: underline;
+}

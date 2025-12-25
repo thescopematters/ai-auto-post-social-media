@@ -9,8 +9,13 @@ import {
   Trash2,
   RefreshCw,
   Globe,
+  Eye,
+  Edit2,
+  X as XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
 
 type ScheduledPost = {
   id: string;
@@ -37,12 +42,70 @@ export function Schedule() {
   const [refreshing, setRefreshing] = useState(false);
   const [userTimezone, setUserTimezone] = useState<string>("");
 
+  const [showViewModal, setShowViewModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
+  const [editedContent, setEditedContent] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     // Detect user's timezone
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     setUserTimezone(timezone);
     console.log("🌍 User timezone detected:", timezone);
   }, []);
+
+  // Helper functions for formatting
+  const markdownToHtml = (markdown: string) => {
+    if (!markdown) return "";
+    let clean = markdown
+      .replace(/\*\*([\s\S]*?)\*\*/g, "$1")
+      .replace(/__([\s\S]*?)__/g, "$1");
+    clean = clean
+      .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, "$1")
+      .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, "$1");
+    return clean;
+  };
+
+  const textToHtml = (text: string) => {
+    if (!text) return "";
+    const clean = markdownToHtml(text);
+    return clean
+      .split(/\n\s*\n/)
+      .map(block => {
+        const lines = block.trim().split('\n');
+        const content = lines.join('<br>');
+        return `<p>${content}</p>`;
+      })
+      .join("");
+  };
+
+  const prepareContentForSocial = (html: string) => {
+    if (!html) return "";
+    const boldMap: { [key: string]: string } = {
+      'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+      'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+      '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+    };
+    const convertToUnicodeBold = (text: string) => text.split('').map(char => boldMap[char] || char).join('');
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    const processNodes = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE && (node.parentElement?.tagName === 'STRONG' || node.parentElement?.tagName === 'B')) {
+        node.textContent = convertToUnicodeBold(node.textContent || "");
+      }
+      node.childNodes.forEach(processNodes);
+    };
+    processNodes(container);
+    let content = container.innerHTML;
+    content = content.replace(/<\/p><p>/g, '\n\n');
+    content = content.replace(/<p>/g, '');
+    content = content.replace(/<\/p>/g, '\n');
+    content = content.replace(/<br\s*\/?>/gi, '\n');
+    const finalTmp = document.createElement('div');
+    finalTmp.innerHTML = content;
+    return finalTmp.textContent?.trim() || "";
+  };
 
   useEffect(() => {
     if (currentWorkspace) {
@@ -108,6 +171,60 @@ export function Schedule() {
     }
   };
 
+  const handleEditClick = (post: ScheduledPost) => {
+    setSelectedPost(post);
+    setEditedContent(textToHtml(post.content));
+    setShowEditModal(true);
+  };
+
+  const handleViewClick = (post: ScheduledPost) => {
+    setSelectedPost(post);
+    setEditedContent(textToHtml(post.content));
+    setShowViewModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!currentWorkspace || !selectedPost || !editedContent.trim()) return;
+
+    setIsSaving(true);
+    try {
+      const socialContent = prepareContentForSocial(editedContent);
+      const response = await contentApi.updatePost(
+        currentWorkspace.id,
+        selectedPost.id,
+        { content: socialContent }
+      );
+
+      if (response.success) {
+        setPosts(posts.map(p => p.id === selectedPost.id ? { ...p, content: editedContent } : p));
+        toast.success("Post updated successfully!");
+        setShowEditModal(false);
+      } else {
+        toast.error("Failed to update post", { description: response.error });
+      }
+    } catch (error) {
+      console.error("Error updating post:", error);
+      toast.error("Error updating post");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const quillModules = {
+    toolbar: [
+      ['bold', 'italic', 'underline'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['link'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'bold', 'italic', 'underline',
+    'list', 'bullet',
+    'link'
+  ];
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "published":
@@ -137,7 +254,7 @@ export function Schedule() {
   // Format date in user's local timezone
   const formatDateTime = (dateString: string, showTimezone: boolean = false) => {
     const date = new Date(dateString);
-    
+
     const formatted = date.toLocaleString("en-US", {
       year: "numeric",
       month: "short",
@@ -185,7 +302,7 @@ export function Schedule() {
         timeZone: userTimezone,
         timeZoneName: "long",
       }).split(" ").slice(2).join(" ");
-      
+
       return tzName;
     } catch {
       return userTimezone;
@@ -241,31 +358,28 @@ export function Schedule() {
           <nav className="-mb-px flex space-x-8">
             <button
               onClick={() => setActiveTab("scheduled")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "scheduled"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === "scheduled"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
             >
               Scheduled ({scheduledCount})
             </button>
             <button
               onClick={() => setActiveTab("published")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "published"
-                  ? "border-blue-500 text-blue-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === "published"
+                ? "border-blue-500 text-blue-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
             >
               Published ({publishedCount})
             </button>
             <button
               onClick={() => setActiveTab("failed")}
-              className={`py-2 px-1 border-b-2 font-medium text-sm ${
-                activeTab === "failed"
-                  ? "border-red-500 text-red-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
-              }`}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === "failed"
+                ? "border-red-500 text-red-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
             >
               Failed ({failedCount})
             </button>
@@ -278,18 +392,18 @@ export function Schedule() {
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <CalendarIcon className="w-16 h-16 text-gray-300 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">
-            {activeTab === "scheduled" 
-              ? "No scheduled posts" 
+            {activeTab === "scheduled"
+              ? "No scheduled posts"
               : activeTab === "published"
-              ? "No published posts"
-              : "No failed posts"}
+                ? "No published posts"
+                : "No failed posts"}
           </h3>
           <p className="text-gray-600 mb-4">
             {activeTab === "scheduled"
               ? "Schedule posts from the content generator to see them here"
               : activeTab === "published"
-              ? "Published posts will appear here once they're live"
-              : "Failed posts will appear here"}
+                ? "Published posts will appear here once they're live"
+                : "Failed posts will appear here"}
           </p>
           <button
             onClick={handleRefresh}
@@ -303,11 +417,11 @@ export function Schedule() {
         <div className="space-y-6">
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-gray-900">
-              {activeTab === "scheduled" 
-                ? "Scheduled Posts" 
+              {activeTab === "scheduled"
+                ? "Scheduled Posts"
                 : activeTab === "published"
-                ? "Published Posts"
-                : "Failed Posts"} ({filteredPosts.length})
+                  ? "Published Posts"
+                  : "Failed Posts"} ({filteredPosts.length})
             </h2>
             <div className="flex gap-2">
               <button
@@ -331,9 +445,10 @@ export function Schedule() {
               >
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex-1">
-                    <p className="text-gray-800 whitespace-pre-wrap mb-2 line-clamp-3">
-                      {post.content}
-                    </p>
+                    <div
+                      className="text-gray-800 whitespace-pre-wrap mb-2 line-clamp-3 max-w-none"
+                      dangerouslySetInnerHTML={{ __html: textToHtml(post.content) }}
+                    />
 
                     <div className="flex items-center gap-4 text-sm text-gray-500 flex-wrap">
                       <span>Platform: {post.platform || "LinkedIn"}</span>
@@ -347,6 +462,24 @@ export function Schedule() {
                   </div>
 
                   <div className="flex gap-2 ml-4 flex-wrap justify-end">
+                    <button
+                      onClick={() => handleViewClick(post)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition"
+                      title="View"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+
+                    {post.status === "scheduled" && (
+                      <button
+                        onClick={() => handleEditClick(post)}
+                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition"
+                        title="Edit"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+
                     {post.status === "scheduled" && (
                       <button
                         onClick={() => handleDeletePost(post.id)}
@@ -377,10 +510,10 @@ export function Schedule() {
                       {post.status === "published"
                         ? `Published: ${formatDateTime(post.published_at!, true)}`
                         : post.status === "failed"
-                        ? `Failed: ${formatDateTime(post.scheduled_time, true)}`
-                        : post.status === "cancelled"
-                        ? `Cancelled: ${formatDateTime(post.scheduled_time, true)}`
-                        : `Scheduled: ${formatDateTime(post.scheduled_time, true)} (${getTimeRemaining(post.scheduled_time)})`}
+                          ? `Failed: ${formatDateTime(post.scheduled_time, true)}`
+                          : post.status === "cancelled"
+                            ? `Cancelled: ${formatDateTime(post.scheduled_time, true)}`
+                            : `Scheduled: ${formatDateTime(post.scheduled_time, true)} (${getTimeRemaining(post.scheduled_time)})`}
                     </p>
                   </div>
 
@@ -405,6 +538,90 @@ export function Schedule() {
                 )}
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* View Modal */}
+      {showViewModal && selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden text-sm">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">View Post</h2>
+              <button onClick={() => setShowViewModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+              <div className="bg-white p-8 rounded-lg border border-gray-200 shadow-sm max-w-none min-h-[400px]">
+                <div
+                  className="text-gray-800 text-base leading-relaxed linkedin-preview-content"
+                  dangerouslySetInnerHTML={{ __html: editedContent }}
+                />
+              </div>
+              <div className="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
+                <span>Platform: {selectedPost.platform || "LinkedIn"}</span>
+                <span>Scheduled: {formatDateTime(selectedPost.scheduled_time, true)}</span>
+                <span>Status: {selectedPost.status}</span>
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end">
+              <button
+                onClick={() => setShowViewModal(false)}
+                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-xs"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-7xl max-h-[95vh] flex flex-col overflow-hidden text-sm">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-gray-900">Edit Scheduled Post</h2>
+              <button onClick={() => setShowEditModal(false)} className="text-gray-400 hover:text-gray-600">
+                <XIcon className="w-6 h-6" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex-1 flex flex-col">
+              <div className="flex-1 quill-editor-container">
+                <ReactQuill
+                  theme="snow"
+                  value={editedContent}
+                  onChange={setEditedContent}
+                  modules={quillModules}
+                  formats={quillFormats}
+                  placeholder="Edit your post..."
+                />
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-3 bg-gray-50">
+              <button
+                onClick={() => setShowEditModal(false)}
+                disabled={isSaving}
+                className="px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition disabled:opacity-50 text-xs"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                disabled={isSaving || !editedContent.trim()}
+                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-50 text-xs font-medium"
+              >
+                {isSaving ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  "Save Changes"
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

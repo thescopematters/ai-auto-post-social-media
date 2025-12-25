@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import {
   contentApi,
@@ -25,11 +25,16 @@ import {
   X as XIcon,
   Plus,
   Send,
-  TrendingUp,
   AlertCircle,
   Copy,
+  ThumbsUp,
+  MessageSquare,
+  Repeat2,
+
 } from "lucide-react";
 import { toast } from "sonner";
+import ReactQuill from "react-quill";
+import "react-quill/dist/quill.snow.css";
 
 // Type Definitions
 type Document = {
@@ -82,8 +87,8 @@ type WorkspaceLimits = {
     limit: number;
     remaining: number;
     canPost: boolean;
-    canPostNow: boolean; // Daily limit check
-    nextResetDate?: string; // Rolling 7-day reset date
+    canPostNow: boolean;
+    nextResetDate?: string;
     message?: string;
     planType?: string;
   };
@@ -144,6 +149,7 @@ export function Generator() {
   const [selectedAccount, setSelectedAccount] = useState<string>("");
   const [scheduledTime, setScheduledTime] = useState("");
   const [generatedPosts, setGeneratedPosts] = useState<GeneratedPost[]>([]);
+  const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [modalImages, setModalImages] = useState<File[]>([]);
@@ -155,6 +161,124 @@ export function Generator() {
   const [generatingAIImage, setGeneratingAIImage] = useState(false);
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
+  const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+
+  const quillRef = useRef<ReactQuill>(null);
+
+  const LOADING_MESSAGES = [
+    "Warming up the AI's creative neurons...",
+    "Brewing a fresh post. Almost there.",
+    "Teaching the AI to be witty. One second.",
+    "Generating scroll-stopping content...",
+    "Turning ideas into engagement...",
+    "Convincing the AI this post needs to go viral.",
+    "Asking the AI for its best social voice.",
+    "Polishing words. Removing cringe.",
+    "Aligning hashtags with the universe.",
+    "Creativity in progress. Please stand by.",
+  ];
+
+  // Quill modules configuration
+  const quillModules = {
+    toolbar: [
+      ['bold', 'italic', 'underline'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['link'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'bold', 'italic', 'underline',
+    'list', 'bullet',
+    'link'
+  ];
+
+  // Helper function to strip HTML tags for character count and plain text
+  const stripHtml = (html: string) => {
+    const tmp = document.createElement("DIV");
+    tmp.innerHTML = html;
+    return tmp.textContent || tmp.innerText || "";
+  };
+
+  // Strip AI-generated markdown bold and HTML bold (requested by user to not show bold in list)
+  const markdownToHtml = (markdown: string) => {
+    if (!markdown) return "";
+    // Robust replacement for **bold** and __bold__
+    let clean = markdown
+      .replace(/\*\*([\s\S]*?)\*\*/g, "$1")
+      .replace(/__([\s\S]*?)__/g, "$1");
+
+    // Also strip literal <strong> and <b> tags if AI included them
+    clean = clean
+      .replace(/<strong[^>]*>([\s\S]*?)<\/strong>/gi, "$1")
+      .replace(/<b[^>]*>([\s\S]*?)<\/b>/gi, "$1");
+
+    return clean;
+  };
+
+  // Convert plain text with newlines to HTML for ReactQuill
+  const textToHtml = (text: string) => {
+    if (!text) return "";
+    const clean = markdownToHtml(text);
+
+    // Split by double newlines or more to identify "true" paragraph breaks
+    // and then handle single newlines within those blocks
+    return clean
+      .split(/\n\s*\n/)
+      .map(block => {
+        const lines = block.trim().split('\n');
+        const content = lines.join('<br>');
+        return `<p>${content}</p>`;
+      })
+      .join("");
+  };
+
+  // Convert HTML to LinkedIn-compatible Unicode bold/italic
+  // Convert HTML to LinkedIn-compatible Unicode bold/italic
+  const prepareContentForSocial = (html: string) => {
+    if (!html) return "";
+
+    const boldMap: { [key: string]: string } = {
+      'a': '𝗮', 'b': '𝗯', 'c': '𝗰', 'd': '𝗱', 'e': '𝗲', 'f': '𝗳', 'g': '𝗴', 'h': '𝗵', 'i': '𝗶', 'j': '𝗷', 'k': '𝗸', 'l': '𝗹', 'm': '𝗺', 'n': '𝗻', 'o': '𝗼', 'p': '𝗽', 'q': '𝗾', 'r': '𝗿', 's': '𝘀', 't': '𝘁', 'u': '𝘂', 'v': '𝘃', 'w': '𝘄', 'x': '𝘅', 'y': '𝘆', 'z': '𝘇',
+      'A': '𝗔', 'B': '𝗕', 'C': '𝗖', 'D': '𝗗', 'E': '𝗘', 'F': '𝗙', 'G': '𝗚', 'H': '𝗛', 'I': '𝗜', 'J': '𝗝', 'K': '𝗞', 'L': '𝗟', 'M': '𝗠', 'N': '𝗡', 'O': '𝗢', 'P': '𝗣', 'Q': '𝗤', 'R': '𝗥', 'S': '𝗦', 'T': '𝗧', 'U': '𝗨', 'V': '𝗩', 'W': '𝗪', 'X': '𝗫', 'Y': '𝗬', 'Z': '𝗭',
+      '0': '𝟬', '1': '𝟭', '2': '𝟮', '3': '𝟯', '4': '𝟰', '5': '𝟱', '6': '𝟲', '7': '𝟳', '8': '𝟴', '9': '𝟵'
+    };
+
+    const convertToUnicodeBold = (text: string) => {
+      return text.split('').map(char => boldMap[char] || char).join('');
+    };
+
+    // Use a container to parse the HTML string
+    const container = document.createElement('div');
+    container.innerHTML = html;
+
+    // Recursive function to process text nodes within bold tags
+    const processNodes = (node: Node) => {
+      if (node.nodeType === Node.TEXT_NODE && (node.parentElement?.tagName === 'STRONG' || node.parentElement?.tagName === 'B')) {
+        node.textContent = convertToUnicodeBold(node.textContent || "");
+      }
+      node.childNodes.forEach(processNodes);
+    };
+
+    processNodes(container);
+
+    // Clean up HTML tags but preserve line structure
+    let content = container.innerHTML;
+
+    // Replace <p> with newlines
+    content = content.replace(/<\/p><p>/g, '\n\n');
+    content = content.replace(/<p>/g, '');
+    content = content.replace(/<\/p>/g, '\n');
+
+    // Replace <br> with newlines
+    content = content.replace(/<br\s*\/?>/gi, '\n');
+
+    // Strip any remaining tags
+    const finalTmp = document.createElement('div');
+    finalTmp.innerHTML = content;
+    return finalTmp.textContent?.trim() || "";
+  };
 
   useEffect(() => {
     console.log('Generator Component Mounted');
@@ -263,6 +387,12 @@ export function Generator() {
 
     setGenerating(true);
     setGeneratedPosts([]);
+    setSelectedVariantIndex(0);
+    setLoadingMessageIndex(0);
+
+    const messageInterval = setInterval(() => {
+      setLoadingMessageIndex((prev) => (prev + 1) % LOADING_MESSAGES.length);
+    }, 2000);
 
     try {
       const response = await contentApi.generate(currentWorkspace.id, {
@@ -288,7 +418,6 @@ export function Generator() {
           }));
 
           setGeneratedPosts(postsWithFramework);
-          setGenerating(false);
           await loadWorkspaceLimits();
 
           toast.success("Posts generated!", {
@@ -296,32 +425,19 @@ export function Generator() {
           });
         } else {
           console.log("❌ No posts in response:", postsArray);
-          setGenerating(false);
           toast.error("No posts were generated");
         }
       } else {
         console.log("❌ API response not successful:", response);
-        setGenerating(false);
         toast.error("Failed to generate posts");
       }
     } catch (error: any) {
       console.error("Error generating content:", error);
-
-      const errorMsg = error?.response?.data?.error || error?.message || "";
-
-      if (errorMsg.includes("limit") || errorMsg.includes("exceeded")) {
-        toast.error("AI Generation Limit Reached", {
-          description: errorMsg,
-          duration: 5000,
-        });
-        await loadWorkspaceLimits();
-      } else {
-        toast.error("Failed to generate posts", {
-          description: errorMsg,
-        });
-      }
+      const errorMsg = error?.response?.data?.error || error?.message || "Failed to generate posts";
+      toast.error(errorMsg);
     } finally {
       setGenerating(false);
+      clearInterval(messageInterval);
     }
   };
 
@@ -362,9 +478,10 @@ export function Generator() {
     setGeneratingAIImage(true);
 
     try {
+      const plainText = stripHtml(editedContent);
       const response = await contentApi.generateImage(
         currentWorkspace.id,
-        editedContent.substring(0, 500)
+        plainText.substring(0, 500)
       );
 
       if (response.success && response.data?.imageUrl) {
@@ -405,7 +522,8 @@ export function Generator() {
 
   const handleScheduleClick = (post: GeneratedPost) => {
     setSelectedPost(post);
-    setEditedContent(post.content);
+    // Convert newlines to paragraphs for ReactQuill to maintain spacing
+    setEditedContent(textToHtml(post.content));
     setModalImages([]);
     setModalImagePreviews([]);
     setIsScheduleMode(false);
@@ -462,7 +580,6 @@ export function Generator() {
       return;
     }
 
-    // Check weekly limit
     if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPost) {
       toast.error("Weekly Post Limit Reached", {
         description: workspaceLimits.weeklyPosting.message ||
@@ -472,7 +589,6 @@ export function Generator() {
       return;
     }
 
-    // Check daily limit
     if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -492,11 +608,13 @@ export function Generator() {
     setScheduling(selectedPost.id);
 
     try {
-      if (editedContent !== selectedPost.content) {
+      const socialContent = prepareContentForSocial(editedContent);
+
+      if (socialContent !== selectedPost.content) {
         const updateResponse = await contentApi.updatePost(
           currentWorkspace.id,
           selectedPost.id,
-          { content: editedContent }
+          { content: socialContent }
         );
 
         if (!updateResponse.success) {
@@ -558,7 +676,6 @@ export function Generator() {
       return;
     }
 
-    // Check weekly limit
     if (workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPost) {
       toast.error("Weekly Post Limit Reached", {
         description:
@@ -572,7 +689,6 @@ export function Generator() {
     const selectedDate = new Date(scheduledTime);
     const now = new Date();
 
-    // Check if scheduled for today
     const todayStart = new Date(now);
     todayStart.setHours(0, 0, 0, 0);
     const todayEnd = new Date(now);
@@ -580,7 +696,6 @@ export function Generator() {
 
     const isScheduledForToday = selectedDate >= todayStart && selectedDate <= todayEnd;
 
-    // If scheduling for today, check daily limit
     if (isScheduledForToday && workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow) {
       const tomorrow = new Date(now);
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -597,7 +712,6 @@ export function Generator() {
       return;
     }
 
-    // Validate future time
     if (selectedDate <= now) {
       toast.error("Scheduled time must be in the future");
       return;
@@ -612,11 +726,13 @@ export function Generator() {
     setScheduling(selectedPost.id);
 
     try {
-      if (editedContent !== selectedPost.content) {
+      const socialContent = prepareContentForSocial(editedContent);
+
+      if (socialContent !== selectedPost.content) {
         const updateResponse = await contentApi.updatePost(
           currentWorkspace.id,
           selectedPost.id,
-          { content: editedContent }
+          { content: socialContent }
         );
 
         if (!updateResponse.success) {
@@ -699,7 +815,6 @@ export function Generator() {
   minDateTime.setMinutes(minDateTime.getMinutes() + 5);
   const minDateTimeString = minDateTime.toISOString().slice(0, 16);
 
-  // Format date for display (DD/MMM/YYYY)
   const formatResetDate = (dateString: string | undefined) => {
     if (!dateString) return "Not available";
 
@@ -740,8 +855,9 @@ export function Generator() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-8">
+    <div className="h-[calc(100vh-72px)] flex flex-col p-6 lg:p-8 max-w-[1600px] mx-auto overflow-hidden">
+
+      <div className="mb-6 flex-shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
           Content Generator
         </h1>
@@ -751,167 +867,159 @@ export function Generator() {
         </p>
       </div>
 
-      {!isPro && workspaceLimits && (
-        <div className="mb-6 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg p-4">
-          <div className="flex items-start gap-3">
-            <TrendingUp className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
-            <div className="flex-1">
-              <h4 className="font-semibold text-gray-900 mb-1">
-                Upgrade to Pro Plan
-              </h4>
-              <p className="text-sm text-gray-600 mb-3">
-                Get unlimited AI generations, unlimited documents, and 100 posts
-                per week
-              </p>
-              <button
-                onClick={() => (window.location.href = "/subscription")}
-                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition text-sm font-medium"
-              >
-                Upgrade Now
-              </button>
+      <div className="flex-1 min-h-0 grid lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-1 h-full flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex-shrink-0 bg-gray-50/50">
+              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-blue-600" />
+                Configuration
+              </h2>
             </div>
-          </div>
-        </div>
-      )}
 
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 sticky top-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Settings className="w-5 h-5" />
-              Configuration
-            </h2>
-
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Source Document
-                </label>
-                <select
-                  value={selectedDocument}
-                  onChange={(e) => setSelectedDocument(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="">Select a document</option>
-                  {documents.map((doc) => (
-                    <option key={doc.id} value={doc.id}>
-                      {doc.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-3">
-                  Platform
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => setPlatform("linkedin")}
-                    className={`p-4 rounded-lg border-2 transition ${platform === "linkedin"
-                      ? "border-blue-600 bg-blue-50"
-                      : "border-gray-200 hover:border-gray-300"
-                      }`}
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
+              <div className="space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Source Document
+                  </label>
+                  <select
+                    value={selectedDocument}
+                    onChange={(e) => setSelectedDocument(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                   >
-                    <Linkedin
-                      className={`w-6 h-6 mx-auto mb-2 ${platform === "linkedin"
-                        ? "text-blue-600"
-                        : "text-gray-400"
-                        }`}
-                    />
-                    <span className="block text-sm font-medium">LinkedIn</span>
-                  </button>
+                    <option value="">Select a document</option>
+                    {documents.map((doc) => (
+                      <option key={doc.id} value={doc.id}>
+                        {doc.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-                  <div
-                    className="relative"
-                    onMouseEnter={() => setShowTooltip(true)}
-                    onMouseLeave={() => setShowTooltip(false)}
-                  >
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Platform
+                  </label>
+                  <div className="grid grid-cols-2 gap-4">
                     <button
-                      disabled
-                      className="w-full p-4 rounded-lg border-2 border-gray-200 opacity-50 cursor-not-allowed"
+                      onClick={() => setPlatform("linkedin")}
+                      className={`p-3 rounded-xl border-2 transition-all duration-200 ${platform === "linkedin"
+                        ? "border-blue-600 bg-blue-50 ring-2 ring-blue-100"
+                        : "border-gray-100 bg-gray-50 hover:border-gray-300"
+                        }`}
                     >
-                      <svg
-                        className="w-6 h-6 mx-auto mb-2 text-gray-400"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                      >
-                        <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-                      </svg>
-                      <span className="block text-sm font-medium">Twitter</span>
+                      <Linkedin
+                        className={`w-5 h-5 mx-auto mb-1.5 ${platform === "linkedin"
+                          ? "text-blue-600"
+                          : "text-gray-400"
+                          }`}
+                      />
+                      <span className={`block text-xs font-semibold ${platform === "linkedin" ? "text-blue-700" : "text-gray-600"}`}>LinkedIn</span>
                     </button>
 
-                    {showTooltip && (
-                      <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-sm rounded-lg whitespace-nowrap z-50 pointer-events-none">
-                        Coming Soon
-                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
-                      </div>
-                    )}
+                    <div
+                      className="relative"
+                      onMouseEnter={() => setShowTooltip(true)}
+                      onMouseLeave={() => setShowTooltip(false)}
+                    >
+                      <button
+                        disabled
+                        className="w-full p-3 rounded-xl border-2 border-gray-100 bg-gray-50 opacity-50 cursor-not-allowed"
+                      >
+                        <svg
+                          className="w-5 h-5 mx-auto mb-1.5 text-gray-400"
+                          viewBox="0 0 24 24"
+                          fill="currentColor"
+                        >
+                          <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+                        </svg>
+                        <span className="block text-xs font-semibold text-gray-400">Twitter</span>
+                      </button>
+
+                      {showTooltip && (
+                        <div className="absolute -top-12 left-1/2 transform -translate-x-1/2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg whitespace-nowrap z-50 pointer-events-none shadow-xl">
+                          Coming Soon
+                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900"></div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Content Framework
-                </label>
-                <select
-                  value={framework}
-                  onChange={(e) =>
-                    setFramework(e.target.value as keyof typeof FRAMEWORKS)
-                  }
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Content Framework
+                  </label>
+                  <select
+                    value={framework}
+                    onChange={(e) =>
+                      setFramework(e.target.value as keyof typeof FRAMEWORKS)
+                    }
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    {Object.entries(FRAMEWORKS).map(([key, config]) => (
+                      <option key={key} value={key}>
+                        {config.name}
+                        {config.description}
+                      </option>
+                    ))}
+                  </select>
+
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Tone
+                  </label>
+                  <select
+                    value={tone}
+                    onChange={(e) => setTone(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  >
+                    <option value="professional">Professional</option>
+                    <option value="casual">Casual</option>
+                    <option value="thought_leader">Thought Leader</option>
+                    <option value="educational">Educational</option>
+                    <option value="promotional">Promotional</option>
+                  </select>
+                </div>
+
+              </div>
+            </div>
+
+            {workspaceLimits && (
+              <div className="p-5 border-t border-gray-100 bg-white space-y-3 flex-shrink-0">
+                <button
+                  onClick={handleGenerate}
+                  disabled={!selectedDocument || generating}
+                  className={`w-full flex flex-col items-center justify-center gap-1 px-4 py-2.5 rounded-xl transition-all duration-300 font-bold shadow-lg relative overflow-hidden group ${(!selectedDocument || generating)
+                    ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5"
+                    }`}
                 >
-                  {Object.entries(FRAMEWORKS).map(([key, config]) => (
-                    <option key={key} value={key}>
-                      {config.name} - {config.description}
-                    </option>
-                  ))}
-                </select>
-              </div>
+                  {generating ? (
+                    <div className="flex items-center gap-2">
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span className="text-sm">Generating...</span>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex items-center gap-2">
+                        <Sparkles className="w-4 h-4" />
+                        <span className="text-sm">Generate Posts</span>
+                      </div>
+                      <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-shimmer" />
+                    </>
+                  )}
+                </button>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Tone
-                </label>
-                <select
-                  value={tone}
-                  onChange={(e) => setTone(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                >
-                  <option value="professional">Professional</option>
-                  <option value="casual">Casual</option>
-                  <option value="thought_leader">Thought Leader</option>
-                  <option value="educational">Educational</option>
-                  <option value="promotional">Promotional</option>
-                </select>
-              </div>
-
-              <button
-                onClick={handleGenerate}
-                disabled={!selectedDocument || generating}
-                className="w-full flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {generating ? (
-                  <>
-                    <RefreshCw className="w-5 h-5 animate-spin" />
-                    Generating...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="w-5 h-5" />
-                    Generate Posts
-                  </>
-                )}
-              </button>
-
-              {workspaceLimits && (
-                <div className="mt-4 pt-4 border-t border-gray-200 space-y-3">
+                <div className="space-y-3 pt-1">
                   {workspaceLimits.aiGeneration && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">AI Generations Today:</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">AI Generations Today:</span>
+                        <span className="font-bold text-gray-900">
                           {isPro ? (
                             <span className="text-purple-600">Unlimited ∞</span>
                           ) : (
@@ -920,9 +1028,9 @@ export function Generator() {
                         </span>
                       </div>
                       {!isPro && (
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div className="w-full bg-gray-100 rounded-full h-1">
                           <div
-                            className="bg-blue-600 h-1.5 rounded-full transition-all"
+                            className="bg-blue-600 h-1 rounded-full transition-all duration-500"
                             style={{
                               width: `${((workspaceLimits.aiGeneration.limit - workspaceLimits.aiGeneration.remaining) /
                                 workspaceLimits.aiGeneration.limit) *
@@ -937,9 +1045,9 @@ export function Generator() {
 
                   {workspaceLimits.documentUpload && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">Documents:</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">Documents:</span>
+                        <span className="font-bold text-gray-900">
                           {isPro ? (
                             <span className="text-purple-600">Unlimited ∞</span>
                           ) : (
@@ -948,9 +1056,9 @@ export function Generator() {
                         </span>
                       </div>
                       {!isPro && (
-                        <div className="w-full bg-gray-200 rounded-full h-1.5">
+                        <div className="w-full bg-gray-100 rounded-full h-1">
                           <div
-                            className="bg-green-600 h-1.5 rounded-full transition-all"
+                            className="bg-green-500 h-1 rounded-full transition-all duration-500"
                             style={{
                               width: `${((workspaceLimits.documentUpload.limit - workspaceLimits.documentUpload.remaining) /
                                 workspaceLimits.documentUpload.limit) *
@@ -965,19 +1073,19 @@ export function Generator() {
 
                   {workspaceLimits.weeklyPosting && (
                     <div>
-                      <div className="flex items-center justify-between text-xs mb-1">
-                        <span className="text-gray-600 font-medium">Posts (Rolling 7 Days):</span>
-                        <span className="font-semibold text-gray-900">
+                      <div className="flex items-center justify-between text-[10px] mb-1">
+                        <span className="text-gray-500 font-medium">Posts (Rolling 7 Days):</span>
+                        <span className="font-bold text-gray-900">
                           {`${Math.max(0, workspaceLimits.weeklyPosting.remaining)}/${workspaceLimits.weeklyPosting.limit}`}
                         </span>
                       </div>
-                      <div className="w-full bg-gray-200 rounded-full h-1.5 mb-1">
+                      <div className="w-full bg-gray-100 rounded-full h-1">
                         <div
-                          className={`h-1.5 rounded-full transition-all ${workspaceLimits.weeklyPosting.remaining <= 0
+                          className={`h-1 rounded-full transition-all duration-500 ${workspaceLimits.weeklyPosting.remaining <= 0
                             ? "bg-red-400"
                             : workspaceLimits.weeklyPosting.remaining <= 1
-                              ? "bg-orange-500"
-                              : "bg-orange-600"
+                              ? "bg-orange-400"
+                              : "bg-orange-500"
                             }`}
                           style={{
                             width: `${Math.min(
@@ -989,152 +1097,144 @@ export function Generator() {
                           }}
                         />
                       </div>
-
-                      {/* Daily limit warning */}
-                      {!workspaceLimits.weeklyPosting.canPostNow && (
-                        <p className="text-xs text-orange-600 mt-1 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          Daily limit reached - try tomorrow
-                        </p>
-                      )}
-
-                      {/* Weekly reset date */}
                       {workspaceLimits.weeklyPosting.nextResetDate && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-[9px] text-gray-400 mt-1">
                           Resets on: {formatResetDate(workspaceLimits.weeklyPosting.nextResetDate)}
                         </p>
                       )}
-
-                      {/* Weekly limit reached */}
-                      {!workspaceLimits.weeklyPosting.canPost && (
-                        <p className="text-xs text-red-500 mt-1 font-medium">
-                          ⚠️ Weekly limit reached
-                        </p>
-                      )}
                     </div>
                   )}
+                </div>
 
-                  {!isPro && (
-                    <div className="pt-2 border-t border-gray-200">
-                      <button
-                        onClick={() => (window.location.href = "/subscription")}
-                        className="w-full text-xs py-2 px-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition font-medium"
-                      >
-                        ✨ Upgrade to Pro
-                      </button>
+                {!isPro && (
+                  <button
+                    onClick={() => (window.location.href = "/subscription")}
+                    className="w-full text-xs py-2 px-4 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl hover:from-purple-700 hover:to-pink-700 transition-all font-bold shadow-md shadow-purple-100 mt-2"
+                  >
+                    ✨ Upgrade to Pro
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="lg:col-span-2 h-full flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between flex-shrink-0 bg-gray-50/50">
+              <h2 className="text-xl font-bold text-gray-900">
+                Generated Variants
+              </h2>
+              {generatedPosts.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => handlePreviewClick(generatedPosts[selectedVariantIndex])}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-all text-[11px] font-bold shadow-sm"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Preview
+                  </button>
+                  <button
+                    onClick={() => handleScheduleClick(generatedPosts[selectedVariantIndex])}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-all text-[11px] font-bold shadow-sm"
+                  >
+                    <Calendar className="w-3.5 h-3.5" />
+                    Schedule
+                  </button>
+                  <div className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-bold border border-blue-100">
+                    {getFrameworkIcon(framework)}
+                    {FRAMEWORKS[framework].name}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1 custom-scrollbar bg-gray-50/30">
+              {generating ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12">
+                  <div className="relative mb-8">
+                    <div className="w-24 h-24 bg-blue-50 rounded-full animate-ping absolute inset-0 opacity-20" />
+                    <div className="w-24 h-24 bg-white rounded-3xl shadow-lg border border-blue-100 flex items-center justify-center relative z-10">
+                      <RefreshCw className="w-10 h-10 text-blue-600 animate-spin" />
+                    </div>
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-3 animate-pulse">
+                    Crafting your content...
+                  </h3>
+                  <p className="text-blue-600 font-medium text-sm max-w-sm leading-relaxed bg-blue-50 px-6 py-3 rounded-2xl border border-blue-100">
+                    {LOADING_MESSAGES[loadingMessageIndex]}
+                  </p>
+                </div>
+              ) : generatedPosts.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-center p-12">
+                  <div className="w-20 h-20 bg-white rounded-3xl shadow-sm border border-gray-100 flex items-center justify-center mb-6">
+                    <Sparkles className="w-10 h-10 text-gray-200" />
+                  </div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">
+                    Ready to create?
+                  </h3>
+                  <p className="text-gray-500 mb-8 max-w-sm text-sm leading-relaxed">
+                    Select a document and click generate to create AI-powered
+                    content using the {FRAMEWORKS[framework].name} framework.
+                  </p>
+                  {documents.length === 0 && (
+                    <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
+                      <AlertCircle className="w-4 h-4" />
+                      Please upload documents first
                     </div>
                   )}
+                </div>
+              ) : (
+                <div className="space-y-8">
+                  {generatedPosts.map((post, index) => (
+                    <div
+                      key={index}
+                      className="group/card animate-fade-in cursor-pointer"
+                      onClick={() => setSelectedVariantIndex(index)}
+                    >
+                      <div className={`bg-white rounded-2xl border transition-all duration-300 overflow-hidden ${selectedVariantIndex === index
+                        ? "border-blue-500 shadow-md ring-2 ring-blue-100"
+                        : "border-gray-200 shadow-sm hover:shadow-md hover:border-gray-300"
+                        }`}>
+                        {/* Top bar with variant label and actions */}
+                        <div className={`p-4 border-b flex items-center justify-between transition-colors ${selectedVariantIndex === index ? "border-blue-100 bg-blue-50/30" : "border-gray-100 bg-gray-50/30"
+                          }`}>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleCopyPost(post.content);
+                              }}
+                              className="flex items-center gap-2 px-2.5 py-1 bg-white border border-gray-200 text-gray-600 rounded-lg hover:bg-gray-50 transition-all text-[11px] font-bold shadow-sm"
+                              title="Copy to clipboard"
+                            >
+                              <Copy className="w-3.5 h-3.5" />
+                              Copy
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Content area */}
+                        <div className="p-6">
+                          <div
+                            className="text-gray-800 whitespace-pre-wrap leading-relaxed text-[15px] linkedin-preview-content prose prose-sm max-w-none"
+                            dangerouslySetInnerHTML={{ __html: markdownToHtml(post.content) }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
           </div>
         </div>
-
-        <div className="lg:col-span-2">
-          {generatedPosts.length === 0 ? (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
-              <Sparkles className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                No posts generated yet
-              </h3>
-              <p className="text-gray-600 mb-6">
-                Select a document and click generate to create AI-powered
-                content using {FRAMEWORKS[framework].name} framework
-              </p>
-              {documents.length === 0 && (
-                <p className="text-sm text-yellow-600">
-                  You need to upload documents first
-                </p>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-gray-900">
-                  Generated Variants
-                </h2>
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="flex items-center gap-1">
-                    {getFrameworkIcon(framework)}
-                    {FRAMEWORKS[framework].name}
-                  </span>
-                  <span>•</span>
-                  <span>{generatedPosts.length} variants</span>
-                </div>
-              </div>
-              {generatedPosts.map((post) => (
-                <div
-                  key={post.id}
-                  className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm font-medium">
-                        Variant
-                      </span>
-                      {post.framework &&
-                        FRAMEWORKS[
-                        post.framework as keyof typeof FRAMEWORKS
-                        ] && (
-                          <span className="px-3 py-1 bg-gradient-to-r from-purple-100 to-pink-100 text-purple-700 rounded-full text-xs font-semibold flex items-center gap-1 border border-purple-200">
-                            {getFrameworkIcon(
-                              post.framework as keyof typeof FRAMEWORKS
-                            )}
-                            {
-                              FRAMEWORKS[
-                                post.framework as keyof typeof FRAMEWORKS
-                              ].name
-                            }
-                          </span>
-                        )}
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleCopyPost(post.content)}
-                        className="flex items-center gap-2 px-3 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition text-sm"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-
-                      <button
-                        onClick={() => handlePreviewClick(post)}
-                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                        Preview
-                      </button>
-
-                      <button
-                        onClick={() => handleScheduleClick(post)}
-                        className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
-                      >
-                        <Calendar className="w-4 h-4" />
-                        Schedule
-                      </button>
-                    </div>
-                  </div>
-                  <p className="text-gray-800 whitespace-pre-wrap mb-4">
-                    {post.content}
-                  </p>
-                  <div className="flex items-center justify-between pt-4 border-t border-gray-200">
-                    <span className="text-sm text-gray-500">
-                      {post.content.length} characters
-                    </span>
-                    <span className="text-sm text-gray-500 capitalize">
-                      {post.platform}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
 
       {showScheduleModal && selectedPost && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
-          <div className="w-full max-w-6xl max-h-screen flex bg-white rounded-xl shadow-2xl overflow-hidden">
-            <div className="w-1/2 flex flex-col overflow-hidden border-r border-gray-200">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-2 z-50 overflow-hidden">
+          <div className="w-[92vw] max-w-[1440px] h-[95vh] max-h-[95vh] flex bg-white rounded-xl shadow-2xl overflow-hidden">
+            <div className="w-[55%] flex flex-col overflow-hidden border-r border-gray-200">
               <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-shrink-0">
                 <div>
                   <h2 className="text-lg font-bold text-gray-900">
@@ -1144,15 +1244,9 @@ export function Generator() {
                     Edit, add images & publish
                   </p>
                 </div>
-                <button
-                  onClick={closeScheduleModal}
-                  className="text-gray-400 hover:text-gray-600"
-                >
-                  <XIcon className="w-5 h-5" />
-                </button>
               </div>
 
-              <div className="p-4 space-y-3 overflow-y-auto flex-1 text-sm">
+              <div className="p-4 space-y-3 overflow-y-auto flex-1 text-sm flex flex-col">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Account
@@ -1174,19 +1268,23 @@ export function Generator() {
                   </select>
                 </div>
 
-                <div>
+                <div className="flex-1 flex flex-col">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Content
+                    Edit Content
                   </label>
-                  <textarea
-                    value={editedContent}
-                    onChange={(e) => setEditedContent(e.target.value)}
-                    rows={8}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none text-sm"
-                    placeholder="Edit your post..."
-                  />
+                  <div className="flex-1 quill-editor-container">
+                    <ReactQuill
+                      ref={quillRef}
+                      theme="snow"
+                      value={editedContent}
+                      onChange={setEditedContent}
+                      modules={quillModules}
+                      formats={quillFormats}
+                      placeholder="Edit your post..."
+                    />
+                  </div>
                   <p className="text-xs text-gray-500 mt-1">
-                    {editedContent.length} characters
+                    {stripHtml(editedContent).length} characters
                   </p>
                 </div>
 
@@ -1278,7 +1376,7 @@ export function Generator() {
                   <div className="flex gap-2 mb-2">
                     <button
                       onClick={() => setIsScheduleMode(false)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${!isScheduleMode
+                      className={`flex-1 py-1.5 rounded text-xs font-medium transition ${!isScheduleMode
                         ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                         : "bg-gray-100 text-gray-600"
                         }`}
@@ -1287,7 +1385,7 @@ export function Generator() {
                     </button>
                     <button
                       onClick={() => setIsScheduleMode(true)}
-                      className={`flex-1 py-2 rounded text-sm font-medium transition ${isScheduleMode
+                      className={`flex-1 py-1.5 rounded text-xs font-medium transition ${isScheduleMode
                         ? "bg-blue-100 text-blue-700 border-2 border-blue-500"
                         : "bg-gray-100 text-gray-600"
                         }`}
@@ -1302,7 +1400,6 @@ export function Generator() {
                         Date & Time
                       </label>
 
-                      {/* Daily limit warning for today's schedule */}
                       {workspaceLimits?.weeklyPosting && !workspaceLimits.weeklyPosting.canPostNow && (
                         <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded flex items-start gap-2">
                           <AlertCircle className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
@@ -1321,8 +1418,9 @@ export function Generator() {
                         type="datetime-local"
                         value={scheduledTime}
                         onChange={(e) => setScheduledTime(e.target.value)}
+                        onClick={(e) => (e.target as HTMLInputElement).showPicker?.()}
                         min={minDateTimeString}
-                        className="w-full px-3 py-2 border border-gray-300 rounded text-sm"
+                        className="w-full px-3 py-2 border border-gray-300 rounded text-xs cursor-pointer"
                       />
                       <p className="text-xs text-gray-500 mt-1">
                         Min 5 minutes ahead
@@ -1334,12 +1432,12 @@ export function Generator() {
                 </div>
               </div>
 
-              <div className="p-4 border-t border-gray-200 flex gap-2 bg-gray-50 flex-shrink-0">
+              <div className="p-4 border-t border-gray-200 flex justify-end gap-2 bg-gray-50 flex-shrink-0">
                 <button
                   onClick={closeScheduleModal}
-                  className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-sm"
+                  className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-xs"
                 >
-                  Cancel
+                  Close
                 </button>
 
                 {!isScheduleMode ? (
@@ -1348,7 +1446,7 @@ export function Generator() {
                     disabled={
                       !selectedAccount || scheduling !== null || uploading
                     }
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded hover:bg-green-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
@@ -1371,7 +1469,7 @@ export function Generator() {
                       scheduling !== null ||
                       uploading
                     }
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-sm font-medium"
+                    className="flex items-center justify-center gap-2 px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
                   >
                     {uploading || scheduling ? (
                       <>
@@ -1389,11 +1487,20 @@ export function Generator() {
               </div>
             </div>
 
-            <div className="w-1/2 flex flex-col bg-gray-50 overflow-hidden">
-              <div className="p-4 border-b border-gray-200 bg-white">
-                <h3 className="text-sm font-semibold text-gray-900">
+            <div className="w-[45%] flex flex-col bg-gray-50 overflow-hidden">
+              <div className="p-4 border-b border-gray-200 bg-white flex-shrink-0 relative">
+                <h3 className="text-lg font-bold text-gray-900">
                   LinkedIn Preview
                 </h3>
+                <p className="text-xs text-gray-500">
+                  Visual representation of your post
+                </p>
+                <button
+                  onClick={closeScheduleModal}
+                  className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                >
+                  <XIcon className="w-5 h-5" />
+                </button>
               </div>
 
               <div className="p-4 overflow-y-auto flex-1">
@@ -1423,9 +1530,10 @@ export function Generator() {
                   </div>
 
                   <div className="px-3 pb-3">
-                    <p className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap break-words">
-                      {editedContent || "Your post content will appear here..."}
-                    </p>
+                    <div
+                      className="text-gray-800 text-sm leading-relaxed linkedin-preview-content max-w-none"
+                      dangerouslySetInnerHTML={{ __html: editedContent || "Your post content will appear here..." }}
+                    />
                   </div>
 
                   {modalImagePreviews.length > 0 && (
@@ -1456,115 +1564,165 @@ export function Generator() {
                       ))}
                     </div>
                   )}
+
+                  <div className="border-t border-gray-100 mt-2">
+                    <div className="flex items-center justify-around py-1">
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <ThumbsUp className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Like</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <MessageSquare className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Comment</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Repeat2 className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Repost</span>
+                      </button>
+                      <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                        <Send className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                        <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Send</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="mt-4 p-3 bg-white border border-gray-200 rounded-lg">
                   <div className="flex justify-between text-xs text-gray-600 mb-2">
                     <span>Characters</span>
-                    <span className="font-medium">{editedContent.length}</span>
+                    <span className="font-medium">{stripHtml(editedContent).length}</span>
                   </div>
                 </div>
               </div>
             </div>
           </div>
         </div>
-      )}
+      )
+      }
 
-      {showPreviewModal && selectedPost && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
-          <div className="flex items-center justify-center w-full max-h-screen">
-            <div className="bg-white rounded-xl shadow-lg w-full max-w-4xl max-h-screen flex flex-col">
-              <div className="p-6 border-b border-gray-200 flex-shrink-0">
-                <h2 className="text-2xl font-bold text-gray-900">
-                  Preview Post
-                </h2>
-                <div className="flex items-center gap-4 mt-2">
-                  <p className="text-gray-600">
-                    Platform: {selectedPost.platform || "LinkedIn"}
-                  </p>
-                  {selectedPost.framework && (
-                    <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
-                      {FRAMEWORKS[
-                        selectedPost.framework as keyof typeof FRAMEWORKS
-                      ]?.name || selectedPost.framework}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              <div className="p-6 overflow-y-auto flex-1">
-                <div className="bg-gray-50 rounded-lg p-6 border border-gray-200">
-                  <p className="text-gray-800 whitespace-pre-wrap text-lg leading-relaxed">
-                    {selectedPost.content}
-                  </p>
-                </div>
-
-                <div className="mt-6 grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-gray-600 font-medium">Platform</p>
-                    <p className="text-gray-900 capitalize">
-                      {selectedPost.platform}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Variant</p>
-                    <p className="text-gray-900">
-                      {selectedPost.variant_number}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Character Count</p>
-                    <p className="text-gray-900">
-                      {selectedPost.content.length}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-gray-600 font-medium">Framework</p>
-                    <p className="text-gray-900">
-                      {FRAMEWORKS[
-                        selectedPost.framework as keyof typeof FRAMEWORKS
-                      ]?.name ||
-                        selectedPost.framework ||
-                        "Auto"}
-                    </p>
+      {
+        showPreviewModal && selectedPost && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-hidden">
+            <div className="flex items-center justify-center w-full max-h-screen">
+              <div className="bg-white rounded-xl shadow-lg w-full max-w-5xl max-h-[90vh] flex flex-col">
+                <div className="p-6 border-b border-gray-200 flex-shrink-0">
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Preview Post
+                  </h2>
+                  <div className="flex items-center justify-between mt-2">
+                    <div className="flex items-center gap-4">
+                      <p className="text-gray-600">
+                        Platform: {selectedPost.platform || "LinkedIn"}
+                      </p>
+                      {selectedPost.framework && (
+                        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+                          {FRAMEWORKS[
+                            selectedPost.framework as keyof typeof FRAMEWORKS
+                          ]?.name || selectedPost.framework}
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="text-gray-600 text-sm font-medium">
+                        Characters: <span className="text-gray-900">{selectedPost.content.length}</span>
+                      </p>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
-                <button
-                  onClick={() => setShowPreviewModal(false)}
-                  className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
-                >
-                  Close
-                </button>
+                <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+                  <div className="max-w-2xl mx-auto bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                    <div className="p-3 flex items-center gap-2">
+                      {filteredAccounts.find((a) => a.id === selectedAccount)?.photo ? (
+                        <img
+                          src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo!}
+                          alt={filteredAccounts.find((a) => a.id === selectedAccount)?.account_name}
+                          className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">
+                          {filteredAccounts
+                            .find((a) => a.id === selectedAccount)
+                            ?.account_name?.charAt(0)
+                            ?.toUpperCase() || "U"}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="font-medium text-gray-900 text-sm truncate">
+                          {filteredAccounts.find((a) => a.id === selectedAccount)
+                            ?.account_name || "User"}
+                        </p>
+                        <p className="text-xs text-gray-500">Now</p>
+                      </div>
+                    </div>
+
+                    <div className="px-3 pb-3">
+                      <div
+                        className="text-gray-800 text-sm leading-relaxed whitespace-pre-wrap break-words linkedin-preview-content prose prose-sm max-w-none"
+                        dangerouslySetInnerHTML={{ __html: markdownToHtml(selectedPost.content) }}
+                      />
+                    </div>
+
+                    <div className="border-t border-gray-100 mt-2">
+                      <div className="flex items-center justify-around py-1">
+                        <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                          <ThumbsUp className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                          <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Like</span>
+                        </button>
+                        <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                          <MessageSquare className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                          <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Comment</span>
+                        </button>
+                        <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                          <Repeat2 className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                          <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Repost</span>
+                        </button>
+                        <button className="flex flex-col items-center gap-1 p-2 hover:bg-gray-100 rounded-lg transition-colors group">
+                          <Send className="w-5 h-5 text-gray-500 group-hover:text-blue-600" />
+                          <span className="text-[10px] font-bold text-gray-500 group-hover:text-blue-600">Send</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 border-t border-gray-200 flex justify-end flex-shrink-0">
+                  <button
+                    onClick={() => setShowPreviewModal(false)}
+                    className="px-6 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition"
+                  >
+                    Close
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
-      {showImagePreview && previewImageUrl && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
-          onClick={() => setShowImagePreview(false)}
-        >
-          <div className="relative max-w-4xl max-h-screen">
-            <button
-              onClick={() => setShowImagePreview(false)}
-              className="absolute -top-10 right-0 text-white hover:text-gray-300 transition"
-            >
-              <XIcon className="w-8 h-8" />
-            </button>
-            <img
-              src={previewImageUrl}
-              alt="Preview"
-              className="max-w-full max-h-screen object-contain rounded-lg"
-              onClick={(e) => e.stopPropagation()}
-            />
+      {
+        showImagePreview && previewImageUrl && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 z-[60]"
+            onClick={() => setShowImagePreview(false)}
+          >
+            <div className="relative max-w-4xl max-h-screen">
+              <button
+                onClick={() => setShowImagePreview(false)}
+                className="absolute -top-10 right-0 text-white hover:text-gray-300 transition"
+              >
+                <XIcon className="w-8 h-8" />
+              </button>
+              <img
+                src={previewImageUrl}
+                alt="Preview"
+                className="max-w-full max-h-screen object-contain rounded-lg"
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
           </div>
-        </div>
-      )}
-    </div>
+        )
+      }
+    </div >
   );
 }
