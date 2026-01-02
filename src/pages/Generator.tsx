@@ -1267,11 +1267,11 @@ export function Generator() {
                   </select>
                 </div>
 
-                <div className="flex-1 flex flex-col">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                <div className="flex-1 flex flex-col mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1 flex-shrink-0">
                     Edit Content
                   </label>
-                  <div className="flex-1 quill-editor-container">
+                  <div className="quill-editor-container flex-1 flex flex-col border border-gray-200 rounded-lg">
                     <ReactQuill
                       ref={quillRef}
                       theme="snow"
@@ -1280,38 +1280,36 @@ export function Generator() {
                       modules={quillModules}
                       formats={quillFormats}
                       placeholder="Edit your post..."
+                      className="h-full flex flex-col"
                     />
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1 flex-shrink-0">
                     {stripHtml(editedContent).length} characters
                   </p>
                 </div>
 
-                <div>
+                <div className="flex-shrink-0">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
                     Images
                   </label>
 
                   {modalImagePreviews.length === 0 ? (
                     <div className="grid grid-cols-2 gap-3">
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition cursor-pointer">
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-gray-400 transition cursor-pointer relative">
                         <input
                           type="file"
                           accept="image/*"
                           multiple
                           onChange={handleModalImageUpload}
-                          className="hidden"
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                           id="modal-image-upload"
                         />
-                        <label
-                          htmlFor="modal-image-upload"
-                          className="cursor-pointer flex flex-col items-center"
-                        >
+                        <div className="flex flex-col items-center pointer-events-none">
                           <Image className="w-6 h-6 text-gray-400 mb-2" />
                           <p className="text-xs text-gray-600">
                             Click to upload
                           </p>
-                        </label>
+                        </div>
                       </div>
 
                       <button
@@ -1331,39 +1329,56 @@ export function Generator() {
                     </div>
                   ) : (
                     <div>
-                      <div className="grid grid-cols-4 gap-2 mb-2">
+                      <div className="grid grid-cols-4 gap-2 mb-3">
                         {modalImagePreviews.map((preview, index) => (
-                          <div key={index} className="relative group">
+                          <div key={index} className="relative group aspect-square">
                             <img
                               src={preview}
                               alt={`Preview ${index + 1}`}
                               onClick={() => handleImagePreviewClick(preview)}
-                              className="w-full h-24 object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition"
+                              className="w-full h-full object-cover rounded-lg border border-gray-200 cursor-pointer hover:opacity-90 transition"
                             />
                             <button
                               onClick={() => handleRemoveModalImage(index)}
-                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded hover:bg-red-600 transition opacity-0 group-hover:opacity-100"
+                              className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600 transition opacity-0 group-hover:opacity-100 shadow-sm"
                             >
-                              <XIcon className="w-3 h-3" />
+                              <XIcon className="w-2.5 h-2.5" />
                             </button>
                           </div>
                         ))}
                       </div>
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleModalImageUpload}
-                        className="hidden"
-                        id="add-more-modal-images"
-                      />
-                      <label
-                        htmlFor="add-more-modal-images"
-                        className="inline-flex items-center gap-1 px-3 py-1.5 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition cursor-pointer text-xs"
-                      >
-                        <Plus className="w-3 h-3" />
-                        Add More
-                      </label>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="relative">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleModalImageUpload}
+                            className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                            id="add-more-modal-images"
+                          />
+                          <button
+                            className="w-full flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-50 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-100 transition text-xs font-medium"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            Add Upload
+                          </button>
+                        </div>
+
+                        <button
+                          onClick={handleGenerateAIImage}
+                          disabled={generatingAIImage || !editedContent.trim()}
+                          className="flex items-center justify-center gap-1.5 px-3 py-2 bg-purple-50 border border-purple-200 text-purple-700 rounded-lg hover:bg-purple-100 transition disabled:opacity-50 disabled:cursor-not-allowed text-xs font-medium"
+                        >
+                          {generatingAIImage ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Sparkles className="w-3.5 h-3.5" />
+                          )}
+                          Generate AI
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

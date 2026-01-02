@@ -8,6 +8,10 @@
     font-size: 14px;
     font-family: inherit;
     line-height: 1.6;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    height: auto;
 }
 
 .quill-editor-container .ql-toolbar {
@@ -18,11 +22,19 @@
     border-radius: 8px 8px 0 0;
 }
 
+.quill-editor-container .quill {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    height: 100%;
+}
+
 .quill-editor-container .ql-editor {
     min-height: 150px;
-    max-height: 250px;
+    flex: 1;
     padding: 12px 14px;
     line-height: 1.8;
+    overflow-y: visible;
 }
 
 .quill-editor-container .ql-editor p {
