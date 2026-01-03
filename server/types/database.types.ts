@@ -261,6 +261,7 @@ export interface Database {
           hashtags: string[];
           media_urls: string[];
           predicted_score: number;
+          status: "pending" | "published" | "scheduled" | "draft";
           moderation_status: "pending" | "approved" | "rejected" | "flagged";
           moderation_notes: string | null;
           moderated_by: string | null;

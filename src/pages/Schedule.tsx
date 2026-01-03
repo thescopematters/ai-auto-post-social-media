@@ -12,7 +12,9 @@ import {
   Eye,
   Edit2,
   X as XIcon,
+  FileText,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import ReactQuill from "react-quill";
 import "react-quill/dist/quill.snow.css";
@@ -20,8 +22,8 @@ import "react-quill/dist/quill.snow.css";
 type ScheduledPost = {
   id: string;
   content: string;
-  scheduled_time: string;
-  status: "scheduled" | "published" | "failed" | "cancelled";
+  scheduled_time?: string;
+  status: "scheduled" | "published" | "failed" | "cancelled" | "draft";
   published_at?: string;
   error_message?: string;
   external_post_id?: string;
@@ -29,12 +31,14 @@ type ScheduledPost = {
   variant_number?: number;
   social_account?: string;
   timezone?: string;
+  generated_at?: string; // For drafts
 };
 
-type TabType = "scheduled" | "published" | "failed";
+type TabType = "scheduled" | "published" | "failed" | "draft";
 
 export function Schedule() {
   const { currentWorkspace } = useAuth();
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("scheduled");
   const [posts, setPosts] = useState<ScheduledPost[]>([]);
   const [loading, setLoading] = useState(true);
@@ -111,23 +115,42 @@ export function Schedule() {
     if (currentWorkspace) {
       loadScheduledPosts();
     }
-  }, [currentWorkspace]);
+  }, [currentWorkspace, activeTab]);
 
   const loadScheduledPosts = async () => {
     if (!currentWorkspace) return;
 
     try {
       setLoading(true);
-      const response = await contentApi.getScheduledPosts(currentWorkspace.id);
 
-      if (response.success && response.data) {
-        setPosts(response.data as ScheduledPost[]);
+      let data: any[] = [];
+
+      if (activeTab === "draft") {
+        const response = await contentApi.getAllPosts(
+          currentWorkspace.id,
+          1,
+          100,
+          "draft"
+        );
+        if (response.success && response.data) {
+          // Map generated_posts to ScheduledPost shape
+          data = (response.data as any[]).map(p => ({
+            ...p,
+            status: "draft",
+            scheduled_time: p.generated_at // Use generated_at for sorting/display
+          }));
+        }
       } else {
-        console.error("❌ Failed to load scheduled posts:", response.error);
-        setPosts([]);
+        const response = await contentApi.getScheduledPosts(currentWorkspace.id);
+        if (response.success && response.data) {
+          data = response.data as ScheduledPost[];
+        }
       }
+
+      setPosts(data || []);
+
     } catch (error) {
-      console.error("❌ Error loading scheduled posts:", error);
+      console.error("❌ Error loading posts:", error);
       setPosts([]);
     } finally {
       setLoading(false);
@@ -140,32 +163,40 @@ export function Schedule() {
     loadScheduledPosts();
   };
 
-  const handleDeletePost = async (postId: string) => {
+  const handleDeletePost = async (post: ScheduledPost) => {
     if (
       !currentWorkspace ||
-      !confirm("Are you sure you want to delete this scheduled post?")
+      !confirm(`Are you sure you want to delete this ${post.status === 'draft' ? 'draft' : 'scheduled'} post?`)
     ) {
       return;
     }
 
-    setDeleting(postId);
+    setDeleting(post.id);
     try {
-      const response = await contentApi.deleteScheduledPost(
-        currentWorkspace.id,
-        postId
-      );
+      let response;
+      if (post.status === "draft") {
+        response = await contentApi.deletePost(
+          currentWorkspace.id,
+          post.id
+        );
+      } else {
+        response = await contentApi.deleteScheduledPost(
+          currentWorkspace.id,
+          post.id
+        );
+      }
 
       if (response.success) {
-        setPosts(posts.filter((post) => post.id !== postId));
-        toast.success("Scheduled post deleted successfully!");
+        setPosts(posts.filter((p) => p.id !== post.id));
+        toast.success(`${post.status === 'draft' ? 'Draft' : 'Scheduled post'} deleted successfully!`);
       } else {
-        toast.error("Failed to delete scheduled post", {
+        toast.error(`Failed to delete ${post.status === 'draft' ? 'draft' : 'scheduled post'}`, {
           description: response.error,
         });
       }
     } catch (error) {
-      console.error("Error deleting scheduled post:", error);
-      toast.error("Error deleting scheduled post");
+      console.error(`Error deleting ${post.status}:`, error);
+      toast.error(`Error deleting ${post.status}`);
     } finally {
       setDeleting(null);
     }
@@ -317,6 +348,8 @@ export function Schedule() {
       return post.status === "published";
     } else if (activeTab === "failed") {
       return post.status === "failed";
+    } else if (activeTab === "draft") {
+      return post.status === "draft";
     }
     return false;
   });
@@ -356,6 +389,16 @@ export function Schedule() {
       <div className="mb-6">
         <div className="border-b border-gray-200">
           <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab("draft")}
+              className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${activeTab === "draft"
+                ? "border-amber-500 text-amber-600"
+                : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                }`}
+            >
+              <FileText className="w-4 h-4" />
+              Drafts
+            </button>
             <button
               onClick={() => setActiveTab("scheduled")}
               className={`py-2 px-1 border-b-2 font-medium text-sm ${activeTab === "scheduled"
@@ -403,7 +446,9 @@ export function Schedule() {
               ? "Schedule posts from the content generator to see them here"
               : activeTab === "published"
                 ? "Published posts will appear here once they're live"
-                : "Failed posts will appear here"}
+                : activeTab === "draft"
+                  ? "Save posts as drafts in the generator to see them here"
+                  : "Failed posts will appear here"}
           </p>
           <button
             onClick={handleRefresh}
@@ -438,7 +483,7 @@ export function Schedule() {
           </div>
 
           <div className="space-y-4">
-            {filteredPosts.map((post) => (
+            {filteredPosts.map((post: ScheduledPost) => (
               <div
                 key={post.id}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
@@ -480,9 +525,18 @@ export function Schedule() {
                       </button>
                     )}
 
-                    {post.status === "scheduled" && (
+                    {post.status === "draft" && (
                       <button
-                        onClick={() => handleDeletePost(post.id)}
+                        onClick={() => navigate(`/generator?draftId=${post.id}`)}
+                        className="px-3 py-1.5 bg-amber-100 text-amber-700 rounded-lg hover:bg-amber-200 transition text-sm font-medium"
+                      >
+                        Edit / Schedule
+                      </button>
+                    )}
+
+                    {(post.status === "scheduled" || post.status === "draft") && (
+                      <button
+                        onClick={() => handleDeletePost(post)}
                         disabled={deleting === post.id}
                         className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition disabled:opacity-50"
                         title="Delete"
@@ -508,12 +562,14 @@ export function Schedule() {
 
                     <p className="text-sm text-gray-500">
                       {post.status === "published"
-                        ? `Published: ${formatDateTime(post.published_at!, true)}`
+                        ? `Published: ${post.published_at ? formatDateTime(post.published_at, true) : 'Unknown'}`
                         : post.status === "failed"
-                          ? `Failed: ${formatDateTime(post.scheduled_time, true)}`
+                          ? `Failed: ${post.scheduled_time ? formatDateTime(post.scheduled_time, true) : 'Unknown'}`
                           : post.status === "cancelled"
-                            ? `Cancelled: ${formatDateTime(post.scheduled_time, true)}`
-                            : `Scheduled: ${formatDateTime(post.scheduled_time, true)} (${getTimeRemaining(post.scheduled_time)})`}
+                            ? `Cancelled: ${post.scheduled_time ? formatDateTime(post.scheduled_time, true) : 'Unknown'}`
+                            : post.status === "draft"
+                              ? `Draft Saved: ${post.scheduled_time ? formatDateTime(post.scheduled_time, true) : 'Unknown'}`
+                              : `Scheduled: ${post.scheduled_time ? formatDateTime(post.scheduled_time, true) : 'Unknown'} ${post.scheduled_time ? `(${getTimeRemaining(post.scheduled_time)})` : ''}`}
                     </p>
                   </div>
 
@@ -561,7 +617,7 @@ export function Schedule() {
               </div>
               <div className="mt-4 flex flex-wrap gap-4 text-xs text-gray-500">
                 <span>Platform: {selectedPost.platform || "LinkedIn"}</span>
-                <span>Scheduled: {formatDateTime(selectedPost.scheduled_time, true)}</span>
+                <span>Scheduled: {selectedPost.scheduled_time ? formatDateTime(selectedPost.scheduled_time, true) : 'N/A'}</span>
                 <span>Status: {selectedPost.status}</span>
               </div>
             </div>

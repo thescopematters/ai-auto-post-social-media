@@ -72,6 +72,7 @@ export const generateContent = async (
       media_urls: [],
       predicted_score: Math.random() * 10,
       moderation_status: "pending",
+      status: "pending",
     }));
 
     const { data: savedPosts, error: insertError } = await supabaseAdmin
@@ -102,6 +103,48 @@ export const generateContent = async (
     );
   } catch (error: any) {
     logger.error("❌ generateContent error:", error.message);
+    next(error);
+  }
+};
+
+// Moderate a post
+export const moderatePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { workspaceId, postId } = req.params;
+    const { action, reason } = req.body;
+    const userId = req.user.id;
+
+    const statusMap: Record<string, string> = {
+      approve: "approved",
+      reject: "rejected",
+      flag: "flagged",
+    };
+
+    const newStatus = statusMap[action] || "pending";
+
+    const updates: any = {
+      status: newStatus,
+      moderation_status: newStatus,
+      moderated_by: userId,
+      moderated_at: new Date().toISOString(),
+    };
+
+    if (reason) {
+      updates.moderation_notes = reason;
+    }
+
+    const { data: post, error } = await supabaseAdmin
+      .from("generated_posts")
+      .update(updates)
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw new Error(`Failed to moderate post: ${error.message}`);
+
+    successResponse(res, post, "Post moderated successfully");
+  } catch (error) {
     next(error);
   }
 };
@@ -219,19 +262,46 @@ export const getAllPosts = async (req: AuthRequest, res: Response, next: NextFun
 
     let query = supabaseAdmin
       .from("generated_posts")
-      .select("*, documents(title), profiles!generated_posts_user_id_fkey(full_name, email)", { count: "exact" })
+      .select("*, documents(title), profiles(full_name, email)", { count: "exact" })
       .eq("workspace_id", workspaceId)
       .order("generated_at", { ascending: false })
       .range(offset, offset + limit - 1);
 
-    if (status) query = query.eq("moderation_status", status);
+    // Support multiple statuses (e.g. "scheduled,draft")
+    if (status) {
+      const statuses = status.split(",");
+      if (statuses.length > 1) {
+        query = query.in("status", statuses);
+      } else {
+        query = query.eq("status", status);
+      }
+    }
+
     if (platform) query = query.eq("platform", platform);
 
     const { data, error, count } = await query;
 
-    if (error) throw new Error("Failed to fetch posts");
+    if (error) throw new Error(`Failed to fetch posts: ${error.message}`);
 
-    paginatedResponse(res, data || [], page, limit, count || 0, "Posts retrieved successfully");
+    paginatedResponse(res, data, page, limit, count || 0);
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Publish a post immediately
+export const publishPost = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { workspaceId, postId } = req.params;
+    const { socialAccountId } = req.body;
+
+    // Use scheduler controller to handle immediate publishing
+    req.body.postId = postId;
+    req.body.socialAccountId = socialAccountId;
+
+    // We import schedulerController dynamically or assume it's available
+    const { schedulerController } = require("./scheduler.controller");
+    await schedulerController.publishNow(req, res);
   } catch (error) {
     next(error);
   }
@@ -242,16 +312,16 @@ export const getPostById = async (req: AuthRequest, res: Response, next: NextFun
   try {
     const { workspaceId, postId } = req.params;
 
-    const { data, error } = await supabaseAdmin
+    const { data: post, error } = await supabaseAdmin
       .from("generated_posts")
       .select("*, documents(title)")
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .single();
 
-    if (error || !data) throw new NotFoundError("Post not found");
+    if (error || !post) throw new NotFoundError("Post not found");
 
-    successResponse(res, data, "Post retrieved successfully");
+    successResponse(res, post, "Post fetched successfully");
   } catch (error) {
     next(error);
   }
@@ -268,7 +338,7 @@ export const deletePost = async (req: AuthRequest, res: Response, next: NextFunc
       .eq("id", postId)
       .eq("workspace_id", workspaceId);
 
-    if (error) throw new NotFoundError("Post not found");
+    if (error) throw new Error(`Failed to delete post: ${error.message}`);
 
     successResponse(res, null, "Post deleted successfully");
   } catch (error) {
@@ -276,106 +346,71 @@ export const deletePost = async (req: AuthRequest, res: Response, next: NextFunc
   }
 };
 
-// Moderate post
-export const moderatePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
-  try {
-    const { workspaceId, postId } = req.params;
-    const { action, reason } = req.body;
-    if (!req.user) throw new Error("User not authenticated");
-
-    const { data: post } = await supabaseAdmin
-      .from("generated_posts")
-      .select("moderation_status")
-      .eq("id", postId)
-      .eq("workspace_id", workspaceId)
-      .single();
-
-    if (!post) throw new NotFoundError("Post not found");
-
-    const newStatus = action === "approve" ? "approved" : action === "reject" ? "rejected" : "flagged";
-
-    const { data, error } = await supabaseAdmin
-      .from("generated_posts")
-      .update({
-        moderation_status: newStatus,
-        moderation_notes: reason,
-        moderated_by: req.user.id,
-        moderated_at: new Date().toISOString(),
-      } as any)
-      .eq("id", postId)
-      .eq("workspace_id", workspaceId)
-      .select()
-      .single();
-
-    if (error) throw new Error("Failed to moderate post");
-
-    await supabaseAdmin.from("moderation_logs").insert({
-      post_id: postId,
-      user_id: req.user.id,
-      action,
-      reason,
-      previous_status: post.moderation_status,
-      new_status: newStatus,
-    } as any);
-
-    successResponse(res, data, "Post moderated successfully");
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Schedule post with free user limits
+// Schedule a post
 export const schedulePost = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { workspaceId } = req.params;
-    const { postId, socialAccountId, scheduledTime } = req.body;
-    if (!req.user) throw new Error("User not authenticated");
+    const { workspaceId, postId } = req.params;
+    const { scheduledTime } = req.body;
+    const userId = req.user.id;
+
+    if (!scheduledTime) throw new Error("Scheduled time is required");
 
     const { data: post, error: postError } = await supabaseAdmin
       .from("generated_posts")
-      .select("id, platform")
+      .select("platform")
       .eq("id", postId)
       .eq("workspace_id", workspaceId)
       .single();
 
     if (postError || !post) throw new NotFoundError("Post not found");
 
-    // Check limits BEFORE allowing the action
-    const dailyLimitCheck = await checkDailyPostLimit(req.user.id);
-    if (!dailyLimitCheck.canPostToday) throw new Error(dailyLimitCheck.message);
+    // Check weekly post limit
+    const weeklyLimit = await checkWeeklyPostLimit(userId);
+    if (!weeklyLimit.canPost) throw new Error(weeklyLimit.message || "Weekly post limit reached");
 
-    const weeklyLimitCheck = await checkWeeklyPostLimit(req.user.id);
-    if (!weeklyLimitCheck.canPost) throw new Error(weeklyLimitCheck.message);
-
-    // Create scheduled post
     const { data, error } = await supabaseAdmin
-      .from("scheduled_posts")
-      .insert({
-        post_id: postId,
-        workspace_id: workspaceId,
-        social_account_id: socialAccountId,
-        scheduled_time: scheduledTime,
-        status: "scheduled",
-        created_by: req.user.id,
-      })
+      .from("generated_posts")
+      .update({ status: "scheduled", scheduled_at: scheduledTime })
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
       .select()
       .single();
 
     if (error) throw new Error(`Failed to schedule post: ${error.message}`);
 
-    // Update post status
-    await supabaseAdmin.from("generated_posts").update({ moderation_status: "scheduled" }).eq("id", postId);
-
-    // ✅ FIX: Use incrementUsage with correct types
-    await incrementUsage({ 
-      type: "weekly_post", 
-      userId: req.user.id, 
+    // Increment usage
+    await incrementUsage({
+      userId,
+      type: "weekly_post",
       platform: post.platform,
-      scheduledTimeISO: scheduledTime 
+      scheduledTimeISO: scheduledTime,
     });
 
-    successResponse(res, data, "Post scheduled successfully", 201);
+    successResponse(res, data, "Post scheduled successfully");
   } catch (error) {
     next(error);
   }
 };
+
+export const draft_post = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    const { workspaceId, postId } = req.params;
+    if (!req.user) throw new Error("User not authenticated");
+
+    const { data, error } = await supabaseAdmin
+      .from("generated_posts")
+      .update({ status: "draft" })
+      .eq("id", postId)
+      .eq("workspace_id", workspaceId)
+      .select()
+      .single();
+
+    if (error) throw new Error("Failed to draft post");
+
+    successResponse(res, data, "Post drafted successfully");
+  } catch (error) {
+    next(error);
+  }
+};
+
+

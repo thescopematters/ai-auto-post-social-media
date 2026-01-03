@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
   contentApi,
@@ -30,7 +31,7 @@ import {
   ThumbsUp,
   MessageSquare,
   Repeat2,
-
+  Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactQuill from "react-quill";
@@ -152,7 +153,7 @@ export function Generator() {
   const [selectedVariantIndex, setSelectedVariantIndex] = useState(0);
   const [showTooltip, setShowTooltip] = useState(false);
   const [editedContent, setEditedContent] = useState("");
-  const [modalImages, setModalImages] = useState<File[]>([]);
+  const [modalImages, setModalImages] = useState<(File | string)[]>([]);
   const [modalImagePreviews, setModalImagePreviews] = useState<string[]>([]);
   const [isScheduleMode, setIsScheduleMode] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -162,37 +163,11 @@ export function Generator() {
   const [showImagePreview, setShowImagePreview] = useState(false);
   const [previewImageUrl, setPreviewImageUrl] = useState("");
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
+  const [isDrafting, setIsDrafting] = useState(false);
 
   const quillRef = useRef<ReactQuill>(null);
-
-  const LOADING_MESSAGES = [
-    "Warming up the AI's creative neurons...",
-    "Brewing a fresh post. Almost there.",
-    "Teaching the AI to be witty. One second.",
-    "Generating scroll-stopping content...",
-    "Turning ideas into engagement...",
-    "Convincing the AI this post needs to go viral.",
-    "Asking the AI for its best social voice.",
-    "Polishing words. Removing cringe.",
-    "Aligning hashtags with the universe.",
-    "Creativity in progress. Please stand by.",
-  ];
-
-  // Quill modules configuration
-  const quillModules = {
-    toolbar: [
-      ['bold', 'italic', 'underline'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      ['link'],
-      ['clean']
-    ],
-  };
-
-  const quillFormats = [
-    'bold', 'italic', 'underline',
-    'list', 'bullet',
-    'link'
-  ];
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
   // Helper function to strip HTML tags for character count and plain text
   const stripHtml = (html: string) => {
@@ -233,6 +208,72 @@ export function Generator() {
       })
       .join("");
   };
+
+  useEffect(() => {
+    const loadDraft = async () => {
+      const draftId = searchParams.get("draftId");
+      if (draftId && currentWorkspace && !selectedPost) {
+        try {
+          const response = await contentApi.getPostById(currentWorkspace.id, draftId);
+          if (response.success && response.data) {
+            const post = response.data as any; // Cast to any to access dynamic fields
+            setSelectedPost(post);
+            // Use existing textToHtml (defined later) or markdownToHtml
+            // Since textToHtml is defined later and we are inside useEffect using closure or hoisting? 
+            // `const` is block scoped and not hoisted.
+            // I should verify if I can access the later defined textToHtml here.
+            // Actually, I should probably MOVE the robust textToHtml up, or rely on it being defined outside if it were a function declaration.
+            // But it's a const arrow function.
+            // To be safe, I'll use a simple replacement here or just move the definition UP.
+            // Since I am deleting the one here, I should probably MOVe the other one here.
+
+            // Wait, existing code has `textToHtml` at line 261. I cannot use it at line 194 if it's defined at 261 (const).
+            // So I should REPLACE this duplicate with the ROBUST one from 261, and delete 261.
+            setEditedContent(post.content || "");
+
+            if (post.media_urls && post.media_urls.length > 0) {
+              setModalImages(post.media_urls);
+              setModalImagePreviews(post.media_urls);
+            }
+            setShowScheduleModal(true);
+            navigate(location.pathname, { replace: true });
+          }
+        } catch (e) { console.error("Error loading draft", e) }
+      }
+    }
+    loadDraft();
+  }, [currentWorkspace, searchParams]);
+
+  const LOADING_MESSAGES = [
+    "Warming up the AI's creative neurons...",
+    "Brewing a fresh post. Almost there.",
+    "Teaching the AI to be witty. One second.",
+    "Generating scroll-stopping content...",
+    "Turning ideas into engagement...",
+    "Convincing the AI this post needs to go viral.",
+    "Asking the AI for its best social voice.",
+    "Polishing words. Removing cringe.",
+    "Aligning hashtags with the universe.",
+    "Creativity in progress. Please stand by.",
+  ];
+
+  // Quill modules configuration
+  const quillModules = {
+    toolbar: [
+      ['bold', 'italic', 'underline'],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      ['link'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'bold', 'italic', 'underline',
+    'list', 'bullet',
+    'link'
+  ];
+
+
 
   // Convert HTML to LinkedIn-compatible Unicode bold/italic
   const prepareContentForSocial = (html: string) => {
@@ -548,8 +589,18 @@ export function Generator() {
     try {
       const formData = new FormData();
       modalImages.forEach((image) => {
-        formData.append("media", image);
+        if (image instanceof File) {
+          formData.append("media", image);
+        }
       });
+
+      // If no new files to upload, return true immediately (unless we were just deleting? existing logic handles additions)
+      // Actually if no files, formData is empty. 
+      const hasFiles = modalImages.some(img => img instanceof File);
+      if (!hasFiles) {
+        setUploading(false);
+        return true;
+      }
 
       const response = await mediaApi.uploadMedia(
         currentWorkspace.id,
@@ -793,6 +844,43 @@ export function Generator() {
       }
     } finally {
       setScheduling(null);
+    }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!selectedPost || !currentWorkspace) return;
+
+    setIsDrafting(true);
+    try {
+      // First ensure images are uploaded if any
+      const imageUploadSuccess = await uploadPostImages();
+      if (!imageUploadSuccess) {
+        setIsDrafting(false);
+        return;
+      }
+
+      // Update content first
+      await contentApi.updatePost(currentWorkspace.id, selectedPost.id, {
+        content: stripHtml(editedContent),
+      });
+
+      // Then mark as draft
+      const response = await contentApi.draftPost(
+        currentWorkspace.id,
+        selectedPost.id
+      );
+
+      if (response.success) {
+        toast.success("Post saved as draft");
+        closeScheduleModal(); // Use the existing close function
+      } else {
+        toast.error("Failed to save draft");
+      }
+    } catch (error) {
+      console.error("Error saving draft:", error);
+      toast.error("Failed to save draft");
+    } finally {
+      setIsDrafting(false);
     }
   };
 
@@ -1447,6 +1535,18 @@ export function Generator() {
               </div>
 
               <div className="p-4 border-t border-gray-200 flex justify-end gap-2 bg-gray-50 flex-shrink-0">
+                <button
+                  onClick={handleSaveDraft}
+                  disabled={uploading || isDrafting}
+                  className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-xs flex items-center gap-2"
+                >
+                  {isDrafting ? (
+                    <RefreshCw className="w-3 h-3 animate-spin" />
+                  ) : (
+                    <Save className="w-3 h-3" />
+                  )}
+                  Save Draft
+                </button>
                 <button
                   onClick={closeScheduleModal}
                   className="px-3 py-1.5 text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition text-xs"

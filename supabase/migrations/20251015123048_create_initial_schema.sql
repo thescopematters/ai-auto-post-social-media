@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS generated_posts (
   hashtags text[] DEFAULT ARRAY[]::text[],
   media_urls text[] DEFAULT ARRAY[]::text[],
   predicted_score numeric DEFAULT 0,
+  status text DEFAULT 'pending' CHECK (status IN ('pending', 'draft', 'scheduled', 'published')),
   moderation_status text DEFAULT 'pending' CHECK (moderation_status IN ('pending', 'approved', 'rejected', 'flagged')),
   moderation_notes text,
   moderated_by uuid REFERENCES profiles(id) ON DELETE SET NULL,

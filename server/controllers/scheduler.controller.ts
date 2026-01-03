@@ -107,8 +107,8 @@ export class SchedulerController {
 
         // FIX: Handle the array properly
         const socialAccountData = accountPosts[0]?.social_accounts;
-        const socialAccount = Array.isArray(socialAccountData) 
-          ? socialAccountData[0] 
+        const socialAccount = Array.isArray(socialAccountData)
+          ? socialAccountData[0]
           : socialAccountData;
 
         const accountName = socialAccount?.account_name || "Unknown";
@@ -231,7 +231,7 @@ export class SchedulerController {
     scheduledPost: any
   ): Promise<{ success: boolean; postId?: string; error?: string }> {
     const postId = scheduledPost.id;
-    
+
 
     try {
       const socialAccountId = scheduledPost.social_account_id;
@@ -615,15 +615,15 @@ export class SchedulerController {
         logger.error("Error fetching generated post:", genPostError);
       } else {
         const { user_id, platform } = generatedPost;
-        
+
         console.log("🔥 Incrementing usage for:", { user_id, platform, postId });
-        
-        await incrementUsage({ 
-          type: "published_post", 
-          userId: user_id, 
-          platform 
+
+        await incrementUsage({
+          type: "published_post",
+          userId: user_id,
+          platform
         });
-        
+
         console.log("✅ Usage incremented successfully");
       }
 
@@ -637,6 +637,13 @@ export class SchedulerController {
           error_message: null,
         })
         .eq("id", postId);
+
+
+      // Update the original generated post status to 'published'
+      await supabase
+        .from("generated_posts")
+        .update({ status: "published" })
+        .eq("id", scheduledPost.post_id);
 
       if (updateError) {
         logger.error("Error updating scheduled post:", updateError);
@@ -712,7 +719,7 @@ export class SchedulerController {
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
-  
+
   private getNextDayStartISO(): string {
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -720,126 +727,126 @@ export class SchedulerController {
     return tomorrow.toISOString();
   }
 
- async publishNow(req: Request, res: Response): Promise<void> {
+  async publishNow(req: Request, res: Response): Promise<void> {
     console.log("req body", req.body)
     try {
-        const { postId, socialAccountId } = req.body;
+      const { postId, socialAccountId } = req.body;
 
-        if (!postId || !socialAccountId) {
-            res.status(400).json({
-                success: false,
-                error: "Missing postId or socialAccountId",
-            });
-            return;
-        }
+      if (!postId || !socialAccountId) {
+        res.status(400).json({
+          success: false,
+          error: "Missing postId or socialAccountId",
+        });
+        return;
+      }
 
-        const userId = (req as any).user?.id;
-        if (!userId) {
-            res.status(401).json({
-                success: false,
-                error: "User not authenticated",
-            });
-            return;
-        }
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({
+          success: false,
+          error: "User not authenticated",
+        });
+        return;
+      }
 
-        const { data: generatedPost, error: postError } = await supabase
-            .from("generated_posts")
-            .select("id, content, media_urls, platform, workspace_id, user_id")
-            .eq("id", postId)
-            .single();
+      const { data: generatedPost, error: postError } = await supabase
+        .from("generated_posts")
+        .select("id, content, media_urls, platform, workspace_id, user_id")
+        .eq("id", postId)
+        .single();
 
-        if (postError || !generatedPost) {
-            res.status(404).json({
-                success: false,
-                error: "Generated post not found",
-            });
-            return;
-        }
+      if (postError || !generatedPost) {
+        res.status(404).json({
+          success: false,
+          error: "Generated post not found",
+        });
+        return;
+      }
 
-        // --- LIMIT CHECK LOGIC ---
-        let scheduledTime: string;
+      // --- LIMIT CHECK LOGIC ---
+      let scheduledTime: string;
 
-        // 1. Check Weekly Limit (Hard stop for the week)
-        const weeklyLimitCheck = await checkWeeklyPostLimit(
-            generatedPost.user_id
-        );
+      // 1. Check Weekly Limit (Hard stop for the week)
+      const weeklyLimitCheck = await checkWeeklyPostLimit(
+        generatedPost.user_id
+      );
 
-        if (!weeklyLimitCheck.canPost) {
-            res.status(400).json({
-                success: false,
-                error: weeklyLimitCheck.message || "Weekly posting limit exceeded",
-            });
-            return;
-        }
+      if (!weeklyLimitCheck.canPost) {
+        res.status(400).json({
+          success: false,
+          error: weeklyLimitCheck.message || "Weekly posting limit exceeded",
+        });
+        return;
+      }
 
-        // 2. Check Daily Limit (UPDATED LOGIC)
-        const dailyLimitCheck = await checkDailyPostLimit(generatedPost.user_id);
-        
-        // 🛑 HARD BLOCK IF DAILY LIMIT IS REACHED
-        if (!dailyLimitCheck.canPostToday) {
-            res.status(400).json({
-                success: false,
-                error: dailyLimitCheck.message || "Daily posting limit exceeded. Reset at 00:00.",
-            });
-            return;
-        }
-        
-        // 3. LIMIT NOT REACHED: Schedule for immediate posting
-        scheduledTime = new Date().toISOString();
-        
-        // --- END LIMIT CHECK LOGIC ---
+      // 2. Check Daily Limit (UPDATED LOGIC)
+      const dailyLimitCheck = await checkDailyPostLimit(generatedPost.user_id);
 
-        // Fetch social account for access token
-        const { data: socialAccount, error: accountError } = await supabase
-            .from("social_accounts")
-            .select(
-                "id, account_id, access_token, token_expires_at, is_active, platform"
-            )
-            .eq("id", socialAccountId)
-            .single();
+      // 🛑 HARD BLOCK IF DAILY LIMIT IS REACHED
+      if (!dailyLimitCheck.canPostToday) {
+        res.status(400).json({
+          success: false,
+          error: dailyLimitCheck.message || "Daily posting limit exceeded. Reset at 00:00.",
+        });
+        return;
+      }
 
-        if (accountError || !socialAccount) {
-            res.status(404).json({
-                success: false,
-                error: "Social account not found",
-            });
-            return;
-        }
+      // 3. LIMIT NOT REACHED: Schedule for immediate posting
+      scheduledTime = new Date().toISOString();
 
-        if (!socialAccount.is_active) {
-            res.status(400).json({
-                success: false,
-                error:
-                    "LinkedIn account has been disconnected. Please reconnect your account.",
-            });
-            return;
-        }
+      // --- END LIMIT CHECK LOGIC ---
 
-        const tokenExpiry = new Date(socialAccount.token_expires_at);
-        const now = new Date();
-        if (tokenExpiry <= now) {
-            res.status(400).json({
-                success: false,
-                error: "Access token expired, please reconnect LinkedIn",
-            });
-            return;
-        }
+      // Fetch social account for access token
+      const { data: socialAccount, error: accountError } = await supabase
+        .from("social_accounts")
+        .select(
+          "id, account_id, access_token, token_expires_at, is_active, platform"
+        )
+        .eq("id", socialAccountId)
+        .single();
 
-        // Create a scheduled_post record
-        const scheduledPostData = {
-            workspace_id: generatedPost.workspace_id,
-            post_id: postId,
-            social_account_id: socialAccountId,
-            scheduled_time: scheduledTime,
-            status: "scheduled",
-            retry_count: 0,
-        };
+      if (accountError || !socialAccount) {
+        res.status(404).json({
+          success: false,
+          error: "Social account not found",
+        });
+        return;
+      }
 
-        const { data: scheduledPost, error: createError } = await supabase
-            .from("scheduled_posts")
-            .insert(scheduledPostData)
-            .select(
-                `
+      if (!socialAccount.is_active) {
+        res.status(400).json({
+          success: false,
+          error:
+            "LinkedIn account has been disconnected. Please reconnect your account.",
+        });
+        return;
+      }
+
+      const tokenExpiry = new Date(socialAccount.token_expires_at);
+      const now = new Date();
+      if (tokenExpiry <= now) {
+        res.status(400).json({
+          success: false,
+          error: "Access token expired, please reconnect LinkedIn",
+        });
+        return;
+      }
+
+      // Create a scheduled_post record
+      const scheduledPostData = {
+        workspace_id: generatedPost.workspace_id,
+        post_id: postId,
+        social_account_id: socialAccountId,
+        scheduled_time: scheduledTime,
+        status: "scheduled",
+        retry_count: 0,
+      };
+
+      const { data: scheduledPost, error: createError } = await supabase
+        .from("scheduled_posts")
+        .insert(scheduledPostData)
+        .select(
+          `
             id,
             workspace_id,
             post_id,
@@ -850,83 +857,83 @@ export class SchedulerController {
             generated_posts!inner(id, content, platform, media_urls),
             social_accounts!inner(account_name, platform, is_active, token_expires_at, access_token, account_id)
             `
-            )
-            .single();
+        )
+        .single();
 
-        if (createError) {
-            console.error("Error creating scheduled post:", createError);
-            res.status(500).json({
-                success: false,
-                error: `Failed to create scheduled post: ${createError.message}`,
-            });
-            return;
-        }
+      if (createError) {
+        console.error("Error creating scheduled post:", createError);
+        res.status(500).json({
+          success: false,
+          error: `Failed to create scheduled post: ${createError.message}`,
+        });
+        return;
+      }
 
-        if (!scheduledPost) {
-            console.error("No scheduled post data returned");
-            res.status(500).json({
-                success: false,
-                error: "Failed to create scheduled post - no data returned",
-            });
-            return;
-        }
+      if (!scheduledPost) {
+        console.error("No scheduled post data returned");
+        res.status(500).json({
+          success: false,
+          error: "Failed to create scheduled post - no data returned",
+        });
+        return;
+      }
 
-        // Handle array responses from Supabase joins
-        const generatedPostData = scheduledPost.generated_posts;
-        const socialAccountData = scheduledPost.social_accounts;
-        
-        const generatedPostObj = Array.isArray(generatedPostData)
-            ? generatedPostData[0]
-            : generatedPostData;
-        
-        const socialAccountObj = Array.isArray(socialAccountData)
-            ? socialAccountData[0]
-            : socialAccountData;
+      // Handle array responses from Supabase joins
+      const generatedPostData = scheduledPost.generated_posts;
+      const socialAccountData = scheduledPost.social_accounts;
 
-        const flatPost = {
-            id: scheduledPost.id,
-            workspace_id: scheduledPost.workspace_id,
-            post_id: scheduledPost.post_id,
-            social_account_id: scheduledPost.social_account_id,
-            scheduled_time: scheduledPost.scheduled_time,
-            status: scheduledPost.status,
-            retry_count: scheduledPost.retry_count,
-            content: generatedPostObj?.content || generatedPost.content,
-            platform: generatedPostObj?.platform || generatedPost.platform,
-            media_urls: generatedPostObj?.media_urls || generatedPost.media_urls || [],
-            account_name: socialAccountObj?.account_name,
-            is_active: socialAccountObj?.is_active,
-            token_expires_at: socialAccountObj?.token_expires_at,
-            access_token: socialAccountObj?.access_token,
-            account_id: socialAccountObj?.account_id,
-        };
+      const generatedPostObj = Array.isArray(generatedPostData)
+        ? generatedPostData[0]
+        : generatedPostData;
 
-        // --- PUBLICATION RESPONSE ---
-        const result = await this.publishToLinkedIn(flatPost);
+      const socialAccountObj = Array.isArray(socialAccountData)
+        ? socialAccountData[0]
+        : socialAccountData;
 
-        if (result.success) {
-            // ✅ REMOVED DOUBLE INCREMENT - Only incremented in markPostAsPublished()
-            res.json({
-                success: true,
-                message: "Post published successfully",
-                linkedinPostId: result.postId,
-                scheduledPostId: scheduledPost.id,
-            });
-        } else {
-            res.status(500).json({
-                success: false,
-                error: result.error || "Failed to publish post",
-            });
-        }
+      const flatPost = {
+        id: scheduledPost.id,
+        workspace_id: scheduledPost.workspace_id,
+        post_id: scheduledPost.post_id,
+        social_account_id: scheduledPost.social_account_id,
+        scheduled_time: scheduledPost.scheduled_time,
+        status: scheduledPost.status,
+        retry_count: scheduledPost.retry_count,
+        content: generatedPostObj?.content || generatedPost.content,
+        platform: generatedPostObj?.platform || generatedPost.platform,
+        media_urls: generatedPostObj?.media_urls || generatedPost.media_urls || [],
+        account_name: socialAccountObj?.account_name,
+        is_active: socialAccountObj?.is_active,
+        token_expires_at: socialAccountObj?.token_expires_at,
+        access_token: socialAccountObj?.access_token,
+        account_id: socialAccountObj?.account_id,
+      };
+
+      // --- PUBLICATION RESPONSE ---
+      const result = await this.publishToLinkedIn(flatPost);
+
+      if (result.success) {
+        // ✅ REMOVED DOUBLE INCREMENT - Only incremented in markPostAsPublished()
+        res.json({
+          success: true,
+          message: "Post published successfully",
+          linkedinPostId: result.postId,
+          scheduledPostId: scheduledPost.id,
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: result.error || "Failed to publish post",
+        });
+      }
 
     } catch (error: any) {
-        console.error("Unexpected error in publishNow:", error);
-        res.status(500).json({
-            success: false,
-            error: error.message,
-        });
+      console.error("Unexpected error in publishNow:", error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
     }
-}
+  }
 }
 
 export const schedulerController = new SchedulerController();

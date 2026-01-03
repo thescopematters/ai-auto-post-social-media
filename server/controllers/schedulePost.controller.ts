@@ -374,6 +374,12 @@ export class SchedulePostController {
         return;
       }
 
+      // Update the original generated post status to 'scheduled'
+      await supabaseAdmin
+        .from("generated_posts")
+        .update({ status: "scheduled" })
+        .eq("id", postId);
+
       // ✅ NEW: Increment usage counts after successful scheduling
       await incrementUsage({
         type: "weekly_post",

@@ -348,6 +348,9 @@ export const contentApi = {
       fileName: string;
       mimeType: string;
     }>(`/workspaces/${workspaceId}/generate-image`, { prompt }),
+
+  draftPost: (workspaceId: string, postId: string) =>
+    apiClient.post(`/workspaces/${workspaceId}/posts/${postId}/draft`),
 };
 
 export const socialAccountsApi = {

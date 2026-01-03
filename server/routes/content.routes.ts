@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Request, Router } from "express";
 import { body, param, query } from "express-validator";
 import * as contentController from "../controllers/content.controller";
 import { validate } from "../middleware/validation";
@@ -58,8 +58,8 @@ router.get(
       .withMessage("Limit must be between 1 and 100"),
     query("status")
       .optional()
-      .isIn(["pending", "approved", "rejected", "flagged"])
-      .withMessage("Invalid status"),
+      .isString()
+      .withMessage("Invalid status format"),
     query("platform")
       .optional()
       .isIn(["linkedin", "twitter"])
@@ -153,6 +153,31 @@ router.put(
   requireWorkspace,
   requireRole(["admin", "editor"]),
   contentController.updatePost
+);
+
+router.post(
+  "/:workspaceId/posts/:postId/draft",
+  validate([
+    param("workspaceId").isUUID().withMessage("Invalid workspace ID"),
+    param("postId").isUUID().withMessage("Invalid post ID"),
+  ]),
+  requireWorkspace,
+  requireRole(["admin", "editor"]),
+  contentController.draft_post
+);
+
+router.post(
+  "/:workspaceId/posts/:postId/publish",
+  validate([
+    param("workspaceId").isUUID().withMessage("Invalid workspace ID"),
+    param("postId").isUUID().withMessage("Invalid post ID"),
+    body("socialAccountId")
+      .isUUID()
+      .withMessage("Valid social account ID is required"),
+  ]),
+  requireWorkspace,
+  requireRole(["admin", "editor"]),
+  contentController.publishPost
 );
 
 export default router;
