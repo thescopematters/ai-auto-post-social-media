@@ -13,6 +13,7 @@ import {
   Edit2,
   X as XIcon,
   FileText,
+  AlertCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -51,6 +52,11 @@ export function Schedule() {
   const [selectedPost, setSelectedPost] = useState<ScheduledPost | null>(null);
   const [editedContent, setEditedContent] = useState("");
   const [isSaving, setIsSaving] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState<{
+    id: string;
+    title: string;
+    post: ScheduledPost;
+  } | null>(null);
 
   useEffect(() => {
     // Detect user's timezone
@@ -166,12 +172,10 @@ export function Schedule() {
   const handleDeletePost = (post: ScheduledPost) => {
     if (!currentWorkspace) return;
 
-    toast(`Delete ${post.status === 'draft' ? 'draft' : 'scheduled'} post?`, {
-      description: "This action cannot be undone.",
-      action: {
-        label: "Delete",
-        onClick: () => executeDelete(post),
-      },
+    setDeleteConfirmation({
+      id: post.id,
+      title: post.status === 'draft' ? 'draft post' : 'scheduled post',
+      post: post
     });
   };
 
@@ -206,6 +210,7 @@ export function Schedule() {
       toast.error(`Error deleting ${post.status}`);
     } finally {
       setDeleting(null);
+      setDeleteConfirmation(null);
     }
   };
 
@@ -688,6 +693,58 @@ export function Schedule() {
           </div>
         </div>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {deleteConfirmation && (
+        <DeleteConfirmationModal
+          title={deleteConfirmation.title}
+          onConfirm={() => executeDelete(deleteConfirmation.post)}
+          onCancel={() => setDeleteConfirmation(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function DeleteConfirmationModal({
+  title,
+  onConfirm,
+  onCancel,
+}: {
+  title: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-center gap-3 mb-4">
+          <div className="p-3 bg-red-50 rounded-full">
+            <AlertCircle className="w-6 h-6 text-red-600" />
+          </div>
+          <h2 className="text-xl font-bold text-gray-900">Delete {title.charAt(0).toUpperCase() + title.slice(1)}?</h2>
+        </div>
+
+        <p className="text-gray-600 mb-6">
+          Are you sure you want to delete this <span className="font-semibold text-gray-900">{title}</span>? This action cannot be undone.
+        </p>
+
+        <div className="flex justify-end gap-3">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2"
+          >
+            <Trash2 className="w-4 h-4" />
+            Delete
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

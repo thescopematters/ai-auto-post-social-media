@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { documentApi, workspaceApi } from "../lib/apiClient";
 import {
@@ -542,6 +542,7 @@ function UploadModal({
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -629,7 +630,10 @@ function UploadModal({
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   File (PDF, DOCX, TXT)
                 </label>
-                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition cursor-pointer relative">
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition cursor-pointer relative"
+                >
                   <div className="space-y-1 text-center">
                     <Upload className="mx-auto h-12 w-12 text-gray-400" />
                     <div className="flex text-sm text-gray-600 justify-center">
@@ -642,6 +646,7 @@ function UploadModal({
                           id="file-upload"
                           name="file-upload"
                           type="file"
+                          ref={fileInputRef}
                           className="sr-only"
                           accept=".pdf,.docx,.txt"
                           onChange={handleFileChange}
@@ -749,31 +754,34 @@ function DeleteConfirmationModal({
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
-        <div className="flex items-center gap-3 mb-4">
+      <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200 text-center sm:text-left">
+        <div className="flex flex-col sm:flex-row items-center gap-4 mb-4">
           <div className="p-3 bg-red-50 rounded-full">
-            <AlertCircle className="w-6 h-6 text-red-600" />
+            <AlertCircle className="w-8 h-8 text-red-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">Delete Document?</h2>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-900">Delete Document?</h2>
+            <p className="text-gray-500 text-sm mt-1">This action cannot be undone.</p>
+          </div>
         </div>
 
-        <p className="text-gray-600 mb-6">
-          Are you sure you want to delete <span className="font-semibold text-gray-900">"{title}"</span>? This action cannot be undone.
+        <p className="text-gray-600 mb-8">
+          Are you sure you want to delete <span className="font-semibold text-gray-900">"{title}"</span>? This will permanently remove the document from your library.
         </p>
 
-        <div className="flex justify-end gap-3">
+        <div className="flex flex-col sm:flex-row justify-end gap-3">
           <button
             onClick={onCancel}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
+            className="px-6 py-2.5 rounded-xl border border-gray-300 text-gray-700 hover:bg-gray-50 transition font-medium order-2 sm:order-1"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2"
+            className="px-6 py-2.5 rounded-xl bg-red-600 text-white hover:bg-red-700 transition flex items-center justify-center gap-2 font-medium order-1 sm:order-2"
           >
-            <Trash2 className="w-4 h-4" />
-            Delete
+            <Trash2 className="w-5 h-5" />
+            Delete Document
           </button>
         </div>
       </div>
