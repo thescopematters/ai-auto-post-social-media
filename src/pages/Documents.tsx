@@ -41,7 +41,6 @@ export function Documents() {
     id: string;
     title: string;
   } | null>(null);
-  const [deleting, setDeleting] = useState(false);
   const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
   useEffect(() => {
@@ -83,11 +82,7 @@ export function Documents() {
     }
   };
 
-  const handleUpload = async (data: {
-    title?: string;
-    content?: string;
-    file?: File;
-  }) => {
+  const handleUpload = async (data: { type: 'text' | 'file'; content?: string; title?: string; file?: File }) => {
     if (!currentWorkspace) return;
 
     if (
@@ -97,47 +92,69 @@ export function Documents() {
       setShowUploadModal(false);
       setShowUpgradeModal(true);
       toast.error("Document Limit Reached", {
-        description:
-          workspaceLimits.documentUpload.limit === 0
-            ? "You have unlimited documents in your plan."
-            : `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
+        description: workspaceLimits.documentUpload.limit === 0
+          ? "You have unlimited documents in your plan."
+          : `You've used all ${workspaceLimits.documentUpload.limit} document slots.`,
         duration: 5000,
       });
       return;
     }
 
     setUploading(true);
-    try {
-      const formData = new FormData();
-      if (data.title) formData.append("title", data.title);
-      if (data.content) formData.append("contentText", data.content);
-      if (data.file) formData.append("file", data.file);
 
-      const response = await documentApi.upload(currentWorkspace.id, formData);
+    try {
+      let response;
+      if (data.type === 'text' && data.content) {
+        response = await documentApi.create(currentWorkspace.id, {
+          title: data.title || "Manual Text Input",
+          fileType: "manual",
+          contentText: data.content,
+        });
+      } else if (data.type === 'file' && data.file) {
+        const formData = new FormData();
+        formData.append('file', data.file);
+        if (data.title) {
+          formData.append('title', data.title);
+        }
+        response = await documentApi.upload(currentWorkspace.id, formData);
+      } else {
+        throw new Error("Invalid upload data");
+      }
 
       if (response.success) {
-        toast.success("Document uploaded successfully");
+        await loadDocuments();
+        await loadWorkspaceLimits();
         setShowUploadModal(false);
-        loadDocuments();
-        loadWorkspaceLimits(); // Refresh limits
+        toast.success("Document uploaded successfully!");
+      } else {
+        throw new Error(response.error || "Upload failed");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading document:", error);
-      toast.error("Failed to upload document");
+      const errorMsg = error?.response?.data?.error || error?.message || "";
+      if (
+        errorMsg.includes("limit reached") ||
+        errorMsg.includes("Document limit")
+      ) {
+        setShowUploadModal(false);
+        setShowUpgradeModal(true);
+        toast.error("Document Limit Reached", { description: errorMsg });
+      } else {
+        toast.error("Upload failed", { description: errorMsg });
+      }
     } finally {
       setUploading(false);
     }
   };
 
   const handleDeleteDocument = async (id: string, title: string) => {
-    if (!currentWorkspace || deleting) return;
+    if (!currentWorkspace) return;
     setDeleteConfirmation({ id, title });
   };
 
   const confirmDelete = async () => {
-    if (!currentWorkspace || !deleteConfirmation || deleting) return;
+    if (!currentWorkspace || !deleteConfirmation) return;
 
-    setDeleting(true);
     try {
       const response = await documentApi.delete(
         currentWorkspace.id,
@@ -154,7 +171,6 @@ export function Documents() {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
     } finally {
-      setDeleting(false);
       setDeleteConfirmation(null);
     }
   };
@@ -216,101 +232,125 @@ export function Documents() {
         </button>
       </div>
 
-      {workspaceLimits?.documentUpload &&
-        workspaceLimits.documentUpload.remaining <= 2 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div
-                  className={`p-3 rounded-lg ${workspaceLimits.documentUpload.canUpload
+      {workspaceLimits?.documentUpload && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div
+                className={`p-3 rounded-lg ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-50"
+                  : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
                     ? "bg-yellow-50"
-                    : "bg-red-50"
-                    }`}
-                >
-                  <AlertCircle
-                    className={`w-6 h-6 ${workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                      }`}
-                  />
-                </div>
-                <div>
-                  <h3
-                    className={`text-lg font-semibold ${workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-900"
-                      : "text-red-900"
-                      }`}
-                  >
-                    {workspaceLimits.documentUpload.canUpload
-                      ? "Document Limit Warning"
-                      : "Document Limit Reached"}
-                  </h3>
-                  <div className="flex items-center gap-2 mt-1">
-                    <p
-                      className={`text-sm ${workspaceLimits.documentUpload.canUpload
-                        ? "text-yellow-700"
-                        : "text-red-700"
-                        }`}
-                    >
-                      {workspaceLimits.documentUpload.canUpload
-                        ? `Only ${workspaceLimits.documentUpload.limit === 0
-                          ? "Unlimited"
-                          : workspaceLimits.documentUpload.remaining
-                        } document${workspaceLimits.documentUpload.remaining === 1
-                          ? ""
-                          : "s"
-                        } left`
-                        : `You've used all ${workspaceLimits.documentUpload.limit === 0
-                          ? "Unlimited"
-                          : workspaceLimits.documentUpload.limit
-                        } document slots`}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div
-              className={`mt-4 p-3 rounded-lg border ${workspaceLimits.documentUpload.canUpload
-                ? "bg-yellow-50 border-yellow-200"
-                : "bg-red-50 border-red-200"
-                }`}
-            >
-              <div className="flex items-center gap-2">
+                    : "bg-blue-50"
+                  }`}
+              >
                 <AlertCircle
-                  className={`w-4 h-4 ${workspaceLimits.documentUpload.canUpload
-                    ? "text-yellow-600"
-                    : "text-red-600"
-                    } flex-shrink-0`}
+                  className={`w-6 h-6 ${!workspaceLimits.documentUpload.canUpload
+                    ? "text-red-600"
+                    : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                      ? "text-yellow-600"
+                      : "text-blue-600"
+                    }`}
                 />
-                <p
-                  className={`text-sm ${workspaceLimits.documentUpload.canUpload
-                    ? "text-yellow-800"
-                    : "text-red-800"
+              </div>
+              <div>
+                <h3
+                  className={`text-lg font-semibold ${!workspaceLimits.documentUpload.canUpload
+                    ? "text-red-900"
+                    : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                      ? "text-yellow-900"
+                      : "text-blue-900"
                     }`}
                 >
-                  {workspaceLimits.documentUpload.canUpload
-                    ? `Only ${workspaceLimits.documentUpload.limit === 0
-                      ? "Unlimited"
-                      : workspaceLimits.documentUpload.remaining
-                    } document${workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
-                    } left. `
-                    : "You've reached your document limit. "}
-                  <button
-                    onClick={() => (window.location.href = "/subscription")}
-                    className={`font-semibold underline hover:${workspaceLimits.documentUpload.canUpload
-                      ? "text-yellow-900"
-                      : "text-red-900"
-                      } transition`}
+                  {!workspaceLimits.documentUpload.canUpload
+                    ? "Document Limit Reached"
+                    : workspaceLimits.documentUpload.limit === 0
+                      ? "Unlimited Documents"
+                      : workspaceLimits.documentUpload.remaining <= 2
+                        ? "Document Limit Warning"
+                        : "Document Usage"}
+                </h3>
+                <div className="flex items-center gap-2 mt-1">
+                  <p
+                    className={`text-sm ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-700"
+                      : workspaceLimits.documentUpload.remaining <= 2 && workspaceLimits.documentUpload.limit !== 0
+                        ? "text-yellow-700"
+                        : "text-blue-700"
+                      }`}
                   >
-                    Upgrade to Pro
-                  </button>{" "}
-                  for unlimited documents.
-                </p>
+                    {workspaceLimits.documentUpload.limit === 0
+                      ? `You have unlimited document uploads on the ${workspaceLimits.documentUpload.planType} plan.`
+                      : `You have used ${workspaceLimits.documentUpload.currentCount} of ${workspaceLimits.documentUpload.limit} document slots.`}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
-        )}
+
+          {workspaceLimits.documentUpload.limit !== 0 && (
+            <div className="mt-4 w-full bg-gray-200 rounded-full h-2">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-600"
+                  : workspaceLimits.documentUpload.remaining <= 2
+                    ? "bg-yellow-500"
+                    : "bg-blue-600"
+                  }`}
+                style={{
+                  width: `${Math.min(
+                    (workspaceLimits.documentUpload.currentCount /
+                      workspaceLimits.documentUpload.limit) *
+                    100,
+                    100
+                  )}%`,
+                }}
+              ></div>
+            </div>
+          )}
+
+          {(!workspaceLimits.documentUpload.canUpload ||
+            (workspaceLimits.documentUpload.remaining <= 2 &&
+              workspaceLimits.documentUpload.limit !== 0)) && (
+              <div
+                className={`mt-4 p-3 rounded-lg border ${!workspaceLimits.documentUpload.canUpload
+                  ? "bg-red-50 border-red-200"
+                  : "bg-yellow-50 border-yellow-200"
+                  }`}
+              >
+                <div className="flex items-center gap-2">
+                  <AlertCircle
+                    className={`w-4 h-4 ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-600"
+                      : "text-yellow-600"
+                      } flex-shrink-0`}
+                  />
+                  <p
+                    className={`text-sm ${!workspaceLimits.documentUpload.canUpload
+                      ? "text-red-800"
+                      : "text-yellow-800"
+                      }`}
+                  >
+                    {!workspaceLimits.documentUpload.canUpload
+                      ? "You've reached your document limit. "
+                      : `Only ${workspaceLimits.documentUpload.remaining} document${workspaceLimits.documentUpload.remaining === 1 ? "" : "s"
+                      } left. `}
+                    <button
+                      onClick={() => (window.location.href = "/subscription")}
+                      className={`font-semibold underline hover:${!workspaceLimits.documentUpload.canUpload
+                        ? "text-red-900"
+                        : "text-yellow-900"
+                        } transition`}
+                    >
+                      Upgrade to Pro
+                    </button>{" "}
+                    for unlimited documents.
+                  </p>
+                </div>
+              </div>
+            )}
+        </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-6">
         <div className="p-4 border-b border-gray-200">
@@ -385,7 +425,6 @@ export function Documents() {
           title={deleteConfirmation.title}
           onConfirm={confirmDelete}
           onCancel={() => setDeleteConfirmation(null)}
-          deleting={deleting}
         />
       )}
 
@@ -496,69 +535,29 @@ function UploadModal({
   uploading,
 }: {
   onClose: () => void;
-  onUpload: (data: {
-    title?: string;
-    content?: string;
-    file?: File;
-  }) => Promise<void>;
+  onUpload: (data: { type: 'text' | 'file'; content?: string; title?: string; file?: File }) => Promise<void>;
   uploading: boolean;
 }) {
-  const [activeTab, setActiveTab] = useState<"text" | "file">("text");
+  const [activeTab, setActiveTab] = useState<'text' | 'file'>('text');
   const [text, setText] = useState("");
   const [title, setTitle] = useState("");
   const [file, setFile] = useState<File | null>(null);
-  const [dragActive, setDragActive] = useState(false);
-
-  const handleDrag = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (e.type === "dragenter" || e.type === "dragover") {
-      setDragActive(true);
-    } else if (e.type === "dragleave") {
-      setDragActive(false);
-    }
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFileSelect(e.dataTransfer.files[0]);
-    }
-  };
-
-  const handleFileSelect = (selectedFile: File) => {
-    // Check file type
-    const validTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "text/plain",
-    ];
-    if (!validTypes.includes(selectedFile.type)) {
-      toast.error("Invalid file type. Please upload PDF, DOCX, or TXT.");
-      return;
-    }
-
-    // Check file size (50MB)
-    if (selectedFile.size > 50 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 50MB.");
-      return;
-    }
-
-    setFile(selectedFile);
-    // Auto-set title from filename if empty
-    if (!title) {
-      setTitle(selectedFile.name.split(".")[0]);
-    }
-  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (activeTab === "text" && title && text) {
-      onUpload({ title, content: text });
-    } else if (activeTab === "file" && file) {
-      onUpload({ title: title || file.name, file });
+    if (activeTab === 'text' && title && text) {
+      onUpload({ type: 'text', content: text, title });
+    } else if (activeTab === 'file' && file) {
+      onUpload({ type: 'file', file, title: title || file.name });
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0]);
+      if (!title) {
+        setTitle(e.target.files[0].name);
+      }
     }
   };
 
@@ -568,27 +567,27 @@ function UploadModal({
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-2xl font-bold text-gray-900">Upload Document</h2>
           <p className="text-gray-600 mt-1">
-            Add content by pasting text or uploading a file
+            Add content by uploading a file or pasting text
           </p>
         </div>
 
-        <div className="border-b border-gray-200">
-          <div className="flex">
+        <div className="px-6 pt-6">
+          <div className="flex border-b border-gray-200">
             <button
-              onClick={() => setActiveTab("text")}
-              className={`flex-1 py-3 text-sm font-medium text-center border-b-2 transition ${activeTab === "text"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+              className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'text'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
+              onClick={() => setActiveTab('text')}
             >
               Paste Text
             </button>
             <button
-              onClick={() => setActiveTab("file")}
-              className={`flex-1 py-3 text-sm font-medium text-center border-b-2 transition ${activeTab === "file"
-                ? "border-blue-600 text-blue-600"
-                : "border-transparent text-gray-500 hover:text-gray-700"
+              className={`pb-3 px-4 font-medium text-sm transition-colors relative ${activeTab === 'file'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-500 hover:text-gray-700'
                 }`}
+              onClick={() => setActiveTab('file')}
             >
               Upload File
             </button>
@@ -599,23 +598,19 @@ function UploadModal({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                Title {activeTab === "file" && "(Optional)"}
+                Title {activeTab === 'file' && '(Optional)'}
               </label>
               <input
                 type="text"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder={
-                  activeTab === "file"
-                    ? "Leave empty to use filename"
-                    : "Enter a title"
-                }
-                required={activeTab === "text"}
+                placeholder={activeTab === 'file' ? "Defaults to filename" : "Enter a title"}
+                required={activeTab === 'text'}
               />
             </div>
 
-            {activeTab === "text" ? (
+            {activeTab === 'text' ? (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Content
@@ -632,71 +627,45 @@ function UploadModal({
             ) : (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  File Upload
+                  File (PDF, DOCX, TXT)
                 </label>
-                <div
-                  onDragEnter={handleDrag}
-                  onDragLeave={handleDrag}
-                  onDragOver={handleDrag}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-lg p-8 text-center transition ${dragActive
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-300 hover:border-gray-400"
-                    }`}
-                >
-                  {file ? (
-                    <div className="flex items-center justify-center gap-4">
-                      <div className="p-3 bg-blue-100 rounded-full">
-                        <FileText className="w-6 h-6 text-blue-600" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium text-gray-900">{file.name}</p>
-                        <p className="text-sm text-gray-500">
-                          {(file.size / 1024 / 1024).toFixed(2)} MB
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setFile(null)}
-                        className="p-1 hover:bg-gray-200 rounded-full"
+                <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:bg-gray-50 transition cursor-pointer relative">
+                  <div className="space-y-1 text-center">
+                    <Upload className="mx-auto h-12 w-12 text-gray-400" />
+                    <div className="flex text-sm text-gray-600 justify-center">
+                      <label
+                        htmlFor="file-upload"
+                        className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
                       >
-                        <X className="w-5 h-5 text-gray-500" />
-                      </button>
+                        <span>Upload a file</span>
+                        <input
+                          id="file-upload"
+                          name="file-upload"
+                          type="file"
+                          className="sr-only"
+                          accept=".pdf,.docx,.txt"
+                          onChange={handleFileChange}
+                        />
+                      </label>
+                      <p className="pl-1">or drag and drop</p>
                     </div>
-                  ) : (
-                    <>
-                      <Upload className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600 mb-2">
-                        Drag and drop your file here, or{" "}
-                        <label className="text-blue-600 hover:text-blue-700 cursor-pointer font-medium">
-                          browse
-                          <input
-                            type="file"
-                            className="hidden"
-                            accept=".pdf,.docx,.txt"
-                            onChange={(e) =>
-                              e.target.files &&
-                              e.target.files[0] &&
-                              handleFileSelect(e.target.files[0])
-                            }
-                          />
-                        </label>
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        Supports PDF, DOCX, TXT (Max 50MB)
-                      </p>
-                    </>
-                  )}
+                    <p className="text-xs text-gray-500">
+                      PDF, DOCX, TXT up to 50MB
+                    </p>
+                    {file && (
+                      <div className="mt-4 flex items-center justify-center gap-2 text-sm text-blue-600 font-medium bg-blue-50 py-2 px-4 rounded-full">
+                        <FileText className="w-4 h-4" />
+                        {file.name}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
 
             <button
               onClick={handleSubmit}
-              disabled={
-                uploading ||
-                (activeTab === "text" && (!title || !text)) ||
-                (activeTab === "file" && !file)
-              }
+              disabled={uploading || (activeTab === 'text' && (!title || !text)) || (activeTab === 'file' && !file)}
               className="w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50"
             >
               {uploading ? "Saving..." : "Save Content"}
@@ -773,12 +742,10 @@ function DeleteConfirmationModal({
   title,
   onConfirm,
   onCancel,
-  deleting = false,
 }: {
   title: string;
   onConfirm: () => void;
   onCancel: () => void;
-  deleting?: boolean;
 }) {
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -797,18 +764,16 @@ function DeleteConfirmationModal({
         <div className="flex justify-end gap-3">
           <button
             onClick={onCancel}
-            disabled={deleting}
-            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            disabled={deleting}
-            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            {deleting ? "Deleting..." : "Delete"}
+            Delete
           </button>
         </div>
       </div>

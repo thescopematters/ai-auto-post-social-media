@@ -163,13 +163,20 @@ export function Schedule() {
     loadScheduledPosts();
   };
 
-  const handleDeletePost = async (post: ScheduledPost) => {
-    if (
-      !currentWorkspace ||
-      !confirm(`Are you sure you want to delete this ${post.status === 'draft' ? 'draft' : 'scheduled'} post?`)
-    ) {
-      return;
-    }
+  const handleDeletePost = (post: ScheduledPost) => {
+    if (!currentWorkspace) return;
+
+    toast(`Delete ${post.status === 'draft' ? 'draft' : 'scheduled'} post?`, {
+      description: "This action cannot be undone.",
+      action: {
+        label: "Delete",
+        onClick: () => executeDelete(post),
+      },
+    });
+  };
+
+  const executeDelete = async (post: ScheduledPost) => {
+    if (!currentWorkspace) return;
 
     setDeleting(post.id);
     try {
