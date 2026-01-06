@@ -118,13 +118,13 @@ export function Schedule() {
   };
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       loadScheduledPosts();
     }
   }, [currentWorkspace, activeTab]);
 
   const loadScheduledPosts = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       setLoading(true);

@@ -327,7 +327,7 @@ export function Generator() {
   }, []);
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       console.log('Workspace available, loading data...');
       setIsLoading(true);
       Promise.all([
@@ -343,7 +343,7 @@ export function Generator() {
   }, [currentWorkspace]);
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       loadSocialAccounts();
     }
   }, [platform, currentWorkspace]);

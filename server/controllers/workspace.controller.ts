@@ -51,7 +51,7 @@ export const getAllWorkspaces = async (
       role: item.role
     }));
 
-    successResponse(res, data || [], "Workspaces retrieved successfully");
+    successResponse(res, workspaces, "Workspaces retrieved successfully");
   } catch (error) {
     next(error);
   }

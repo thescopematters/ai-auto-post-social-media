@@ -44,7 +44,7 @@ export function Documents() {
   const [viewDocument, setViewDocument] = useState<Document | null>(null);
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       loadDocuments();
       loadWorkspaceLimits();
     } else {
@@ -53,7 +53,7 @@ export function Documents() {
   }, [currentWorkspace]);
 
   const loadDocuments = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const response = await documentApi.getAll(currentWorkspace.id, 1, 100);
@@ -69,7 +69,7 @@ export function Documents() {
   };
 
   const loadWorkspaceLimits = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const response = await workspaceApi.getLimits(currentWorkspace.id);
@@ -83,7 +83,7 @@ export function Documents() {
   };
 
   const handleUpload = async (data: { type: 'text' | 'file'; content?: string; title?: string; file?: File }) => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     if (
       workspaceLimits?.documentUpload &&
@@ -148,12 +148,12 @@ export function Documents() {
   };
 
   const handleDeleteDocument = async (id: string, title: string) => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
     setDeleteConfirmation({ id, title });
   };
 
   const confirmDelete = async () => {
-    if (!currentWorkspace || !deleteConfirmation) return;
+    if (!currentWorkspace?.id || !deleteConfirmation) return;
 
     try {
       const response = await documentApi.delete(
@@ -180,7 +180,7 @@ export function Documents() {
   };
 
   const handleUpdateDocument = async (id: string, updatedContent: string) => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const response = await documentApi.update(currentWorkspace.id, id, {

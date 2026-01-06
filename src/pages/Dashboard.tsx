@@ -53,7 +53,7 @@ export function Dashboard() {
   const [showSocialModal, setShowSocialModal] = useState(false);
 
   const checkSocialConnection = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const response = await socialAccountsApi.getAccounts(currentWorkspace.id);
@@ -84,7 +84,7 @@ export function Dashboard() {
   };
 
   const loadDashboardData = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const [statsRes, activityRes] = await Promise.all([
@@ -114,7 +114,7 @@ export function Dashboard() {
   };
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       loadDashboardData();
       checkSocialConnection();
     } else {
@@ -125,7 +125,7 @@ export function Dashboard() {
   // Re-check social connection when user comes back to tab
   useEffect(() => {
     const handleFocus = () => {
-      if (currentWorkspace) {
+      if (currentWorkspace?.id) {
         checkSocialConnection();
       }
     };
@@ -241,11 +241,10 @@ export function Dashboard() {
                     className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 transition"
                   >
                     <div
-                      className={`p-2 rounded-lg ${
-                        post.platform === "linkedin"
-                          ? "bg-blue-100"
-                          : "bg-sky-100"
-                      }`}
+                      className={`p-2 rounded-lg ${post.platform === "linkedin"
+                        ? "bg-blue-100"
+                        : "bg-sky-100"
+                        }`}
                     >
                       {post.platform === "linkedin" ? (
                         <Linkedin className="w-4 h-4 text-blue-600" />
@@ -262,13 +261,12 @@ export function Dashboard() {
                       </p>
                     </div>
                     <span
-                      className={`px-2 py-1 text-xs font-medium rounded-full ${
-                        post.moderation_status === "approved"
-                          ? "bg-green-100 text-green-700"
-                          : post.moderation_status === "pending"
+                      className={`px-2 py-1 text-xs font-medium rounded-full ${post.moderation_status === "approved"
+                        ? "bg-green-100 text-green-700"
+                        : post.moderation_status === "pending"
                           ? "bg-yellow-100 text-yellow-700"
                           : "bg-gray-100 text-gray-700"
-                      }`}
+                        }`}
                     >
                       {post.moderation_status}
                     </span>

@@ -63,7 +63,7 @@ export function AppLayout() {
   // Fetch plan type
   useEffect(() => {
     const fetchPlan = async () => {
-      if (!currentWorkspace) {
+      if (!currentWorkspace?.id) {
         setIsLoadingPlan(false);
         return;
       }
@@ -88,7 +88,7 @@ export function AppLayout() {
 
   // Check social connection - now using useCallback for reusability
   const checkSocialConnection = useCallback(async () => {
-    if (!currentWorkspace) {
+    if (!currentWorkspace?.id) {
       setIsCheckingConnection(false);
       return;
     }

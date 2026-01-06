@@ -19,7 +19,7 @@ export function Moderation() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (currentWorkspace) {
+    if (currentWorkspace?.id) {
       loadPosts();
     } else {
       setLoading(false);
@@ -27,7 +27,7 @@ export function Moderation() {
   }, [currentWorkspace, filter]);
 
   const loadPosts = async () => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       const response = await contentApi.getAllPosts(currentWorkspace.id, 1, 100, filter);
@@ -43,7 +43,7 @@ export function Moderation() {
   };
 
   const handleModeration = async (postId: string, action: 'approved' | 'rejected') => {
-    if (!currentWorkspace) return;
+    if (!currentWorkspace?.id) return;
 
     try {
       await contentApi.moderatePost(currentWorkspace.id, postId, action);
@@ -73,31 +73,28 @@ export function Moderation() {
           <div className="flex gap-2">
             <button
               onClick={() => setFilter('pending')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filter === 'pending'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition ${filter === 'pending'
+                ? 'bg-yellow-100 text-yellow-700'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
             >
               Pending
             </button>
             <button
               onClick={() => setFilter('approved')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filter === 'approved'
-                  ? 'bg-green-100 text-green-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition ${filter === 'approved'
+                ? 'bg-green-100 text-green-700'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
             >
               Approved
             </button>
             <button
               onClick={() => setFilter('rejected')}
-              className={`px-4 py-2 rounded-lg font-medium transition ${
-                filter === 'rejected'
-                  ? 'bg-red-100 text-red-700'
-                  : 'text-gray-600 hover:bg-gray-100'
-              }`}
+              className={`px-4 py-2 rounded-lg font-medium transition ${filter === 'rejected'
+                ? 'bg-red-100 text-red-700'
+                : 'text-gray-600 hover:bg-gray-100'
+                }`}
             >
               Rejected
             </button>
@@ -116,9 +113,8 @@ export function Moderation() {
               <div key={post.id} className="p-6">
                 <div className="flex items-start justify-between mb-4">
                   <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-lg ${
-                      post.platform === 'linkedin' ? 'bg-blue-100' : 'bg-sky-100'
-                    }`}>
+                    <div className={`p-2 rounded-lg ${post.platform === 'linkedin' ? 'bg-blue-100' : 'bg-sky-100'
+                      }`}>
                       {post.platform === 'linkedin' ? (
                         <Linkedin className="w-5 h-5 text-blue-600" />
                       ) : (
