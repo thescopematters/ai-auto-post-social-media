@@ -37,11 +37,20 @@ const activatePlanForUser = async (userId: string, planId: string) => {
   let startDate = now;
   let isQueued = false;
 
-  // If user has an active paid plan that hasn't expired yet, queue the new plan
-  if (userPlan.end_date && new Date(userPlan.end_date) > now) {
-    startDate = new Date(userPlan.end_date);
+  // Determine the start date for the new plan period
+  // We check existing end_date and queued_end_date to ensure multiple payments stack
+  const currentEndDate = userPlan.end_date ? new Date(userPlan.end_date) : null;
+  const currentQueuedEndDate = userPlan.queued_end_date ? new Date(userPlan.queued_end_date) : null;
+
+  // Pick the latest possible date to start the new subscription
+  const latestDate = [now, currentEndDate, currentQueuedEndDate]
+    .filter((d): d is Date => d !== null)
+    .reduce((a, b) => (a > b ? a : b), now);
+
+  if (latestDate > now) {
+    startDate = latestDate;
     isQueued = true;
-    logger.info(`Queuing subscription for user ${userId}. Starts after: ${userPlan.end_date}`);
+    logger.info(`Queuing subscription for user ${userId}. Starts after current/queued end date: ${startDate.toISOString()}`);
   } else {
     logger.info(`Starting new subscription period for user ${userId} from now.`);
   }
