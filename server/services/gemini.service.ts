@@ -157,13 +157,13 @@ class GeminiService {
     const layoutRule = this.getRandomLayoutRule();
 
     // ✅ DYNAMIC WORD COUNT based on character limit
-    // Average: 6-7 characters per word (conservative to account for emojis/hashtags)
-    const minWords = Math.floor(characterLimit / 8);
-    const maxWords = Math.floor(characterLimit / 7);
+    // Adjusted ratio: ~5.5-6.5 characters per word for high quality LinkedIn content
+    const minWords = Math.floor(characterLimit / 6.5);
+    const maxWords = Math.floor(characterLimit / 5.2);
     const wordCountRule = `Write between ${minWords}–${maxWords} words.`;
 
     // ✅ CHARACTER LIMIT (User-configurable: 500-2500 characters)
-    const characterCountRule = `HARD MAXIMUM: ${characterLimit} characters (including spaces, emojis, and hashtags). DO NOT EXCEED THIS.`;
+    const characterCountRule = `TARGET LENGTH: Aim to get as close to ${characterLimit} characters as possible without exceeding it. HARD MAXIMUM: ${characterLimit} characters.`;
 
     return `
 You are an expert AI social media content creator who writes viral LinkedIn posts.
@@ -192,7 +192,7 @@ ${layoutRule}
 - Keep the post scroll-friendly
 - End with a reflective question
 - Add 4–5 relevant hashtags
-- IMPORTANT: You MUST stay under the character limit specified above. This is crucial.
+- IMPORTANT: You MUST stay under the character limit but aim to provide as much value as possible up to that limit.
 - Output ONLY the post
 - Separate multiple posts with ===POST===
 
