@@ -23,14 +23,33 @@ export const getAllWorkspaces = async (
       throw new AuthorizationError("User not authenticated");
     }
 
-    const { data, error } = await supabaseAdmin.rpc("get_user_workspaces", {
-      user_id_param: req.user.id,
-    });
+    const { data, error } = await supabaseAdmin
+      .from("workspace_members")
+      .select(`
+        workspace_id,
+        role,
+        workspaces (
+          id,
+          name,
+          owner_id,
+          brand_color,
+          logo_url,
+          created_at,
+          updated_at
+        )
+      `)
+      .eq("user_id", req.user.id);
 
     if (error) {
       logger.error("Error fetching workspaces:", error);
       throw new Error("Failed to fetch workspaces");
     }
+
+    // Transform the data to match expected format
+    const workspaces = (data || []).map((item: any) => ({
+      ...item.workspaces,
+      role: item.role
+    }));
 
     successResponse(res, data || [], "Workspaces retrieved successfully");
   } catch (error) {
@@ -316,7 +335,7 @@ export const getWorkspaceLimits = async (
 
     // ✅ CRITICAL: Fetch plan limits ONCE to avoid race conditions
     const planLimits = await getUserPlanLimits(req.user.id);
-    
+
     console.log("✅ Plan limits fetched once:", planLimits);
 
     // ✅ FIX: Now checking BOTH daily AND weekly limits
@@ -346,17 +365,17 @@ export const getWorkspaceLimits = async (
           message: aiLimitCheck.message,
           currentUsage: aiLimitCheck.currentUsage,
           limit: aiLimitCheck.limit,
-          remaining: aiLimitCheck.remaining, 
+          remaining: aiLimitCheck.remaining,
           planType: aiLimitCheck.planType,
         },
         weeklyPosting: {
           canPost: weeklyPostCheck.canPost, // ✅ Weekly limit (2/week for free)
           canPostNow: dailyPostCheck.canPostToday, // ✅ CRITICAL FIX: Daily limit (1/day for free)
-          message: !weeklyPostCheck.canPost 
-            ? weeklyPostCheck.message 
-            : !dailyPostCheck.canPostToday 
-            ? dailyPostCheck.message 
-            : undefined,
+          message: !weeklyPostCheck.canPost
+            ? weeklyPostCheck.message
+            : !dailyPostCheck.canPostToday
+              ? dailyPostCheck.message
+              : undefined,
           postsThisWeek: weeklyPostCheck.postsThisWeek,
           limit: weeklyPostCheck.limit,
           remaining: weeklyPostCheck.limit === 0 ? -1 : weeklyPostCheck.limit - weeklyPostCheck.postsThisWeek,
