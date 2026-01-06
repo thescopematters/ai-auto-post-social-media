@@ -68,12 +68,13 @@ class GeminiService {
     platform: "linkedin" | "twitter",
     tone: string,
     variantCount: number = 3,
-    framework?: string
+    framework?: string,
+    characterLimit: number = 1000
   ): Promise<string[]> {
     if (this.genAI) {
-      return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework);
+      return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit);
     } else if (this.groqAI) {
-      return this.generateGroqPost(documentContent, platform, tone, variantCount, framework);
+      return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit);
     } else {
       throw new Error("No AI service available to generate content.");
     }
@@ -84,7 +85,8 @@ class GeminiService {
     platform: "linkedin" | "twitter",
     tone: string,
     variantCount: number = 3,
-    framework?: string
+    framework?: string,
+    characterLimit: number = 1000
   ): Promise<string[]> {
     try {
       const prompt = this.buildCleanPrompt(
@@ -92,7 +94,8 @@ class GeminiService {
         platform,
         tone,
         variantCount,
-        framework
+        framework,
+        characterLimit
       );
       const model = this.getCurrentModel();
 
@@ -102,11 +105,11 @@ class GeminiService {
     } catch (error: any) {
       if (this.currentModelIndex < this.availableModels.length - 1) {
         this.currentModelIndex++;
-        return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework);
+        return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit);
       }
 
       if (this.groqAI) {
-        return this.generateGroqPost(documentContent, platform, tone, variantCount, framework);
+        return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit);
       }
 
       throw error;
@@ -118,7 +121,8 @@ class GeminiService {
     platform: "linkedin" | "twitter",
     tone: string,
     variantCount: number = 3,
-    framework?: string
+    framework?: string,
+    characterLimit: number = 1000
   ): Promise<string[]> {
     if (!this.groqAI) throw new Error("Groq not initialized");
 
@@ -127,7 +131,8 @@ class GeminiService {
       platform,
       tone,
       variantCount,
-      framework
+      framework,
+      characterLimit
     );
 
     const chatCompletion = await this.groqAI.chat.completions.create({
@@ -144,14 +149,21 @@ class GeminiService {
     platform: string,
     tone: string,
     variantCount: number,
-    framework?: string
+    framework?: string,
+    characterLimit: number = 1000
   ): string {
     const truncatedContent = documentContent.substring(0, 2000);
 
     const layoutRule = this.getRandomLayoutRule();
 
-    // ✅ WORD COUNT RANGE (CHANGE THIS ANYTIME)
-    const wordCountRule = "Write between 200–220 words.";
+    // ✅ DYNAMIC WORD COUNT based on character limit
+    // Average: 5 characters per word
+    const minWords = Math.floor(characterLimit / 5.5);
+    const maxWords = Math.ceil(characterLimit / 4.5);
+    const wordCountRule = `Write between ${minWords}–${maxWords} words.`;
+
+    // ✅ CHARACTER LIMIT (User-configurable: 500-2500 characters)
+    const characterCountRule = `Maximum ${characterLimit} characters.`;
 
     return `
 You are an expert AI social media content creator who writes viral LinkedIn posts.
@@ -167,6 +179,9 @@ STEP 4 — FORMAT FOR LINKEDIN
 
 WORD COUNT RULE (STRICT):
 ${wordCountRule}
+
+CHARACTER LIMIT RULE (STRICT):
+${characterCountRule}
 
 LAYOUT VARIATION RULE (MANDATORY FOR THIS POST):
 ${layoutRule}
@@ -198,7 +213,8 @@ Generate ${variantCount} posts now.
     tone: string,
     variantCount: number = 3,
     maxRetries: number = 2,
-    framework?: string
+    framework?: string,
+    characterLimit: number = 1000
   ): Promise<string[]> {
     for (let i = 0; i <= maxRetries; i++) {
       try {
@@ -207,7 +223,8 @@ Generate ${variantCount} posts now.
           platform,
           tone,
           variantCount,
-          framework
+          framework,
+          characterLimit
         );
         if (posts.length) return posts;
       } catch { }

@@ -164,6 +164,7 @@ export function Generator() {
   const [previewImageUrl, setPreviewImageUrl] = useState("");
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [isDrafting, setIsDrafting] = useState(false);
+  const [characterLimit, setCharacterLimit] = useState(1000);
 
   const quillRef = useRef<ReactQuill>(null);
   const [searchParams] = useSearchParams();
@@ -441,6 +442,7 @@ export function Generator() {
         tone,
         framework,
         variantCount: 1,
+        characterLimit,
       });
 
       if (response.success && response.data) {
@@ -1070,6 +1072,26 @@ export function Generator() {
                     <option value="educational">Educational</option>
                     <option value="promotional">Promotional</option>
                   </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Post Length: <span className="text-blue-600 font-semibold">{characterLimit}</span> characters
+                  </label>
+                  <input
+                    type="range"
+                    min="500"
+                    max="2500"
+                    step="100"
+                    value={characterLimit}
+                    onChange={(e) => setCharacterLimit(Number(e.target.value))}
+                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                  />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>500 (Short)</span>
+                    <span>1000 (Default)</span>
+                    <span>2500 (Long)</span>
+                  </div>
                 </div>
 
               </div>

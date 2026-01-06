@@ -273,6 +273,7 @@ export const contentApi = {
       framework?: string;
       agentConfigId?: string;
       variantCount?: number;
+      characterLimit?: number;
     }
   ) => apiClient.post(`/workspaces/${workspaceId}/generate`, data),
 

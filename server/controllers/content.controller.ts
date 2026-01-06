@@ -22,7 +22,7 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const { documentId, platform, tone, framework, agentConfigId, variantCount = 1 } = req.body;
+    const { documentId, platform, tone, framework, agentConfigId, variantCount = 1, characterLimit = 1000 } = req.body;
 
     if (!req.user) throw new Error("User not authenticated");
     const userId = req.user.id;
@@ -52,7 +52,8 @@ export const generateContent = async (
       tone,
       1,
       2,
-      framework
+      framework,
+      characterLimit
     );
 
     if (!generatedContent || generatedContent.length === 0)
