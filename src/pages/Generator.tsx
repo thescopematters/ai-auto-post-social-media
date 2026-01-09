@@ -1647,6 +1647,7 @@ export function Generator() {
                         src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo || profile?.avatar_url || ""}
                         alt={filteredAccounts.find((a) => a.id === selectedAccount)?.account_name}
                         className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        referrerPolicy="no-referrer"
                       />
                     ) : (
                       <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white text-sm font-semibold flex-shrink-0">

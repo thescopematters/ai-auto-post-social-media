@@ -336,6 +336,7 @@ export function AppLayout() {
                           src={profile.avatar_url}
                           alt={profile.full_name || 'User'}
                           className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
                         />
                       ) : (
                         profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || 'U'

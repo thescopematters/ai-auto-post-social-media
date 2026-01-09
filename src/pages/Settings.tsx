@@ -379,6 +379,7 @@ export function Settings() {
                               src={getLinkedInAccount()?.photo || profile?.avatar_url || ""}
                               alt="Profile"
                               className="absolute -top-1 -right-1 w-8 h-8 rounded-full border-2 border-white shadow-sm object-cover"
+                              referrerPolicy="no-referrer"
                             />
                           )}
                         </div>
