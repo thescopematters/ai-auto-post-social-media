@@ -134,7 +134,7 @@ const FRAMEWORKS = {
 };
 
 export function Generator() {
-  const { currentWorkspace } = useAuth();
+  const { currentWorkspace, profile } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
@@ -1642,9 +1642,9 @@ export function Generator() {
               <div className="p-4 overflow-y-auto flex-1">
                 <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                   <div className="p-3 flex items-center gap-2">
-                    {filteredAccounts.find((a) => a.id === selectedAccount)?.photo ? (
+                    {filteredAccounts.find((a) => a.id === selectedAccount)?.photo || profile?.avatar_url ? (
                       <img
-                        src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo!}
+                        src={filteredAccounts.find((a) => a.id === selectedAccount)?.photo || profile?.avatar_url || ""}
                         alt={filteredAccounts.find((a) => a.id === selectedAccount)?.account_name}
                         className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                       />

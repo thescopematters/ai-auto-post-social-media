@@ -222,7 +222,8 @@ export function Settings() {
         description: `Connected as: ${account}`,
       });
       fetchSocialAccounts();
-      window.history.replaceState({}, "", "/settings");
+      // Refresh user profile to get the updated avatar
+      window.location.reload();
     }
 
     if (error) {
