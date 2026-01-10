@@ -58,9 +58,20 @@ export function AppLayout() {
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isSocialConnected, setIsSocialConnected] = useState(false);
   const [linkedInPhoto, setLinkedInPhoto] = useState<string | null>(null);
+  const [imgSrc, setImgSrc] = useState<string | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (profile?.avatar_url) {
+      setImgSrc(profile.avatar_url);
+    } else if (linkedInPhoto) {
+      setImgSrc(linkedInPhoto);
+    } else {
+      setImgSrc(null);
+    }
+  }, [profile?.avatar_url, linkedInPhoto]);
 
   // Fetch plan type
   useEffect(() => {
@@ -97,12 +108,13 @@ export function AppLayout() {
 
     try {
       const response = await socialAccountsApi.getAccounts(currentWorkspace.id);
-
+      console.log("response", response);
       if (response.success && response.data) {
         const accounts = response.data as SocialAccount[];
         const linkedInAccount = accounts.find(
           (account: SocialAccount) => account.platform === 'linkedin' && account.is_active
         );
+        console.log("linkedInAccount", linkedInAccount, accounts);
         setIsSocialConnected(!!linkedInAccount);
         if (linkedInAccount?.photo) {
           setLinkedInPhoto(linkedInAccount.photo);
@@ -336,12 +348,19 @@ export function AppLayout() {
                     className="flex items-center hover:bg-gray-50 p-1 rounded-full transition"
                   >
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm overflow-hidden">
-                      {profile?.avatar_url || linkedInPhoto ? (
+                      {imgSrc ? (
                         <img
-                          src={profile?.avatar_url || linkedInPhoto || ''}
+                          src={imgSrc}
                           alt={profile?.full_name || 'User'}
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
+                          onError={() => {
+                            if (imgSrc === profile?.avatar_url && linkedInPhoto) {
+                              setImgSrc(linkedInPhoto);
+                            } else {
+                              setImgSrc(null);
+                            }
+                          }}
                         />
                       ) : (
                         profile?.full_name?.charAt(0) || profile?.email?.charAt(0) || 'U'
