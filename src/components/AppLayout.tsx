@@ -31,6 +31,7 @@ interface SocialAccount {
   is_active: boolean;
   connected_at: string;
   last_sync: string;
+  photo?: string;
 }
 
 interface UsageLimitDetail {
@@ -56,6 +57,7 @@ export function AppLayout() {
   const [showSocialModal, setShowSocialModal] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const [isSocialConnected, setIsSocialConnected] = useState(false);
+  const [linkedInPhoto, setLinkedInPhoto] = useState<string | null>(null);
   const [isCheckingConnection, setIsCheckingConnection] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
@@ -98,10 +100,13 @@ export function AppLayout() {
 
       if (response.success && response.data) {
         const accounts = response.data as SocialAccount[];
-        const linkedInConnected = accounts.some(
+        const linkedInAccount = accounts.find(
           (account: SocialAccount) => account.platform === 'linkedin' && account.is_active
         );
-        setIsSocialConnected(linkedInConnected);
+        setIsSocialConnected(!!linkedInAccount);
+        if (linkedInAccount?.photo) {
+          setLinkedInPhoto(linkedInAccount.photo);
+        }
       } else {
         setIsSocialConnected(false);
       }
@@ -331,10 +336,10 @@ export function AppLayout() {
                     className="flex items-center hover:bg-gray-50 p-1 rounded-full transition"
                   >
                     <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-semibold text-sm overflow-hidden">
-                      {profile?.avatar_url ? (
+                      {profile?.avatar_url || linkedInPhoto ? (
                         <img
-                          src={profile.avatar_url}
-                          alt={profile.full_name || 'User'}
+                          src={profile?.avatar_url || linkedInPhoto || ''}
+                          alt={profile?.full_name || 'User'}
                           className="w-full h-full object-cover"
                           referrerPolicy="no-referrer"
                         />

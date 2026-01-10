@@ -223,7 +223,7 @@ export function Settings() {
       });
       fetchSocialAccounts();
       // Refresh user profile to get the updated avatar
-      window.location.reload();
+      window.history.replaceState({}, "", "/settings");
     }
 
     if (error) {
