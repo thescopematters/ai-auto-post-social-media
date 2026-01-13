@@ -1001,70 +1001,78 @@ export function Generator() {
                     <label className="block text-sm font-medium text-gray-700">
                       Source Content
                     </label>
+                    <button
+                      onClick={handleGenerateIdeas}
+                      disabled={isGeneratingIdeas}
+                      className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-lg transition-colors border border-purple-100 disabled:opacity-50"
+                    >
+                      {isGeneratingIdeas ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      <span>{isGeneratingIdeas ? "Generating..." : "Get AI Ideas"}</span>
+                    </button>
                   </div>
 
-                  <div className="space-y-3">
-                    <select
-                      value={selectedDocument ? `doc:${selectedDocument}` : (selectedTopic ? `topic:${selectedTopic}` : (isGeneratingIdeas ? "action:generating" : ""))}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        if (!val) {
-                          setSelectedDocument("");
-                          setSelectedTopic("");
-                          return;
-                        }
-
-                        if (val === "action:generate") {
-                          handleGenerateIdeas();
-                          return;
-                        }
-
-                        if (val === "action:generating") {
-                          return;
-                        }
-
-                        const firstColonIndex = val.indexOf(":");
-                        const type = val.substring(0, firstColonIndex);
-                        const value = val.substring(firstColonIndex + 1);
-
-                        if (type === "doc") {
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-500 mb-1 ml-1 uppercase tracking-wider">
+                        From Your Documents
+                      </label>
+                      <select
+                        value={selectedDocument ? `doc:${selectedDocument}` : ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          if (!val) {
+                            setSelectedDocument("");
+                            return;
+                          }
+                          const value = val.substring(val.indexOf(":") + 1);
                           setSelectedDocument(value);
-                          setSelectedTopic("");
-                        } else if (type === "topic") {
-                          setSelectedTopic(value);
-                          setSelectedDocument("");
-                        }
-                      }}
-                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
-                    >
-                      <option value="">Select source (document or idea)</option>
+                          setSelectedTopic(""); // Clear topic when document is selected
+                        }}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
+                      >
+                        <option value="">Select a document</option>
+                        {documents.map((doc) => (
+                          <option key={doc.id} value={`doc:${doc.id}`}>
+                            📄 {doc.title}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
 
-                      <optgroup label="Actions">
-                        <option value="action:generate" disabled={isGeneratingIdeas}>
-                          {isGeneratingIdeas ? "⏳ Generating ideas..." : "✨ Generate ideas from AI"}
-                        </option>
-                      </optgroup>
-
-                      {documents.length > 0 && (
-                        <optgroup label="Your Documents">
-                          {documents.map((doc) => (
-                            <option key={doc.id} value={`doc:${doc.id}`}>
-                              📄 {doc.title}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-
-                      {ideas.length > 0 && (
-                        <optgroup label="AI Suggested Ideas">
+                    {(ideas.length > 0 || isGeneratingIdeas) && (
+                      <div className="animate-in fade-in slide-in-from-top-2 duration-500">
+                        <label className="block text-[10px] font-medium text-purple-500 mb-1 ml-1 uppercase tracking-wider">
+                          From AI Suggested Ideas
+                        </label>
+                        <select
+                          value={selectedTopic ? `topic:${selectedTopic}` : ""}
+                          disabled={isGeneratingIdeas}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) {
+                              setSelectedTopic("");
+                              return;
+                            }
+                            const value = val.substring(val.indexOf(":") + 1);
+                            setSelectedTopic(value);
+                            setSelectedDocument(""); // Clear document when topic is selected
+                          }}
+                          className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white text-sm ${isGeneratingIdeas ? "border-purple-200 opacity-60" : "border-gray-300"
+                            }`}
+                        >
+                          <option value="">{isGeneratingIdeas ? "⏳ Generating ideas..." : "Select an AI idea"}</option>
                           {ideas.map((idea, index) => (
                             <option key={index} value={`topic:${idea}`}>
                               💡 {idea}
                             </option>
                           ))}
-                        </optgroup>
-                      )}
-                    </select>
+                        </select>
+                      </div>
+                    )}
 
                     {selectedTopic && !ideas.includes(selectedTopic) && (
                       <div className="p-3 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm flex items-center justify-between animate-in fade-in slide-in-from-top-1">
