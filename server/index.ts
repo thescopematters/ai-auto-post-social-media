@@ -22,23 +22,37 @@ import paymentRoutes from "./routes/payment.routes";
 import imageGenerationRoutes from "./routes/imageGeneration.routes";
 import { webhook } from "./controllers/phone-pay";
 import * as paymentController from "./controllers/phone-pay";
-
 import bodyParser from "body-parser";
-import dotenv from "dotenv";
-dotenv.config();
-
 const app: Application = express();
 app.set("trust proxy", 1);
 
 const allowedOrigins = [
-  "https://zeroeffortposts.com", // dev
+  "http://localhost:5173", // dev
   "http://thescopematters-frontend.s3-website-us-east-1.amazonaws.com", // prod
 ];
 
-// ------------------- CORS -------------------
+app.use("/api/v1/payment/webhook",
+  bodyParser.raw({ type: "*/*" }),
+  webhook
+);
+
 app.use(
   cors({
-    origin: "https://zeroeffortposts.com", // or dynamic logic with allowedOrigins
+    // origin: (origin, callback) => {
+    //   // Allow requests with no origin (like Postman, curl, or same-origin)
+    //   if (!origin) return callback(null, true);
+
+    //   if (allowedOrigins.includes(origin)) {
+    //     callback(null, true);
+    //   } else {
+    //     logger.warn(`CORS blocked origin: ${origin}`);
+    //     callback(
+    //       new Error(`CORS policy: The origin ${origin} is not allowed.`),
+    //       false
+    //     );
+    //   }
+    // },
+    origin: '*',
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: [
@@ -52,25 +66,26 @@ app.use(
   })
 );
 
-// ------------------- Webhook -------------------
-app.use(
-  "/api/v1/payment/webhook",
+app.use("/api/v1/payment/webhook",
   bodyParser.raw({ type: "*/*" }),
   webhook
 );
 
-// ------------------- Security -------------------
+// Apply helmet AFTER CORS
 app.use(
   helmet({
     crossOriginResourcePolicy: { policy: "cross-origin" },
   })
 );
 
-// ------------------- Parsers -------------------
-app.use(express.urlencoded({ extended: true, limit: "100mb" }));
-app.use(express.json({ limit: "100mb" }));
+// 🧾 PHONEPE WEBHOOK ROUTE — must come BEFORE express.json()
+// (add your webhook logic here if needed)
 
-// ------------------- Logging -------------------
+// Parse URL-encoded & JSON (remove duplicate parsers)
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+app.use(express.json({ limit: "10mb" }));
+
+// 🧾 LOGGING
 if (config.nodeEnv === "development") {
   app.use(morgan("dev"));
 } else {
@@ -83,7 +98,7 @@ if (config.nodeEnv === "development") {
   );
 }
 
-// ------------------- Health -------------------
+// 💚 HEALTH CHECK
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -93,10 +108,10 @@ app.get("/health", (req, res) => {
   });
 });
 
-// ------------------- Static -------------------
+// 📁 STATIC FILES
 app.use("/uploads", express.static("uploads"));
 
-// ------------------- API Routes -------------------
+// 🧩 API ROUTES
 app.use(config.api.prefix, apiLimiter);
 app.use(`${config.api.prefix}/auth`, authRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceRoutes);
@@ -111,20 +126,21 @@ app.use(`${config.api.prefix}/payment`, paymentRoutes);
 app.use(config.api.prefix, schedulePostRoutes);
 app.use(`${config.api.prefix}/workspaces`, workspaceSocialAccountsRoutes);
 
-// ------------------- Error Handlers -------------------
+// ❌ ERROR HANDLERS
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-// ------------------- Scheduler -------------------
+// 🕒 SCHEDULER
 schedulerController.startScheduler();
 paymentController.startScheduler();
 
-// ------------------- Start Server -------------------
+
+// 🚀 SERVER STARTUP
 const startServer = () => {
   try {
     const HOST = process.env.HOST || "0.0.0.0";
     const BACKEND_URL =
-      process.env.BACKEND_URL || `https://api.zeroeffortposts.com`;
+      process.env.BACKEND_URL || `http://localhost:${config.port}`;
 
     app.listen(config.port, HOST, () => {
       logger.info(`🚀 Server running on port ${config.port}`);
@@ -139,7 +155,7 @@ const startServer = () => {
   }
 };
 
-// ------------------- Global Errors -------------------
+// 🧩 GLOBAL ERROR HANDLERS
 process.on("unhandledRejection", (reason: any) => {
   logger.error("Unhandled Rejection:", reason);
   process.exit(1);

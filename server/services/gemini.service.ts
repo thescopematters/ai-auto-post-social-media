@@ -69,14 +69,56 @@ class GeminiService {
     tone: string,
     variantCount: number = 3,
     framework?: string,
-    characterLimit: number = 1000
+    characterLimit: number = 1000,
+    isTopic: boolean = false
   ): Promise<string[]> {
     if (this.genAI) {
-      return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit);
+      return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit, isTopic);
     } else if (this.groqAI) {
-      return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit);
+      return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit, isTopic);
     } else {
       throw new Error("No AI service available to generate content.");
+    }
+  }
+
+  async generateIdeas(role: string): Promise<string[]> {
+    if (!this.genAI && !this.groqAI) throw new Error("AI service not initialized");
+
+    const currentTime = new Date().toLocaleString();
+    const prompt = `
+      You are a content strategist for social media.
+      User Role: ${role}
+      Current Time/Context: ${currentTime}
+
+      Task: Generate 10 fresh, engaging, and highly relevant content ideas or topics for a ${role} to post on LinkedIn.
+      The ideas should be specific, trending, and provide value to their target audience.
+      
+      Output ONLY the 10 ideas, each on a new line starting with its number (e.g., "1. How to optimize...").
+      Do not add any introductory or concluding text.
+    `;
+
+    try {
+      let text = "";
+      if (this.genAI) {
+        const model = this.getCurrentModel();
+        const result = await model.generateContent(prompt);
+        text = result.response.text();
+      } else {
+        const chatCompletion = await this.groqAI!.chat.completions.create({
+          messages: [{ role: "user", content: prompt }],
+          model: "openai/gpt-oss-20b",
+        });
+        text = chatCompletion.choices[0]?.message?.content || "";
+      }
+
+      return text
+        .split("\n")
+        .map(line => line.replace(/^\d+\.\s*/, "").trim())
+        .filter(line => line.length > 5)
+        .slice(0, 10);
+    } catch (error) {
+      console.error("Error generating ideas:", error);
+      return [];
     }
   }
 
@@ -86,7 +128,8 @@ class GeminiService {
     tone: string,
     variantCount: number = 3,
     framework?: string,
-    characterLimit: number = 1000
+    characterLimit: number = 1000,
+    isTopic: boolean = false
   ): Promise<string[]> {
     try {
       const prompt = this.buildCleanPrompt(
@@ -95,7 +138,8 @@ class GeminiService {
         tone,
         variantCount,
         framework,
-        characterLimit
+        characterLimit,
+        isTopic
       );
       const model = this.getCurrentModel();
 
@@ -105,11 +149,11 @@ class GeminiService {
     } catch (error: any) {
       if (this.currentModelIndex < this.availableModels.length - 1) {
         this.currentModelIndex++;
-        return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit);
+        return this.generateGeminiPost(documentContent, platform, tone, variantCount, framework, characterLimit, isTopic);
       }
 
       if (this.groqAI) {
-        return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit);
+        return this.generateGroqPost(documentContent, platform, tone, variantCount, framework, characterLimit, isTopic);
       }
 
       throw error;
@@ -122,7 +166,8 @@ class GeminiService {
     tone: string,
     variantCount: number = 3,
     framework?: string,
-    characterLimit: number = 1000
+    characterLimit: number = 1000,
+    isTopic: boolean = false
   ): Promise<string[]> {
     if (!this.groqAI) throw new Error("Groq not initialized");
 
@@ -132,7 +177,8 @@ class GeminiService {
       tone,
       variantCount,
       framework,
-      characterLimit
+      characterLimit,
+      isTopic
     );
 
     const chatCompletion = await this.groqAI.chat.completions.create({
@@ -150,9 +196,12 @@ class GeminiService {
     tone: string,
     variantCount: number,
     framework?: string,
-    characterLimit: number = 1000
+    characterLimit: number = 1000,
+    isTopic: boolean = false
   ): string {
-    const truncatedContent = documentContent.substring(0, 2000);
+    const sourceContent = isTopic
+      ? `Topic/Idea: ${documentContent}`
+      : `Reference Document Content:\n${documentContent.substring(0, 2000)}`;
 
     const layoutRule = this.getRandomLayoutRule();
 
@@ -172,8 +221,7 @@ Platform: ${platform}
 Tone: ${tone}
 Framework: ${framework ?? "Auto"}
 
-Reference Document:
-${truncatedContent}
+${sourceContent}
 
 STEP 4 — FORMAT FOR LINKEDIN
 
@@ -215,7 +263,8 @@ Generate ${variantCount} posts now.
     variantCount: number = 3,
     maxRetries: number = 2,
     framework?: string,
-    characterLimit: number = 1000
+    characterLimit: number = 1000,
+    isTopic: boolean = false
   ): Promise<string[]> {
     for (let i = 0; i <= maxRetries; i++) {
       try {
@@ -225,7 +274,8 @@ Generate ${variantCount} posts now.
           tone,
           variantCount,
           framework,
-          characterLimit
+          characterLimit,
+          isTopic
         );
         if (posts.length) return posts;
       } catch { }

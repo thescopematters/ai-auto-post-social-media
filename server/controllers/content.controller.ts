@@ -22,7 +22,7 @@ export const generateContent = async (
 ): Promise<void> => {
   try {
     const { workspaceId } = req.params;
-    const { documentId, platform, tone, framework, agentConfigId, variantCount = 1, characterLimit = 1000 } = req.body;
+    const { documentId, topic, platform, tone, framework, agentConfigId, variantCount = 1, characterLimit = 1000 } = req.body;
 
     if (!req.user) throw new Error("User not authenticated");
     const userId = req.user.id;
@@ -34,26 +34,39 @@ export const generateContent = async (
     const aiLimit = await checkAIGenerationLimit(userId);
     if (!aiLimit.canGenerate) throw new Error(aiLimit.message || "AI generation limit reached");
 
-    // Fetch document
-    const { data: document, error: docError } = await supabaseAdmin
-      .from("documents")
-      .select("content_text, title")
-      .eq("id", documentId)
-      .eq("workspace_id", workspaceId)
-      .single();
+    let contentText = "";
+    let docTitle = "Topic-based Post";
 
-    if (docError || !document) throw new NotFoundError("Document not found");
-    if (!document.content_text) throw new Error("Document has no content to generate posts from");
+    if (topic) {
+      contentText = topic;
+      docTitle = topic;
+    } else if (documentId) {
+      // Fetch document
+      const { data: document, error: docError } = await supabaseAdmin
+        .from("documents")
+        .select("content_text, title")
+        .eq("id", documentId)
+        .eq("workspace_id", workspaceId)
+        .single();
+
+      if (docError || !document) throw new NotFoundError("Document not found");
+      if (!document.content_text) throw new Error("Document has no content to generate posts from");
+      contentText = document.content_text;
+      docTitle = document.title;
+    } else {
+      throw new Error("Either documentId or topic must be provided");
+    }
 
     // Generate content via AI
     const generatedContent = await geminiService.generateWithRetry(
-      document.content_text,
+      contentText,
       platform as "linkedin" | "twitter",
       tone,
       1,
       2,
       framework,
-      characterLimit
+      characterLimit,
+      !!topic
     );
 
     if (!generatedContent || generatedContent.length === 0)
@@ -415,3 +428,31 @@ export const draft_post = async (req: AuthRequest, res: Response, next: NextFunc
 };
 
 
+
+export const generateIdeas = async (
+  req: AuthRequest,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { workspaceId } = req.params;
+    if (!req.user) throw new Error("User not authenticated");
+    const userId = req.user.id;
+
+    // Fetch user role
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from("profiles")
+      .select("role")
+      .eq("id", userId)
+      .single();
+
+    if (profileError || !profile) throw new NotFoundError("User profile not found");
+
+    const ideas = await geminiService.generateIdeas(profile.role || "Professional");
+
+    successResponse(res, { ideas }, "Ideas generated successfully");
+  } catch (error: any) {
+    logger.error("❌ generateIdeas error:", error.message);
+    next(error);
+  }
+};

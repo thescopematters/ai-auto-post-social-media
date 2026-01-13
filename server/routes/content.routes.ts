@@ -17,7 +17,14 @@ router.post(
   "/:workspaceId/generate",
   validate([
     param("workspaceId").isUUID().withMessage("Invalid workspace ID"),
-    body("documentId").isUUID().withMessage("Valid document ID is required"),
+    body("documentId")
+      .optional()
+      .isUUID()
+      .withMessage("Valid document ID is required"),
+    body("topic")
+      .optional()
+      .isString()
+      .withMessage("Topic must be a string"),
     body("platform")
       .isIn(["linkedin", "twitter"])
       .withMessage("Invalid platform"),
@@ -178,6 +185,16 @@ router.post(
   requireWorkspace,
   requireRole(["admin", "editor"]),
   contentController.publishPost
+);
+
+router.post(
+  "/:workspaceId/generate-ideas",
+  validate([
+    param("workspaceId").isUUID().withMessage("Invalid workspace ID"),
+  ]),
+  requireWorkspace,
+  requireRole(["admin", "editor"]),
+  contentController.generateIdeas
 );
 
 export default router;

@@ -75,7 +75,7 @@ export function SignUp() {
       setError(customErrorMessage);
       setLoading(false);
     } else {
-      navigate('/onboarding');
+      navigate('/dashboard');
     }
   };
 

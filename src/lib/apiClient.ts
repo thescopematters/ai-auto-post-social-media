@@ -267,7 +267,8 @@ export const contentApi = {
   generate: (
     workspaceId: string,
     data: {
-      documentId: string;
+      documentId?: string;
+      topic?: string;
       platform: string;
       tone: string;
       framework?: string;
@@ -275,7 +276,10 @@ export const contentApi = {
       variantCount?: number;
       characterLimit?: number;
     }
-  ) => apiClient.post(`/workspaces/${workspaceId}/generate`, data),
+  ) => apiClient.post<any>(`/workspaces/${workspaceId}/generate`, data),
+
+  generateIdeas: (workspaceId: string) =>
+    apiClient.post<any>(`/workspaces/${workspaceId}/generate-ideas`, {}),
 
   getAllPosts: (
     workspaceId: string,

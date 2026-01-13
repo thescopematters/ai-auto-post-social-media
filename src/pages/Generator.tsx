@@ -165,6 +165,9 @@ export function Generator() {
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const [isDrafting, setIsDrafting] = useState(false);
   const [characterLimit, setCharacterLimit] = useState(1000);
+  const [ideas, setIdeas] = useState<string[]>([]);
+  const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState<string>("");
 
   const quillRef = useRef<ReactQuill>(null);
   const [searchParams] = useSearchParams();
@@ -416,8 +419,32 @@ export function Generator() {
     }
   };
 
+  const handleGenerateIdeas = async () => {
+    if (!currentWorkspace) return;
+    setIsGeneratingIdeas(true);
+    try {
+      const response = await contentApi.generateIdeas(currentWorkspace.id);
+      if (response.success && response.data?.ideas) {
+        setIdeas(response.data.ideas);
+        toast.success("10 fresh ideas generated based on your role!");
+      } else {
+        toast.error("Failed to generate ideas");
+      }
+    } catch (error) {
+      console.error("Error generating ideas:", error);
+      toast.error("Error generating ideas");
+    } finally {
+      setIsGeneratingIdeas(false);
+    }
+  };
+
   const handleGenerate = async () => {
-    if (!selectedDocument || !currentWorkspace) return;
+    if (!currentWorkspace) return;
+
+    if (!selectedDocument && !selectedTopic) {
+      toast.error("Please select a document or an idea first");
+      return;
+    }
 
     if (workspaceLimits?.aiGeneration && !workspaceLimits.aiGeneration.canGenerate) {
       toast.error("AI Generation Limit Reached", {
@@ -437,7 +464,8 @@ export function Generator() {
 
     try {
       const response = await contentApi.generate(currentWorkspace.id, {
-        documentId: selectedDocument,
+        documentId: selectedDocument || undefined,
+        topic: selectedTopic || undefined,
         platform,
         tone,
         framework,
@@ -969,21 +997,78 @@ export function Generator() {
             <div className="p-6 overflow-y-auto flex-1 custom-scrollbar">
               <div className="space-y-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Source Document
-                  </label>
-                  <select
-                    value={selectedDocument}
-                    onChange={(e) => setSelectedDocument(e.target.value)}
-                    className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                  >
-                    <option value="">Select a document</option>
-                    {documents.map((doc) => (
-                      <option key={doc.id} value={doc.id}>
-                        {doc.title}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-700">
+                      Source Content
+                    </label>
+                    <button
+                      onClick={handleGenerateIdeas}
+                      disabled={isGeneratingIdeas}
+                      className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-lg transition-colors border border-purple-100 disabled:opacity-50"
+                    >
+                      {isGeneratingIdeas ? (
+                        <RefreshCw className="w-3 h-3 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3 h-3" />
+                      )}
+                      <span>{isGeneratingIdeas ? "Generating..." : "Get AI Ideas"}</span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-3">
+                    <select
+                      value={selectedDocument ? `doc:${selectedDocument}` : (selectedTopic ? `topic:${selectedTopic}` : "")}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (!val) {
+                          setSelectedDocument("");
+                          setSelectedTopic("");
+                          return;
+                        }
+                        const firstColonIndex = val.indexOf(":");
+                        const type = val.substring(0, firstColonIndex);
+                        const value = val.substring(firstColonIndex + 1);
+
+                        if (type === "doc") {
+                          setSelectedDocument(value);
+                          setSelectedTopic("");
+                        } else if (type === "topic") {
+                          setSelectedTopic(value);
+                          setSelectedDocument("");
+                        }
+                      }}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
+                    >
+                      <option value="">Select source (document or idea)</option>
+                      {documents.length > 0 && (
+                        <optgroup label="Your Documents">
+                          {documents.map((doc) => (
+                            <option key={doc.id} value={`doc:${doc.id}`}>
+                              📄 {doc.title}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {ideas.length > 0 && (
+                        <optgroup label="AI Suggested Ideas">
+                          {ideas.map((idea, index) => (
+                            <option key={index} value={`topic:${idea}`}>
+                              💡 {idea}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+
+                    {selectedTopic && !ideas.includes(selectedTopic) && (
+                      <div className="p-3 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm flex items-center justify-between animate-in fade-in slide-in-from-top-1">
+                        <span className="truncate mr-2">Custom Topic: {selectedTopic}</span>
+                        <button onClick={() => setSelectedTopic("")}>
+                          <XIcon className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 <div>
@@ -1100,8 +1185,8 @@ export function Generator() {
             <div className="p-5 border-t border-gray-100 bg-white space-y-3 flex-shrink-0">
               <button
                 onClick={handleGenerate}
-                disabled={!selectedDocument || generating || !workspaceLimits?.aiGeneration?.canGenerate}
-                className={`w-full flex flex-col items-center justify-center gap-1 px-4 py-2.5 rounded-xl transition-all duration-300 font-bold shadow-lg relative overflow-hidden group ${(!selectedDocument || generating || !workspaceLimits?.aiGeneration?.canGenerate)
+                disabled={(!selectedDocument && !selectedTopic) || generating || !workspaceLimits?.aiGeneration?.canGenerate}
+                className={`w-full flex flex-col items-center justify-center gap-1 px-4 py-2.5 rounded-xl transition-all duration-300 font-bold shadow-lg relative overflow-hidden group ${((!selectedDocument && !selectedTopic) || generating || !workspaceLimits?.aiGeneration?.canGenerate)
                   ? "bg-gray-100 text-gray-400 cursor-not-allowed opacity-70"
                   : "bg-gradient-to-r from-blue-600 to-indigo-600 text-white hover:from-blue-700 hover:to-indigo-700 shadow-blue-200 hover:shadow-blue-300 hover:-translate-y-0.5"
                   }`}
