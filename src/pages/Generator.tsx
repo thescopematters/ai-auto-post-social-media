@@ -1001,23 +1001,11 @@ export function Generator() {
                     <label className="block text-sm font-medium text-gray-700">
                       Source Content
                     </label>
-                    <button
-                      onClick={handleGenerateIdeas}
-                      disabled={isGeneratingIdeas}
-                      className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-lg transition-colors border border-purple-100 disabled:opacity-50"
-                    >
-                      {isGeneratingIdeas ? (
-                        <RefreshCw className="w-3 h-3 animate-spin" />
-                      ) : (
-                        <Sparkles className="w-3 h-3" />
-                      )}
-                      <span>{isGeneratingIdeas ? "Generating..." : "Get AI Ideas"}</span>
-                    </button>
                   </div>
 
                   <div className="space-y-3">
                     <select
-                      value={selectedDocument ? `doc:${selectedDocument}` : (selectedTopic ? `topic:${selectedTopic}` : "")}
+                      value={selectedDocument ? `doc:${selectedDocument}` : (selectedTopic ? `topic:${selectedTopic}` : (isGeneratingIdeas ? "action:generating" : ""))}
                       onChange={(e) => {
                         const val = e.target.value;
                         if (!val) {
@@ -1025,6 +1013,16 @@ export function Generator() {
                           setSelectedTopic("");
                           return;
                         }
+
+                        if (val === "action:generate") {
+                          handleGenerateIdeas();
+                          return;
+                        }
+
+                        if (val === "action:generating") {
+                          return;
+                        }
+
                         const firstColonIndex = val.indexOf(":");
                         const type = val.substring(0, firstColonIndex);
                         const value = val.substring(firstColonIndex + 1);
@@ -1040,6 +1038,13 @@ export function Generator() {
                       className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
                     >
                       <option value="">Select source (document or idea)</option>
+
+                      <optgroup label="Actions">
+                        <option value="action:generate" disabled={isGeneratingIdeas}>
+                          {isGeneratingIdeas ? "⏳ Generating ideas..." : "✨ Generate ideas from AI"}
+                        </option>
+                      </optgroup>
+
                       {documents.length > 0 && (
                         <optgroup label="Your Documents">
                           {documents.map((doc) => (
@@ -1049,6 +1054,7 @@ export function Generator() {
                           ))}
                         </optgroup>
                       )}
+
                       {ideas.length > 0 && (
                         <optgroup label="AI Suggested Ideas">
                           {ideas.map((idea, index) => (
