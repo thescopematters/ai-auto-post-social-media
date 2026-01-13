@@ -27,7 +27,7 @@ export const register = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { email, password, fullName } = req.body;
+    const { email, password, fullName, role } = req.body;
 
     // Email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -92,7 +92,7 @@ export const register = async (
         id: authData.user.id,
         email,
         full_name: fullName,
-        role: "user",
+        role: role || "user",
       } as any);
 
     if (profileError) {
@@ -235,6 +235,7 @@ export const register = async (
           id: authData.user.id,
           email,
           fullName,
+          role: role || "user",
         },
         workspace,
         accessToken,

@@ -46,7 +46,8 @@ interface AuthContextType {
   signUp: (
     email: string,
     password: string,
-    fullName: string
+    fullName: string,
+    role?: string
   ) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
@@ -126,7 +127,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             const savedWorkspaceId = localStorage.getItem("currentWorkspaceId");
             const workspace = savedWorkspaceId
               ? allWorkspaces.find((w) => w.id === savedWorkspaceId) ||
-                allWorkspaces[0]
+              allWorkspaces[0]
               : allWorkspaces[0];
 
             setCurrentWorkspaceState(workspace);
@@ -146,9 +147,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role?: string) => {
     try {
-      const response = await authApi.register(email, password, fullName);
+      const response = await authApi.register(email, password, fullName, role);
 
       if (response.success && response.data) {
         const {

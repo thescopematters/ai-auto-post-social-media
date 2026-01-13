@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Mail, Lock, User, AlertCircle, CheckCircle, Eye, EyeOff, ChevronLeft, Zap, Shield, Sparkles } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, CheckCircle, Eye, EyeOff, ChevronLeft, Zap, Shield, Sparkles, Briefcase } from 'lucide-react';
 
 const validatePassword = (password: string): string | null => {
   if (password.length < 8) {
@@ -27,6 +27,19 @@ export function SignUp() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState('');
+  const [customRole, setCustomRole] = useState('');
+
+  const roles = [
+    'Businessman',
+    'Frontend developer',
+    'Backend developer',
+    'Software engineer',
+    'Data analytics',
+    'Doctor',
+    'Cloud or AWS engineer',
+    'Other'
+  ];
 
   const { signUp } = useAuth();
   const navigate = useNavigate();
@@ -47,7 +60,8 @@ export function SignUp() {
       return;
     }
 
-    const { error: signUpError } = await signUp(email, password, fullName);
+    const finalRole = role === 'Other' ? customRole : role;
+    const { error: signUpError } = await signUp(email, password, fullName, finalRole);
 
     if (signUpError) {
       let customErrorMessage = signUpError.message;
@@ -176,6 +190,52 @@ export function SignUp() {
                 />
               </div>
             </div>
+
+            <div>
+              <label htmlFor="role" className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1">
+                Your Role
+              </label>
+              <div className="relative">
+                <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-300 pointer-events-none" />
+                <select
+                  id="role"
+                  required
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full pl-12 pr-10 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#2C64E3] focus:bg-white transition shadow-inner appearance-none cursor-pointer"
+                >
+                  <option value="" disabled>Select your role</option>
+                  {roles.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-300">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {role === 'Other' && (
+              <div>
+                <label htmlFor="customRole" className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1">
+                  Specify Your Role
+                </label>
+                <div className="relative">
+                  <Briefcase className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-300" />
+                  <input
+                    id="customRole"
+                    type="text"
+                    required
+                    value={customRole}
+                    onChange={(e) => setCustomRole(e.target.value)}
+                    className="w-full pl-12 pr-4 py-4 bg-gray-50 border-none rounded-2xl focus:ring-2 focus:ring-[#2C64E3] focus:bg-white transition shadow-inner"
+                    placeholder="Enter your role"
+                  />
+                </div>
+              </div>
+            )}
 
             <div>
               <label htmlFor="password" className="block text-[11px] font-black uppercase tracking-widest text-gray-400 mb-2 ml-1">

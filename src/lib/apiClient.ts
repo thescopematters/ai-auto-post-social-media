@@ -143,8 +143,8 @@ class ApiClient {
 export const apiClient = new ApiClient();
 
 export const authApi = {
-  register: (email: string, password: string, fullName: string) =>
-    apiClient.post("/auth/register", { email, password, fullName }),
+  register: (email: string, password: string, fullName: string, role?: string) =>
+    apiClient.post("/auth/register", { email, password, fullName, role }),
 
   login: (email: string, password: string) =>
     apiClient.post("/auth/login", { email, password }),
