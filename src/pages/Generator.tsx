@@ -168,6 +168,7 @@ export function Generator() {
   const [ideas, setIdeas] = useState<string[]>([]);
   const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
   const [selectedTopic, setSelectedTopic] = useState<string>("");
+  const [isEditingTopic, setIsEditingTopic] = useState(false);
 
   const quillRef = useRef<ReactQuill>(null);
   const [searchParams] = useSearchParams();
@@ -1004,14 +1005,19 @@ export function Generator() {
                     <button
                       onClick={handleGenerateIdeas}
                       disabled={isGeneratingIdeas}
-                      className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1.5 px-2 py-1 bg-purple-50 rounded-lg transition-colors border border-purple-100 disabled:opacity-50"
+                      className="text-xs font-semibold text-purple-600 hover:text-purple-700 flex items-center gap-1.5 px-2.5 py-1.5 bg-purple-50 rounded-lg transition-all border border-purple-100 disabled:opacity-50 hover:shadow-sm group"
                     >
                       {isGeneratingIdeas ? (
                         <RefreshCw className="w-3 h-3 animate-spin" />
                       ) : (
-                        <Sparkles className="w-3 h-3" />
+                        <Sparkles className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
                       )}
-                      <span>{isGeneratingIdeas ? "Generating..." : "Get AI Ideas"}</span>
+                      <span>
+                        {isGeneratingIdeas
+                          ? "Generating..."
+                          : `Get ideas for ${profile?.role || "your role"}`
+                        }
+                      </span>
                     </button>
                   </div>
 
@@ -1020,27 +1026,36 @@ export function Generator() {
                       <label className="block text-[10px] font-medium text-gray-500 mb-1 ml-1 uppercase tracking-wider">
                         From Your Documents
                       </label>
-                      <select
-                        value={selectedDocument ? `doc:${selectedDocument}` : ""}
-                        onChange={(e) => {
-                          const val = e.target.value;
-                          if (!val) {
-                            setSelectedDocument("");
-                            return;
-                          }
-                          const value = val.substring(val.indexOf(":") + 1);
-                          setSelectedDocument(value);
-                          setSelectedTopic(""); // Clear topic when document is selected
-                        }}
-                        className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm"
-                      >
-                        <option value="">Select a document</option>
-                        {documents.map((doc) => (
-                          <option key={doc.id} value={`doc:${doc.id}`}>
-                            📄 {doc.title}
-                          </option>
-                        ))}
-                      </select>
+                      <div className={`relative transition-all duration-300 ${selectedDocument ? "ring-2 ring-blue-500 rounded-xl" : ""}`}>
+                        <select
+                          value={selectedDocument ? `doc:${selectedDocument}` : ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) {
+                              setSelectedDocument("");
+                              return;
+                            }
+                            const value = val.substring(val.indexOf(":") + 1);
+                            setSelectedDocument(value);
+                            setSelectedTopic("");
+                            setIsEditingTopic(false);
+                          }}
+                          className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all bg-white text-sm ${selectedDocument ? "border-transparent" : "border-gray-300"
+                            }`}
+                        >
+                          <option value="">Select a document</option>
+                          {documents.map((doc) => (
+                            <option key={doc.id} value={`doc:${doc.id}`}>
+                              📄 {doc.title}
+                            </option>
+                          ))}
+                        </select>
+                        {selectedDocument && (
+                          <div className="absolute -top-2 -right-2 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+                            ACTIVE
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {(ideas.length > 0 || isGeneratingIdeas) && (
@@ -1048,38 +1063,86 @@ export function Generator() {
                         <label className="block text-[10px] font-medium text-purple-500 mb-1 ml-1 uppercase tracking-wider">
                           From AI Suggested Ideas
                         </label>
-                        <select
-                          value={selectedTopic ? `topic:${selectedTopic}` : ""}
-                          disabled={isGeneratingIdeas}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            if (!val) {
-                              setSelectedTopic("");
-                              return;
-                            }
-                            const value = val.substring(val.indexOf(":") + 1);
-                            setSelectedTopic(value);
-                            setSelectedDocument(""); // Clear document when topic is selected
-                          }}
-                          className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white text-sm ${isGeneratingIdeas ? "border-purple-200 opacity-60" : "border-gray-300"
-                            }`}
-                        >
-                          <option value="">{isGeneratingIdeas ? "⏳ Generating ideas..." : "Select an AI idea"}</option>
-                          {ideas.map((idea, index) => (
-                            <option key={index} value={`topic:${idea}`}>
-                              💡 {idea}
-                            </option>
-                          ))}
-                        </select>
+                        <div className={`relative transition-all duration-300 ${selectedTopic && !isEditingTopic ? "ring-2 ring-purple-500 rounded-xl" : ""}`}>
+                          <select
+                            value={selectedTopic && !isEditingTopic ? `topic:${selectedTopic}` : ""}
+                            disabled={isGeneratingIdeas}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              if (!val) {
+                                setSelectedTopic("");
+                                return;
+                              }
+                              const value = val.substring(val.indexOf(":") + 1);
+                              setSelectedTopic(value);
+                              setSelectedDocument("");
+                              setIsEditingTopic(false);
+                            }}
+                            className={`w-full px-4 py-2.5 border rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all bg-white text-sm ${isGeneratingIdeas ? "border-purple-200 opacity-60" :
+                              selectedTopic && !isEditingTopic ? "border-transparent" : "border-gray-300"
+                              }`}
+                          >
+                            <option value="">{isGeneratingIdeas ? "⏳ Generating ideas..." : "Select an AI idea"}</option>
+                            {ideas.map((idea, index) => (
+                              <option key={index} value={`topic:${idea}`}>
+                                💡 {idea}
+                              </option>
+                            ))}
+                          </select>
+                          {selectedTopic && !isEditingTopic && (
+                            <div className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm animate-pulse">
+                              ACTIVE
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
 
-                    {selectedTopic && !ideas.includes(selectedTopic) && (
-                      <div className="p-3 rounded-xl border-2 border-blue-600 bg-blue-50 text-blue-700 font-medium text-sm flex items-center justify-between animate-in fade-in slide-in-from-top-1">
-                        <span className="truncate mr-2">Custom Topic: {selectedTopic}</span>
-                        <button onClick={() => setSelectedTopic("")}>
-                          <XIcon className="w-4 h-4" />
-                        </button>
+                    {selectedTopic && (
+                      <div className="animate-in fade-in slide-in-from-top-1 duration-300">
+                        {isEditingTopic ? (
+                          <div className="space-y-2">
+                            <label className="block text-[10px] font-bold text-gray-400 ml-1 uppercase">Edit your topic</label>
+                            <textarea
+                              value={selectedTopic}
+                              onChange={(e) => setSelectedTopic(e.target.value)}
+                              className="w-full px-4 py-3 border-2 border-blue-500 rounded-xl focus:ring-0 focus:outline-none text-sm font-medium bg-white shadow-lg"
+                              rows={3}
+                            />
+                            <div className="flex justify-end">
+                              <button
+                                onClick={() => setIsEditingTopic(false)}
+                                className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-bold hover:bg-blue-700 shadow-sm transition-all"
+                              >
+                                Done Editing
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="p-3.5 rounded-xl border-2 border-dashed border-blue-200 bg-blue-50/50 flex items-start justify-between">
+                            <div className="flex-1 mr-3">
+                              <span className="block text-[10px] font-bold text-blue-500 uppercase mb-0.5 tracking-tight">Active Topic</span>
+                              <p className="text-sm font-semibold text-gray-800 leading-tight">
+                                {selectedTopic}
+                              </p>
+                            </div>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => setIsEditingTopic(true)}
+                                className="p-1.5 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
+                                title="Edit topic"
+                              >
+                                <Settings className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setSelectedTopic("")}
+                                className="p-1.5 text-gray-400 hover:bg-gray-200 rounded-lg transition-colors"
+                              >
+                                <XIcon className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1173,10 +1236,20 @@ export function Generator() {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Post Length: <span className="text-blue-600 font-semibold">{characterLimit}</span> characters
-                  </label>
+                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100">
+                  <div className="flex items-center justify-between mb-4">
+                    <label className="text-sm font-bold text-gray-700">
+                      Post Length
+                    </label>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${characterLimit <= 800 ? "bg-green-100 text-green-700" :
+                        characterLimit <= 1500 ? "bg-blue-100 text-blue-700" :
+                          "bg-purple-100 text-purple-700"
+                      }`}>
+                      {characterLimit <= 800 ? "Quick Read" :
+                        characterLimit <= 1500 ? "Balanced" :
+                          "Deep Dive"}
+                    </span>
+                  </div>
                   <input
                     type="range"
                     min="500"
@@ -1184,12 +1257,14 @@ export function Generator() {
                     step="100"
                     value={characterLimit}
                     onChange={(e) => setCharacterLimit(Number(e.target.value))}
-                    className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                    className="w-full h-1.5 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mb-2"
                   />
-                  <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>500 (Short)</span>
-                    <span>1000 (Default)</span>
-                    <span>2500 (Long)</span>
+                  <div className="flex justify-between items-center text-[10px] font-bold text-gray-400 uppercase tracking-tighter">
+                    <span>500 char</span>
+                    <span className="text-blue-600 bg-white px-2 py-0.5 rounded-md shadow-sm border border-blue-50">
+                      {characterLimit} CHARS
+                    </span>
+                    <span>2500 char</span>
                   </div>
                 </div>
 
@@ -1220,6 +1295,17 @@ export function Generator() {
                   </>
                 )}
               </button>
+
+              {(!profile?.role || profile.role === 'user') && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3 animate-pulse">
+                  <AlertCircle className="w-4 h-4 text-amber-600 mt-0.5 flex-shrink-0" />
+                  <p className="text-[10px] text-amber-700 leading-tight">
+                    <span className="font-bold">Pro Tip:</span> Your role is set to generic. Update it in
+                    <button onClick={() => navigate('/settings')} className="mx-1 underline font-bold hover:text-amber-900 transition-colors">Settings</button>
+                    for 10x better AI ideas.
+                  </p>
+                </div>
+              )}
 
               <div className="space-y-3 pt-1">
                 {workspaceLimits && workspaceLimits.aiGeneration && (
@@ -1388,7 +1474,7 @@ export function Generator() {
                   {documents.length === 0 && (
                     <div className="flex items-center gap-2 px-4 py-2 bg-yellow-50 text-yellow-700 rounded-full text-xs font-bold border border-yellow-100">
                       <AlertCircle className="w-4 h-4" />
-                      Please upload documents first
+                      Please upload documents first OR Generate ideas from AI
                     </div>
                   )}
                 </div>

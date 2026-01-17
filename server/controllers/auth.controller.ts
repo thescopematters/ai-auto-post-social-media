@@ -64,6 +64,15 @@ export const register = async (
       );
     }
 
+    if (role) {
+      if (role.length > 50) {
+        throw new ValidationError("Role must be at most 50 characters long");
+      }
+      if (!/^[a-zA-Z\s]*$/.test(role)) {
+        throw new ValidationError("Role can only contain letters and spaces");
+      }
+    }
+
     const { data: existingUser } = await supabaseAdmin
       .from("profiles")
       .select("id")
@@ -359,10 +368,22 @@ export const updateProfile = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const { fullName, companyName } = req.body;
+    const { fullName, companyName, role } = req.body;
 
     if (!req.user) {
       throw new AuthenticationError("User not authenticated");
+    }
+
+    if (role) {
+      if (role.length > 50) {
+        throw new ValidationError("Role must be at most 50 characters long");
+      }
+      // Only validate custom roles if they are likely to be "Other"
+      // But actually we can just validate everything if it's supposed to be letters and spaces
+      // Note: Predefined roles also match this regex
+      if (!/^[a-zA-Z\s]*$/.test(role)) {
+        throw new ValidationError("Role can only contain letters and spaces");
+      }
     }
 
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
@@ -370,6 +391,7 @@ export const updateProfile = async (
       .update({
         full_name: fullName,
         company_name: companyName,
+        role: role,
         updated_at: new Date().toISOString(),
       })
       .eq("id", req.user.id)

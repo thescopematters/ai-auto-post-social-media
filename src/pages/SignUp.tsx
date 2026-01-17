@@ -60,6 +60,24 @@ export function SignUp() {
       return;
     }
 
+    if (role === 'Other') {
+      if (!customRole.trim()) {
+        setError('Please specify your role.');
+        setLoading(false);
+        return;
+      }
+      if (customRole.length > 50) {
+        setError('Role must be at most 50 characters long.');
+        setLoading(false);
+        return;
+      }
+      if (!/^[a-zA-Z\s]*$/.test(customRole)) {
+        setError('Role can only contain letters and spaces.');
+        setLoading(false);
+        return;
+      }
+    }
+
     const finalRole = role === 'Other' ? customRole : role;
     const { error: signUpError } = await signUp(email, password, fullName, finalRole);
 

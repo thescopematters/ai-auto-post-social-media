@@ -149,7 +149,7 @@ export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post("/auth/login", { email, password }),
 
-  updateProfile: (data: { fullName: string; companyName?: string }) =>
+  updateProfile: (data: { fullName: string; companyName?: string; role?: string }) =>
     apiClient.put("/auth/profile", data),
 
   logout: () => apiClient.post("/auth/logout"),

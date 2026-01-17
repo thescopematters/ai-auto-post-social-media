@@ -43,7 +43,22 @@ export function Settings() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("profile");
   const [fullName, setFullName] = useState(profile?.full_name || "");
-  const [companyName, setCompanyName] = useState(profile?.company_name || "");
+  const roles = [
+    'Businessman',
+    'Frontend developer',
+    'Backend developer',
+    'Software engineer',
+    'Data analytics',
+    'Doctor',
+    'Cloud or AWS engineer',
+    'Other'
+  ];
+
+  const initialRole = profile?.role || "";
+  const isPredefinedRole = roles.includes(initialRole);
+
+  const [role, setRole] = useState(isPredefinedRole ? initialRole : (initialRole ? "Other" : ""));
+  const [customRole, setCustomRole] = useState(isPredefinedRole ? "" : initialRole);
   const [saving, setSaving] = useState(false);
   const [connecting, setConnecting] = useState(false);
   const [socialAccounts, setSocialAccounts] = useState<SocialAccount[]>([]);
@@ -90,9 +105,26 @@ export function Settings() {
     setSaving(true);
 
     try {
+      const finalRole = role === 'Other' ? customRole : role;
+
+      if (role === 'Other') {
+        if (!customRole.trim()) {
+          toast.error("Please specify your role");
+          return;
+        }
+        if (customRole.length > 50) {
+          toast.error("Role must be at most 50 characters long");
+          return;
+        }
+        if (!/^[a-zA-Z\s]*$/.test(customRole)) {
+          toast.error("Role can only contain letters and spaces");
+          return;
+        }
+      }
+
       const response = await authApi.updateProfile({
         fullName: fullName.trim(),
-        companyName: companyName.trim(),
+        role: finalRole,
       });
 
       if (response.success) {
@@ -338,17 +370,49 @@ export function Settings() {
                       />
                     </div>
 
+
+
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Company Name
+                      <label htmlFor="role" className="block text-sm font-medium text-gray-700 mb-2">
+                        Your Role
                       </label>
-                      <input
-                        type="text"
-                        value={companyName}
-                        onChange={(e) => setCompanyName(e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      />
+                      <div className="relative">
+                        <select
+                          id="role"
+                          required
+                          value={role}
+                          onChange={(e) => setRole(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent appearance-none cursor-pointer"
+                        >
+                          <option value="" disabled>Select your role</option>
+                          {roles.map((r) => (
+                            <option key={r} value={r}>{r}</option>
+                          ))}
+                        </select>
+                        <div className="absolute right-4 top-1/2 transform -translate-y-1/2 pointer-events-none text-gray-400">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2 4L6 8L10 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
+                        </div>
+                      </div>
                     </div>
+
+                    {role === 'Other' && (
+                      <div>
+                        <label htmlFor="customRole" className="block text-sm font-medium text-gray-700 mb-2">
+                          Specify Your Role
+                        </label>
+                        <input
+                          id="customRole"
+                          type="text"
+                          required
+                          value={customRole}
+                          onChange={(e) => setCustomRole(e.target.value)}
+                          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                          placeholder="Enter your role"
+                        />
+                      </div>
+                    )}
 
                     <button
                       onClick={handleSaveProfile}

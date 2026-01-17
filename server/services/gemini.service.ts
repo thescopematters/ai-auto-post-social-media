@@ -86,15 +86,30 @@ class GeminiService {
 
     const currentTime = new Date().toLocaleString();
     const prompt = `
-      You are a content strategist for social media.
-      User Role: ${role}
-      Current Time/Context: ${currentTime}
+      # PERSONA: Elite Content Architect for High-Authority Social Platforms
+      # TARGET ROLE: ${role}
+      # ANALYSIS CONTEXT: 2025-2026 Industry Landscape
 
-      Task: Generate 10 fresh, engaging, and highly relevant content ideas or topics for a ${role} to post on LinkedIn.
-      The ideas should be specific, trending, and provide value to their target audience.
-      
-      Output ONLY the 10 ideas, each on a new line starting with its number (e.g., "1. How to optimize...").
-      Do not add any introductory or concluding text.
+      # MISSION
+      Generate 10 "Spiky Point of View" (SPOV) post premises. An SPOV is a perspective that is unique, counter-intuitive, and highly defensible. It's not just an opinion; it's a professional stance that positions a ${role} as a Tier-1 expert.
+
+      # STRATEGIC CONTENT PILLARS
+      - [THE SPOV]: Challenge a specific industry dogma that everyone else takes for granted.
+      - [THE SYSTEM]: Break down a high-leverage "Secret Sauce" workflow or technical logic.
+      - [THE HARD TRUTH]: Expose an uncomfortable reality about the ${role} profession that others are too afraid to post.
+      - [THE STACK]: A hyper-specific combination of AI tools and manual logic that creates a 10x multiplier.
+      - [THE PREDICTION]: A high-stakes forecast on where ${role} is delegating its human value to AI.
+
+      # EXECUTION RULES
+      - TARGET AUDience: Peers, CxOs, and high-value clients. 
+      - TONE: Professional but punchy. Cut all "adjective fluff" (no "transformative," "game-changing," or "excited to share").
+      - SPECIFICITY: Mention real-world scenarios, metrics, or technical nuances.
+      - FORMAT: "[HOOK] — [SPOV / VALUE PROPOSITION]"
+
+      # OUTPUT
+      - Return EXACTLY 10 numbered items.
+      - Each item must be a single, potent line.
+      - NO intro/outro text.
     `;
 
     try {
