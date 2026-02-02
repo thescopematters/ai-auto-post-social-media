@@ -42,7 +42,7 @@ export function SignIn() {
   return (
     <div className="min-h-screen flex bg-white font-sans text-[#1A1F2C]">
       {/* Left Side: Form */}
-      <div className="flex-1 flex flex-col justify-center px-8 sm:px-12 lg:px-24 xl:px-32 py-12">
+      <div className="flex-1 flex flex-col justify-center px-6 sm:px-12 lg:px-24 xl:px-32 py-12">
         <div className="max-w-md w-full mx-auto">
           <Link to="/" className="inline-flex items-center text-gray-400 hover:text-gray-600 mb-12 transition group text-sm font-bold uppercase tracking-widest">
             <ChevronLeft size={16} className="mr-2 group-hover:-translate-x-1 transition-transform" />

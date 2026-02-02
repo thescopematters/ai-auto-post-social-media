@@ -973,7 +973,7 @@ export function Generator() {
   }
 
   return (
-    <div className="h-[calc(100vh-72px)] flex flex-col p-6 lg:p-8 max-w-[1600px] mx-auto overflow-hidden">
+    <div className="lg:h-[calc(100vh-72px)] h-auto min-h-[calc(100vh-72px)] flex flex-col p-4 lg:p-8 max-w-[1600px] mx-auto overflow-visible lg:overflow-hidden">
 
       <div className="mb-6 flex-shrink-0">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">
@@ -986,8 +986,8 @@ export function Generator() {
       </div>
 
       <div className="flex-1 min-h-0 grid lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-1 h-full flex flex-col min-h-0">
-          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+        <div className="lg:col-span-1 lg:h-full h-auto flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col lg:h-full h-auto overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex-shrink-0 bg-gray-50/50">
               <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
                 <Settings className="w-5 h-5 text-blue-600" />
@@ -1242,8 +1242,8 @@ export function Generator() {
                       Post Length
                     </label>
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${characterLimit <= 800 ? "bg-green-100 text-green-700" :
-                        characterLimit <= 1500 ? "bg-blue-100 text-blue-700" :
-                          "bg-purple-100 text-purple-700"
+                      characterLimit <= 1500 ? "bg-blue-100 text-blue-700" :
+                        "bg-purple-100 text-purple-700"
                       }`}>
                       {characterLimit <= 800 ? "Quick Read" :
                         characterLimit <= 1500 ? "Balanced" :
@@ -1413,8 +1413,8 @@ export function Generator() {
           </div>
         </div>
 
-        <div className="lg:col-span-2 h-full flex flex-col min-h-0">
-          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col h-full overflow-hidden">
+        <div className="lg:col-span-2 lg:h-full h-auto flex flex-col min-h-0">
+          <div className="bg-white rounded-2xl shadow-md border border-gray-200 flex flex-col lg:h-full h-auto overflow-hidden">
             <div className="p-6 border-b border-gray-100 flex items-center justify-between flex-shrink-0 bg-gray-50/50">
               <h2 className="text-xl font-bold text-gray-900">
                 Generated Variants

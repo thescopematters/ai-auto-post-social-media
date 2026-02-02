@@ -15,6 +15,8 @@ import { Settings } from "./pages/Settings";
 import { Subscription } from "./pages/Subscription";
 import { ResetPassword } from "./pages/ResetPassword";
 import { ForgotPassword } from "./pages/ForgotPassword";
+import { PrivacyPolicy } from "./pages/PrivacyPolicy";
+import { TermsAndConditions } from "./pages/TermsAndConditions";
 import { Toaster } from "sonner";
 
 function App() {
@@ -27,6 +29,8 @@ function App() {
           <Route path="/signup" element={<SignUp />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsAndConditions />} />
           <Route
             path="/onboarding"
             element={
