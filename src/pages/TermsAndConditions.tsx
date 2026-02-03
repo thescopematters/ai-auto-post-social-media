@@ -30,7 +30,7 @@ export function TermsAndConditions() {
 
                     <div className="prose prose-lg max-w-none text-gray-600">
                         <p className="lead text-xl text-gray-700 font-medium">
-                            These Terms and Conditions ("Terms") govern your access to and use of <strong>[Your App Name]</strong> (the "Platform", "Service", "we", "our", or "us"), an AI-powered platform that enables users to generate, edit, schedule, and publish LinkedIn posts.
+                            These Terms and Conditions ("Terms") govern your access to and use of <strong>[https://zeroeffortposts.com]</strong> (the "Platform", "Service", "we", "our", or "us"), an AI-powered platform that enables users to generate, edit, schedule, and publish LinkedIn posts.
                         </p>
                         <p>
                             By accessing or using our Platform, you agree to be bound by these Terms. If you do not agree, please do not use the Service.
@@ -320,7 +320,7 @@ export function TermsAndConditions() {
                                 These Terms shall be governed by and construed in accordance with the laws of India.
                             </p>
                             <p>
-                                Courts located in <strong>[Your City, State], India</strong> shall have exclusive jurisdiction.
+                                Courts located in <strong>[Mohali (S.A.S Nagar) Punjab], India</strong> shall have exclusive jurisdiction.
                             </p>
                         </div>
                     </section>
@@ -345,7 +345,7 @@ export function TermsAndConditions() {
                         <div className="space-y-3">
                             <div className="flex items-start">
                                 <span className="font-bold w-24 text-blue-400">Email:</span>
-                                <span className="text-gray-200">[your-email@example.com]</span>
+                                <span className="text-gray-200">[contact@metabytetech.com]</span>
                             </div>
                             <div className="flex items-start">
                                 <span className="font-bold w-24 text-blue-400">Country:</span>

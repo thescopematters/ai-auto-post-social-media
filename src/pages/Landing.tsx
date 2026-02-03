@@ -73,12 +73,12 @@ export function Landing() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-              <div className="relative w-full sm:w-80">
-                <input
+              <div className="relative w-full sm:w-80 empty:hidden">
+                {/* <input
                   type="email"
                   placeholder="Enter your email"
                   className="w-full px-6 py-4 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 transition shadow-sm"
-                />
+                /> */}
               </div>
               <Link
                 to="/signup"
@@ -306,26 +306,29 @@ export function Landing() {
               Choose the plan that's right for you. All plans include a 14-day free trial.
             </p>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-center gap-8 max-w-6xl mx-auto">
             <PricingCard
+              className="flex-1"
               plan="Free"
               price="0"
-              features={["5 AI Generations / mo", "1 Social Account", "Basic Scheduling"]}
+              features={["10 AI Generations / day", "1 Social Account", "Basic Scheduling"]}
               buttonText="Start for free"
             />
             <PricingCard
+              className="flex-1"
               plan="Pro"
-              price="29"
-              features={["50 AI Generations / mo", "3 Social Accounts", "Smart Scheduling", "Detailed Analytics"]}
+              price="399"
+              features={["unlimited AI Generations / day", "1 Social Accounts", "Smart Scheduling", "Detailed Analytics"]}
               highlighted={true}
               buttonText="Try Pro for free"
             />
-            <PricingCard
+            {/* <PricingCard
+              className="flex-1"
               plan="Business"
               price="99"
               features={["Unlimited Generations", "10 Social Accounts", "Team Collaboration", "Priority Support"]}
               buttonText="Talk to sales"
-            />
+            /> */}
           </div>
         </div>
       </section>
@@ -462,15 +465,16 @@ function TestimonialCard({ name, role, text }: { name: string; role: string; tex
   );
 }
 
-function PricingCard({ plan, price, features, highlighted = false, buttonText }: {
+function PricingCard({ plan, price, features, highlighted = false, buttonText, className = "" }: {
   plan: string;
   price: string;
   features: string[];
   highlighted?: boolean;
   buttonText: string;
+  className?: string;
 }) {
   return (
-    <div className={`p-8 rounded-3xl border ${highlighted ? 'border-[#2C64E3] shadow-2xl relative scale-105 z-10' : 'border-gray-100 shadow-sm'} bg-white flex flex-col h-full`}>
+    <div className={`p-8 rounded-3xl border ${highlighted ? 'border-[#2C64E3] shadow-2xl relative z-10' : 'border-gray-100 shadow-sm'} bg-white flex flex-col h-full ${className}`}>
       {highlighted && (
         <span className="absolute -top-4 left-1/2 -translate-x-1/2 px-4 py-1 bg-[#2C64E3] text-white text-xs font-bold rounded-full">
           MOST POPULAR
@@ -478,7 +482,7 @@ function PricingCard({ plan, price, features, highlighted = false, buttonText }:
       )}
       <h3 className="text-xl font-bold mb-2">{plan}</h3>
       <div className="flex items-baseline gap-1 mb-6">
-        <span className="text-4xl font-extrabold">${price}</span>
+        <span className="text-4xl font-extrabold">{price}</span>
         <span className="text-gray-500 font-medium">/mo</span>
       </div>
       <ul className="space-y-4 mb-8 flex-grow">

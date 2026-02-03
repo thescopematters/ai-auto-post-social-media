@@ -5,6 +5,7 @@ const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "https://api.zeroeffortposts.com/api/v1";
 
 
+
 interface ApiResponse<T = any> {
   redirectUrl: any;
   success: boolean;

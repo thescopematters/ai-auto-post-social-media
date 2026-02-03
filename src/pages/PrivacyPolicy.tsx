@@ -33,7 +33,7 @@ export function PrivacyPolicy() {
 
 
                         <p>
-                            This Privacy Policy describes how your personal information is collected, used, and shared when you visit or use [Your Website URL] (the “Site”) and the services provided through our AI-powered content generation platform (the “Service”).
+                            This Privacy Policy describes how your personal information is collected, used, and shared when you visit or use [https://zeroeffortposts.com/] (the “Site”) and the services provided through our AI-powered content generation platform (the “Service”).
                         </p>
                     </div>
 
@@ -249,11 +249,11 @@ export function PrivacyPolicy() {
                         <div className="space-y-3">
                             <div className="flex items-start">
                                 <span className="font-bold w-24 text-blue-400">Email:</span>
-                                <span className="text-gray-200">[your-email@example.com]</span>
+                                <span className="text-gray-200">[contact@metabytetech.com]</span>
                             </div>
                             <div className="flex items-start">
                                 <span className="font-bold w-24 text-blue-400">Address:</span>
-                                <span className="text-gray-200">[Your Company/Firm Address]</span>
+                                <span className="text-gray-200">[8-A, Lakhnaur Pind Rd, Industrial Area, Sector 75, Sahibzada Ajit Singh Nagar, Punjab 140307]</span>
                             </div>
                             <div className="flex items-start">
                                 <span className="font-bold w-24 text-blue-400">Country:</span>
